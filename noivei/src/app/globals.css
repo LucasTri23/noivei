@@ -1,0 +1,172 @@
+@import "tailwindcss";
+/* Fontes carregadas via next/font/google no layout.tsx — não importar aqui */
+
+/* ── DESIGN TOKENS ─────────────────────────────────────────────── */
+@theme inline {
+  /* Cores base */
+  --color-brand:           #7C9E6F;
+  --color-brand-light:     #A8C49C;
+  --color-brand-dark:      #5A7A50;
+  --color-brand-subtle:    #F0F5EE;
+
+  --color-accent:          #C4A882;
+  --color-accent-light:    #DBC9AC;
+  --color-accent-dark:     #9E7E58;
+  --color-accent-subtle:   #FAF6F0;
+
+  --color-background:      var(--bg);
+  --color-surface:         var(--surface);
+  --color-border:          var(--border);
+  --color-foreground:      var(--fg);
+  --color-muted:           var(--muted);
+  --color-muted-fg:        var(--muted-fg);
+
+  /* Semânticas */
+  --color-success:         #4CAF7D;
+  --color-warning:         #F59E0B;
+  --color-error:           #EF4444;
+  --color-info:            #3B82F6;
+
+  /* Tipografia */
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-body:    "Inter", system-ui, sans-serif;
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.25rem;
+
+  /* Raios */
+  --radius-sm:  0.25rem;
+  --radius:     0.5rem;
+  --radius-md:  0.75rem;
+  --radius-lg:  1rem;
+  --radius-xl:  1.5rem;
+  --radius-full: 9999px;
+
+  /* Sombras */
+  --shadow-sm:  0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow:     0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md:  0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg:  0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl:  0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  /* Z-index */
+  --z-dropdown: 100;
+  --z-sticky:   200;
+  --z-overlay:  300;
+  --z-modal:    400;
+  --z-toast:    500;
+  --z-tooltip:  600;
+
+  /* Transições */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast:   150ms;
+  --duration-base:   200ms;
+  --duration-slow:   300ms;
+}
+
+/* ── MODO CLARO (padrão) ──────────────────────────────────────── */
+:root {
+  --bg:         #FAFAF7;
+  --surface:    #FFFFFF;
+  --border:     #E5E5E3;
+  --fg:         #1C1C1E;
+  --muted:      #F5F5F3;
+  --muted-fg:   #6B7280;
+
+  /* Cor dinâmica do casal (sobrescrita via JS/generateWeddingTheme) */
+  --wedding-color:         #7C9E6F;
+  --wedding-color-light:   #C8DFC3;
+  --wedding-color-dark:    #5A7A50;
+  --wedding-color-subtle:  #F0F5EE;
+  --wedding-color-fg:      #FFFFFF;
+}
+
+/* ── MODO ESCURO ──────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:         #1C1C1E;
+  --surface:    #2C2C2E;
+  --border:     #3A3A3C;
+  --fg:         #F5F5F0;
+  --muted:      #242426;
+  --muted-fg:   #9CA3AF;
+}
+
+/* ── BASE ─────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--bg);
+  color:            var(--fg);
+  font-family:      var(--font-body);
+  font-size:        var(--text-base);
+  line-height:      1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* ── ACESSIBILIDADE ───────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  padding: 0.5rem 1rem;
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 600;
+  z-index: var(--z-tooltip);
+  border-radius: var(--radius);
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+  left: 0.5rem;
+}
+
+/* Focus ring global — acessível e elegante */
+:focus-visible {
+  outline: 2px solid var(--wedding-color);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── AUTOFILL ─────────────────────────────────────────────────── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--fg);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ── MOVIMENTO REDUZIDO ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:   0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:  0.01ms !important;
+  }
+}
+
+/* ── SCROLLBAR ────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-fg); }
