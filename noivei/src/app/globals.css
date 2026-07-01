@@ -3,33 +3,35 @@
 
 /* ── DESIGN TOKENS ─────────────────────────────────────────────── */
 @theme inline {
-  /* Cores base */
-  --color-brand:           #7C9E6F;
-  --color-brand-light:     #A8C49C;
-  --color-brand-dark:      #5A7A50;
-  --color-brand-subtle:    #F0F5EE;
+  /* Dourado — cor principal da marca */
+  --color-brand:          #C6943A;
+  --color-brand-light:    #E0B870;
+  --color-brand-dark:     #9A7020;
+  --color-brand-subtle:   #FBF0E0;
 
-  --color-accent:          #C4A882;
-  --color-accent-light:    #DBC9AC;
-  --color-accent-dark:     #9E7E58;
-  --color-accent-subtle:   #FAF6F0;
-
-  --color-background:      var(--bg);
-  --color-surface:         var(--surface);
-  --color-border:          var(--border);
-  --color-foreground:      var(--fg);
-  --color-muted:           var(--muted);
-  --color-muted-fg:        var(--muted-fg);
+  /* Rose-cobre — acento botânico */
+  --color-accent:         #C89070;
+  --color-accent-light:   #DDB09A;
+  --color-accent-dark:    #A87050;
+  --color-accent-subtle:  #FBEEE6;
 
   /* Semânticas */
-  --color-success:         #4CAF7D;
-  --color-warning:         #F59E0B;
-  --color-error:           #EF4444;
-  --color-info:            #3B82F6;
+  --color-success:        #5E8B6A;
+  --color-warning:        #C6943A;
+  --color-error:          #C0553F;
+  --color-info:           #3B82F6;
+
+  /* Dinâmicas */
+  --color-background:     var(--bg);
+  --color-surface:        var(--surface);
+  --color-border:         var(--border);
+  --color-foreground:     var(--fg);
+  --color-muted:          var(--muted);
+  --color-muted-fg:       var(--muted-fg);
 
   /* Tipografia */
-  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
-  --font-body:    "Inter", system-ui, sans-serif;
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-body:    "Hanken Grotesk", system-ui, sans-serif;
 
   --text-xs:   0.75rem;
   --text-sm:   0.875rem;
@@ -41,19 +43,19 @@
   --text-4xl:  2.25rem;
 
   /* Raios */
-  --radius-sm:  0.25rem;
-  --radius:     0.5rem;
-  --radius-md:  0.75rem;
-  --radius-lg:  1rem;
-  --radius-xl:  1.5rem;
+  --radius-sm:   0.25rem;
+  --radius:      0.5rem;
+  --radius-md:   0.75rem;
+  --radius-lg:   1rem;
+  --radius-xl:   1.5rem;
   --radius-full: 9999px;
 
   /* Sombras */
   --shadow-sm:  0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow:     0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md:  0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg:  0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl:  0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow:     0 1px 3px 0 rgb(60 40 24 / 0.10), 0 1px 2px -1px rgb(60 40 24 / 0.08);
+  --shadow-md:  0 4px 6px -1px rgb(60 40 24 / 0.08), 0 2px 4px -2px rgb(60 40 24 / 0.06);
+  --shadow-lg:  0 10px 26px rgb(60 40 24 / 0.08);
+  --shadow-xl:  0 20px 40px rgb(60 40 24 / 0.10);
 
   /* Z-index */
   --z-dropdown: 100;
@@ -64,7 +66,7 @@
   --z-tooltip:  600;
 
   /* Transições */
-  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-default:    cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast:   150ms;
   --duration-base:   200ms;
   --duration-slow:   300ms;
@@ -72,29 +74,29 @@
 
 /* ── MODO CLARO (padrão) ──────────────────────────────────────── */
 :root {
-  --bg:         #FAFAF7;
-  --surface:    #FFFFFF;
-  --border:     #E5E5E3;
-  --fg:         #1C1C1E;
-  --muted:      #F5F5F3;
-  --muted-fg:   #6B7280;
+  --bg:       #FAF5F0;
+  --surface:  #FFFFFF;
+  --border:   #EBDDD0;
+  --fg:       #3C2818;
+  --muted:    #FBF5EE;
+  --muted-fg: #9A7A60;
 
-  /* Cor dinâmica do casal (sobrescrita via JS/generateWeddingTheme) */
-  --wedding-color:         #7C9E6F;
-  --wedding-color-light:   #C8DFC3;
-  --wedding-color-dark:    #5A7A50;
-  --wedding-color-subtle:  #F0F5EE;
-  --wedding-color-fg:      #FFFFFF;
+  /* Cor dinâmica do casal */
+  --wedding-color:        #C6943A;
+  --wedding-color-light:  #E0B870;
+  --wedding-color-dark:   #9A7020;
+  --wedding-color-subtle: #FBF0E0;
+  --wedding-color-fg:     #FFFFFF;
 }
 
 /* ── MODO ESCURO ──────────────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg:         #1C1C1E;
-  --surface:    #2C2C2E;
-  --border:     #3A3A3C;
-  --fg:         #F5F5F0;
-  --muted:      #242426;
-  --muted-fg:   #9CA3AF;
+  --bg:       #1E1508;
+  --surface:  #2C1E10;
+  --border:   #3D2D1A;
+  --fg:       #FAF0E6;
+  --muted:    #241808;
+  --muted-fg: #9A8060;
 }
 
 /* ── BASE ─────────────────────────────────────────────────────── */
@@ -118,8 +120,8 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1.2;
+  font-weight: 600;
+  line-height: 1.15;
 }
 
 /* ── ACESSIBILIDADE ───────────────────────────────────────────── */
@@ -134,13 +136,8 @@ h1, h2, h3, h4, h5, h6 {
   z-index: var(--z-tooltip);
   border-radius: var(--radius);
 }
+.skip-link:focus { top: 0.5rem; left: 0.5rem; }
 
-.skip-link:focus {
-  top: 0.5rem;
-  left: 0.5rem;
-}
-
-/* Focus ring global — acessível e elegante */
 :focus-visible {
   outline: 2px solid var(--wedding-color);
   outline-offset: 2px;
@@ -159,9 +156,9 @@ input:-webkit-autofill:focus {
 /* ── MOVIMENTO REDUZIDO ───────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration:   0.01ms !important;
+    animation-duration:        0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration:  0.01ms !important;
+    transition-duration:       0.01ms !important;
   }
 }
 

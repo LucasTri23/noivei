@@ -1,53 +1,54 @@
 import type { Metadata, Viewport } from 'next'
-import { Plus_Jakarta_Sans, Inter } from 'next/font/google'
+import { Cormorant_Garamond, Hanken_Grotesk } from 'next/font/google'
 import './globals.css'
 
-const plusJakarta = Plus_Jakarta_Sans({
+const cormorant = Cormorant_Garamond({
   subsets:  ['latin'],
   variable: '--font-display',
   display:  'swap',
-  weight:   ['400', '500', '600', '700', '800'],
+  weight:   ['400', '500', '600', '700'],
+  style:    ['normal', 'italic'],
 })
 
-const inter = Inter({
+const hanken = Hanken_Grotesk({
   subsets:  ['latin'],
   variable: '--font-body',
   display:  'swap',
-  weight:   ['400', '500', '600'],
+  weight:   ['400', '500', '600', '700'],
 })
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://noivei.com.br'),
   title: {
-    default:  'noivei — Organize seu casamento do jeito certo',
-    template: '%s | noivei',
+    default:  'Noivei — Organize seu casamento do jeito certo',
+    template: '%s | Noivei',
   },
   description:
     'O único lugar onde você organiza todo o seu casamento. ' +
     'Checklist, convidados, financeiro, fornecedores, site e RSVP — tudo em um só lugar.',
   keywords: ['organizar casamento', 'app casamento', 'checklist casamento', 'lista convidados'],
-  authors:  [{ name: 'noivei' }],
+  authors:  [{ name: 'Noivei' }],
   openGraph: {
     type:     'website',
     locale:   'pt_BR',
-    siteName: 'noivei',
+    siteName: 'Noivei',
   },
   twitter: { card: 'summary_large_image' },
   robots:  { index: true, follow: true },
 }
 
 export const viewport: Viewport = {
-  themeColor:    '#7C9E6F',
-  width:         'device-width',
-  initialScale:  1,
-  maximumScale:  5,
+  themeColor:   '#C39A3E',
+  width:        'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="pt-BR"
-      className={`${plusJakarta.variable} ${inter.variable} h-full`}
+      className={`${cormorant.variable} ${hanken.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="min-h-full bg-[var(--bg)] text-[var(--fg)] antialiased">
