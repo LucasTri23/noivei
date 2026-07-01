@@ -11,9 +11,30 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createSupabaseServer()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
+
     if (!error) {
-      const redirectTo = type === 'recovery' ? '/reset-password' : next
-      return NextResponse.redirect(`${origin}${redirectTo}`)
+      if (type === 'recovery') {
+        return NextResponse.redirect(`${origin}/reset-password`)
+      }
+
+      // Check if user already completed onboarding (has a wedding record)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: wedding } = await supabase
+          .from('weddings')
+          .select('id')
+          .eq('user_id', user.id)
+          .is('deleted_at', null)
+          .limit(1)
+          .maybeSingle()
+
+        // New user — no wedding yet → onboarding
+        if (!wedding) {
+          return NextResponse.redirect(`${origin}/onboarding`)
+        }
+      }
+
+      return NextResponse.redirect(`${origin}${next}`)
     }
   }
 
