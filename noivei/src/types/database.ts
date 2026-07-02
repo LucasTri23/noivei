@@ -18,6 +18,8 @@ export type WeddingStyle =
 
 export type RSVPResponse = 'attending' | 'not_attending' | 'maybe' | 'pending'
 
+export type GuestStatus = 'confirmado' | 'pendente' | 'recusado'
+
 export type SubscriptionStatus =
   | 'trialing'
   | 'active'
@@ -51,35 +53,68 @@ export interface Wedding {
   wedding_score:  number
   score_calculated_at: string | null
   is_active:      boolean
+  deleted_at:     string | null
   created_at:     string
   updated_at:     string
 }
 
 export interface Guest {
-  id:             string
-  wedding_id:     string
-  name:           string
-  email:          string | null
-  phone:          string | null
-  group_name:     string | null
-  table_id:       string | null
-  rsvp_response:  RSVPResponse
-  dietary_notes:  string | null
-  is_plus_one:    boolean
-  notes:          string | null
-  created_at:     string
+  id:          string
+  wedding_id:  string
+  name:        string
+  group_name:  string | null
+  status:      GuestStatus
+  rsvp_token:  string
+  email:       string | null
+  phone:       string | null
+  created_at:  string
 }
 
 export interface ChecklistItem {
   id:          string
   wedding_id:  string
-  title:       string
-  category:    string | null
-  completed:   boolean
+  label:       string
   due_date:    string | null
-  notes:       string | null
+  completed:   boolean
   sort_order:  number
   created_at:  string
+}
+
+export interface FinancialEntry {
+  id:           string
+  wedding_id:   string
+  category:     string
+  vendor:       string | null
+  description:  string | null
+  total_amount: number
+  paid_amount:  number
+  due_date:     string | null
+  created_at:   string
+}
+
+export interface TableConfig {
+  id:          string
+  wedding_id:  string
+  label:       string
+  capacity:    number
+  created_at:  string
+}
+
+export interface TableAssignment {
+  id:          string
+  table_id:    string
+  guest_id:    string
+  created_at:  string
+}
+
+export interface SiteConfig {
+  id:              string
+  wedding_id:      string
+  slug:            string
+  published:       boolean
+  cover_photo_url: string | null
+  content:         Record<string, Json | undefined>
+  created_at:      string
 }
 
 export interface TimelineTask {

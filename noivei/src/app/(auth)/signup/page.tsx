@@ -9,10 +9,14 @@ import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
 const SignupSchema = z.object({
-  full_name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
-  email:     z.string().email('E-mail inválido'),
-  password:  z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
-  terms:     z.literal(true, { error: 'Você deve aceitar os termos' }),
+  full_name:       z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
+  email:           z.string().email('E-mail inválido'),
+  password:        z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
+  confirmPassword: z.string().min(8, 'Confirme sua senha'),
+  terms:           z.literal(true, { error: 'Você deve aceitar os termos' }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'As senhas não coincidem',
+  path:    ['confirmPassword'],
 })
 type SignupFields = z.infer<typeof SignupSchema>
 
@@ -92,12 +96,25 @@ export default function SignupPage() {
         </div>
         {errors.password && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.password.message}</p>}
 
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', color: '#9A7A60', cursor: 'pointer', fontSize: '13px', lineHeight: 1.5 }}>
-          <input {...register('terms')} type="checkbox" style={{ accentColor: '#C6943A', width: '16px', height: '16px', marginTop: '2px', flexShrink: 0 }} />
-          Concordo com os{' '}
-          <Link href="/termos" style={{ color: '#C6943A', fontWeight: 600 }}>Termos</Link>
-          {' '}e a{' '}
-          <Link href="/privacidade" style={{ color: '#C6943A', fontWeight: 600 }}>Política de Privacidade</Link>.
+        <div style={inputStyle}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C89070" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input {...register('confirmPassword')} type="password" placeholder="Confirme sua senha"
+            style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }} />
+        </div>
+        {errors.confirmPassword && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.confirmPassword.message}</p>}
+
+        <label style={{
+          display: 'flex', alignItems: 'flex-start', gap: '10px',
+          border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '13px 15px',
+          color: '#9A7A60', cursor: 'pointer', fontSize: '13px', lineHeight: 1.55,
+        }}>
+          <input {...register('terms')} type="checkbox" style={{ accentColor: '#C6943A', width: '16px', height: '16px', marginTop: '1px', flexShrink: 0 }} />
+          <span>
+            Concordo com os{' '}
+            <Link href="/termos" style={{ color: '#C6943A', fontWeight: 600 }}>Termos</Link>
+            {' '}e a{' '}
+            <Link href="/privacidade" style={{ color: '#C6943A', fontWeight: 600 }}>Política de Privacidade</Link>.
+          </span>
         </label>
         {errors.terms && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.terms.message}</p>}
 

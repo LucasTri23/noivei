@@ -1,8 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+
+interface IbgeMunicipio {
+  nome: string
+  microrregiao: { mesorregiao: { UF: { sigla: string } } }
+}
 
 type PlanChoice = 'free' | 'premium_monthly' | 'premium_plus_monthly'
 
@@ -99,6 +104,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep]     = useState(0)
   const [loading, setLoading] = useState(false)
+  const [cities, setCities]   = useState<string[]>([])
   const [data, setData]     = useState<FormData>({
     partner1:  '',
     partner2:  '',
@@ -112,6 +118,16 @@ export default function OnboardingPage() {
   function set<K extends keyof FormData>(key: K, val: FormData[K]) {
     setData((d) => ({ ...d, [key]: val }))
   }
+
+  // Carrega a lista de cidades do IBGE uma vez, para autocompletar o campo "Cidade"
+  useEffect(() => {
+    fetch('https://servicodados.ibge.gov.br/api/v1/localidades/municipios')
+      .then((res) => res.json())
+      .then((municipios: IbgeMunicipio[]) => {
+        setCities(municipios.map((m) => `${m.nome} - ${m.microrregiao.mesorregiao.UF.sigla}`))
+      })
+      .catch(() => setCities([]))
+  }, [])
 
   async function finish() {
     setLoading(true)
@@ -235,11 +251,15 @@ export default function OnboardingPage() {
             <div style={inputStyle}>
               <MapPinIcon />
               <input
+                list="cities-list"
                 value={data.city}
                 onChange={(e) => set('city', e.target.value)}
                 placeholder="Cidade do casamento"
                 style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
               />
+              <datalist id="cities-list">
+                {cities.map((c) => <option key={c} value={c} />)}
+              </datalist>
             </div>
           </div>
 
