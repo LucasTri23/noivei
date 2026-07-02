@@ -66,10 +66,10 @@ export default function SitePage() {
         <button
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
-            background: '#C6943A', color: '#fff', border: 'none',
+            background: 'var(--wedding-color)', color: '#fff', border: 'none',
             borderRadius: '12px', padding: '11px 18px',
             fontWeight: 600, fontSize: '14px', cursor: 'pointer',
-            boxShadow: '0 6px 16px rgba(198,148,58,0.32)',
+            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
           }}
         >
           <ExternalLinkIcon /> Publicar
@@ -89,17 +89,17 @@ export default function SitePage() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: '12px',
                   padding: '13px 16px', borderRadius: '14px',
-                  border: isActive ? '1.5px solid rgba(198,148,58,0.35)' : '1px solid transparent',
-                  background: isActive ? '#FBF5EE' : '#FFFFFF',
-                  color: isActive ? '#9A7020' : '#3C2818',
+                  border: isActive ? '1.5px solid color-mix(in srgb, var(--wedding-color) 35%, transparent)' : '1px solid transparent',
+                  background: isActive ? 'var(--wedding-color-subtle)' : '#FFFFFF',
+                  color: isActive ? 'var(--wedding-color-dark)' : '#3C2818',
                   fontWeight: isActive ? 700 : 500,
                   fontSize: '14px', cursor: 'pointer',
                   textAlign: 'left',
-                  boxShadow: isActive ? '0 4px 12px rgba(198,148,58,0.12)' : '0 2px 8px rgba(60,40,24,0.05)',
+                  boxShadow: isActive ? '0 4px 12px color-mix(in srgb, var(--wedding-color) 12%, transparent)' : '0 2px 8px rgba(60,40,24,0.05)',
                   transition: 'all 0.18s',
                 }}
               >
-                <span style={{ color: isActive ? '#C6943A' : '#9A7A60' }}>{s.icon}</span>
+                <span style={{ color: isActive ? 'var(--wedding-color)' : '#9A7A60' }}>{s.icon}</span>
                 {s.label}
               </button>
             )
@@ -119,8 +119,8 @@ export default function SitePage() {
           >
             <div style={{ display: 'flex', gap: '6px' }}>
               <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#EBDDD0' }} />
-              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#E0B870' }} />
-              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#C6943A' }} />
+              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--wedding-color-light)' }} />
+              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--wedding-color)' }} />
             </div>
             <div
               style={{
@@ -144,7 +144,7 @@ export default function SitePage() {
             {/* Dot pattern */}
             <div
               className="pointer-events-none absolute inset-0"
-              style={{ backgroundImage: 'radial-gradient(rgba(198,148,58,0.22) 1.2px, transparent 1.4px)', backgroundSize: '26px 26px' }}
+              style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 22%, transparent) 1.2px, transparent 1.4px)', backgroundSize: '26px 26px' }}
             />
 
             <div style={{ position: 'relative', textAlign: 'center', padding: '0 24px' }}>
@@ -156,7 +156,7 @@ export default function SitePage() {
               </div>
               <div
                 className="font-display"
-                style={{ fontStyle: 'italic', fontSize: '22px', color: '#9A7020', marginTop: '12px' }}
+                style={{ fontStyle: 'italic', fontSize: '22px', color: 'var(--wedding-color-dark)', marginTop: '12px' }}
               >
                 Data do seu casamento
               </div>
@@ -165,10 +165,10 @@ export default function SitePage() {
                 style={{
                   marginTop: '32px',
                   display: 'inline-flex', alignItems: 'center', gap: '8px',
-                  background: '#C6943A', color: '#fff', border: 'none',
+                  background: 'var(--wedding-color)', color: '#fff', border: 'none',
                   borderRadius: '12px', padding: '13px 26px',
                   fontWeight: 600, fontSize: '15px', cursor: 'pointer',
-                  boxShadow: '0 8px 22px rgba(198,148,58,0.38)',
+                  boxShadow: '0 8px 22px color-mix(in srgb, var(--wedding-color) 38%, transparent)',
                 }}
               >
                 Confirmar presença

@@ -211,3 +211,14 @@ export interface Subscription {
   created_at:      string
   updated_at:      string
 }
+
+export interface Profile {
+  id:              string
+  full_name:       string | null
+  avatar_url:      string | null
+  role:            UserRole
+  notify_timeline: boolean
+  notify_rsvp:     boolean
+  created_at:      string
+  updated_at:      string
+}

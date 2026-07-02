@@ -16,8 +16,8 @@ export default function MobileTopBar() {
         <svg width="30" height="22" viewBox="0 0 76 56" fill="none">
           <defs>
             <linearGradient id="mtg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#E0B870" />
-              <stop offset="100%" stopColor="#C6943A" />
+              <stop offset="0%" stopColor="var(--wedding-color-light)" />
+              <stop offset="100%" stopColor="var(--wedding-color)" />
             </linearGradient>
           </defs>
           <circle cx="28" cy="28" r="17" stroke="url(#mtg)" strokeWidth="5" fill="none" />

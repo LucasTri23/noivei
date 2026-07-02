@@ -40,7 +40,7 @@ export default function Sidebar({ coupleNames, plan, initial }: SidebarProps) {
       {/* Logo */}
       <div className="flex items-center gap-3 px-2.5 pb-7">
         <WednestRings />
-        <span className="font-display" style={{ fontSize: '28px', fontWeight: 500, color: '#E0B870', letterSpacing: '0.02em' }}>
+        <span className="font-display" style={{ fontSize: '28px', fontWeight: 500, color: 'var(--wedding-color-light)', letterSpacing: '0.02em' }}>
           Wednest
         </span>
       </div>
@@ -56,10 +56,10 @@ export default function Sidebar({ coupleNames, plan, initial }: SidebarProps) {
               className={cn(
                 'flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition-colors',
                 active
-                  ? 'text-[#E0B870]'
-                  : 'text-[rgba(250,240,230,0.65)] hover:bg-[rgba(198,148,58,0.1)] hover:text-[rgba(250,240,230,0.9)]',
+                  ? 'text-[var(--wedding-color-light)]'
+                  : 'text-[rgba(250,240,230,0.65)] hover:bg-[color-mix(in_srgb,var(--wedding-color)_10%,transparent)] hover:text-[rgba(250,240,230,0.9)]',
               )}
-              style={active ? { background: 'rgba(198,148,58,0.18)' } : undefined}
+              style={active ? { background: 'color-mix(in srgb, var(--wedding-color) 18%, transparent)' } : undefined}
             >
               <Icon size={19} />
               <span style={{ fontWeight: active ? 600 : 500 }}>{label}</span>
@@ -75,7 +75,7 @@ export default function Sidebar({ coupleNames, plan, initial }: SidebarProps) {
       >
         <div
           className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full font-display text-xl font-semibold"
-          style={{ background: 'rgba(198,148,58,0.22)', color: '#E0B870' }}
+          style={{ background: 'color-mix(in srgb, var(--wedding-color) 22%, transparent)', color: 'var(--wedding-color-light)' }}
         >
           {initial}
         </div>
@@ -98,12 +98,12 @@ function WednestRings() {
     <svg width="36" height="26" viewBox="0 0 72 52" fill="none">
       <defs>
         <linearGradient id="rg1" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#E0B870" />
-          <stop offset="100%" stopColor="#C6943A" />
+          <stop offset="0%" stopColor="var(--wedding-color-light)" />
+          <stop offset="100%" stopColor="var(--wedding-color)" />
         </linearGradient>
         <linearGradient id="rg2" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#C6943A" />
-          <stop offset="100%" stopColor="#9A7020" />
+          <stop offset="0%" stopColor="var(--wedding-color)" />
+          <stop offset="100%" stopColor="var(--wedding-color-dark)" />
         </linearGradient>
       </defs>
       <circle cx="26" cy="26" r="16" stroke="url(#rg1)" strokeWidth="5" fill="none" />

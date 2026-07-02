@@ -1,9 +1,10 @@
+import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
 import LogoutButton from '@/components/auth/logout-button'
+import ExportDataButton from '@/components/perfil/export-data-button'
+import DeleteAccountButton from '@/components/perfil/delete-account-button'
 
-function EditIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-}
 function ChevronRightIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
 }
@@ -22,22 +23,16 @@ function HelpIcon() {
 function CalendarIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
 }
-function DownloadIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-}
-function TrashIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-}
 function StarIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
 }
 
 const MENU_ITEMS = [
-  { label: 'Dados do casamento', icon: <CalendarIcon /> },
-  { label: 'Notificações',       icon: <BellIcon /> },
-  { label: 'Aparência',          icon: <SunIcon /> },
-  { label: 'Segurança',          icon: <LockIcon /> },
-  { label: 'Ajuda',              icon: <HelpIcon /> },
+  { label: 'Dados do casamento', href: '/perfil/dados-do-casamento', icon: <CalendarIcon /> },
+  { label: 'Notificações',       href: '/perfil/notificacoes',       icon: <BellIcon /> },
+  { label: 'Aparência',          href: '/perfil/aparencia',          icon: <SunIcon /> },
+  { label: 'Segurança',          href: '/perfil/seguranca',          icon: <LockIcon /> },
+  { label: 'Ajuda',              href: '/perfil/ajuda',              icon: <HelpIcon /> },
 ]
 
 export default async function PerfilPage() {
@@ -62,8 +57,9 @@ export default async function PerfilPage() {
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
   const email = user?.email ?? ''
-  const planId = subscription?.plan_id ?? 'free'
-  const isPremium = planId !== 'free'
+  const planId = (subscription?.plan_id ?? 'free') as PlanId
+  const isPremium = isPaidPlan(planId)
+  const planName = PLAN_NAMES[planId] ?? 'Gratuito'
   const initial = coupleNames.charAt(0).toUpperCase()
 
   return (
@@ -86,7 +82,7 @@ export default async function PerfilPage() {
               <div
                 style={{
                   width: '64px', height: '64px', borderRadius: '50%', flexShrink: 0,
-                  background: 'rgba(198,148,58,0.22)', color: '#E0B870',
+                  background: 'color-mix(in srgb, var(--wedding-color) 22%, transparent)', color: 'var(--wedding-color-light)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '26px', fontWeight: 700,
                 }}
@@ -105,34 +101,36 @@ export default async function PerfilPage() {
                 </div>
               </div>
             </div>
-            <button
+            <Link
+              href="/perfil/dados-do-casamento"
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                background: 'transparent', color: '#C6943A', border: '1.5px solid #C6943A',
+                background: 'transparent', color: 'var(--wedding-color)', border: '1.5px solid var(--wedding-color)',
                 borderRadius: '12px', padding: '10px 16px',
-                fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+                fontWeight: 600, fontSize: '14px', textDecoration: 'none',
               }}
             >
-              <EditIcon /> Editar perfil
-            </button>
+              Editar dados do casamento
+            </Link>
           </div>
 
           {/* Menu list */}
           <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
             {MENU_ITEMS.map((item, idx) => (
-              <button
+              <Link
                 key={item.label}
+                href={item.href}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
-                  padding: '14px 20px', background: 'transparent', border: 'none',
+                  padding: '14px 20px', background: 'transparent',
                   borderBottom: idx < MENU_ITEMS.length - 1 ? '1px solid #F8F3EE' : 'none',
-                  cursor: 'pointer', textAlign: 'left',
+                  textAlign: 'left', textDecoration: 'none',
                 }}
               >
                 <div
                   style={{
                     width: '38px', height: '38px', borderRadius: '10px',
-                    background: '#FBF5EE', color: '#C6943A',
+                    background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}
@@ -143,7 +141,7 @@ export default async function PerfilPage() {
                   {item.label}
                 </span>
                 <span style={{ color: '#C8B4A0' }}><ChevronRightIcon /></span>
-              </button>
+              </Link>
             ))}
           </div>
 
@@ -162,41 +160,42 @@ export default async function PerfilPage() {
           >
             <div
               className="pointer-events-none absolute inset-0"
-              style={{ backgroundImage: 'radial-gradient(rgba(198,148,58,0.16) 1.3px, transparent 1.5px)', backgroundSize: '26px 26px' }}
+              style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 16%, transparent) 1.3px, transparent 1.5px)', backgroundSize: '26px 26px' }}
             />
             <div style={{ position: 'relative' }}>
               <div
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '4px 12px', borderRadius: '99px',
-                  background: 'rgba(198,148,58,0.22)', color: '#E0B870',
+                  background: 'color-mix(in srgb, var(--wedding-color) 22%, transparent)', color: 'var(--wedding-color-light)',
                   fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em',
                   textTransform: 'uppercase', marginBottom: '12px',
                 }}
               >
-                <StarIcon /> {isPremium ? 'Premium' : 'Gratuito'}
+                <StarIcon /> {planName}
               </div>
               <div
                 className="font-display"
                 style={{ fontSize: '26px', fontWeight: 500, color: '#FAF0E6', marginBottom: '6px' }}
               >
-                {isPremium ? 'Plano Premium ativo' : 'Plano Gratuito'}
+                {isPremium ? `Plano ${planName} ativo` : 'Plano Gratuito'}
               </div>
               <div style={{ fontSize: '13.5px', color: 'rgba(250,240,230,0.65)', marginBottom: '20px', lineHeight: 1.5 }}>
                 {isPremium
-                  ? 'Acesso completo a todas as funcionalidades do Wednest.'
+                  ? 'Acesso completo a todas as funcionalidades do Noivei.'
                   : 'Faça upgrade para desbloquear convidados ilimitados, mesas e muito mais.'}
               </div>
-              <button
+              <Link
+                href="/perfil/planos"
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  background: '#E0B870', color: '#2A1E10', border: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  background: 'var(--wedding-color-light)', color: '#2A1E10', border: 'none',
                   borderRadius: '12px', padding: '12px 20px',
-                  fontWeight: 700, fontSize: '14px', cursor: 'pointer',
+                  fontWeight: 700, fontSize: '14px', textDecoration: 'none',
                 }}
               >
                 {isPremium ? 'Gerenciar assinatura' : 'Ver planos'}
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -206,32 +205,8 @@ export default async function PerfilPage() {
               Privacidade (LGPD)
             </h3>
             <div className="flex flex-col gap-3">
-              <button
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '13px 16px', borderRadius: '12px',
-                  border: '1.5px solid #EBDDD0', background: 'transparent',
-                  cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <span style={{ color: '#C6943A' }}><DownloadIcon /></span>
-                <span style={{ fontSize: '14px', fontWeight: 500, color: '#C6943A' }}>
-                  Exportar meus dados
-                </span>
-              </button>
-              <button
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '13px 16px', borderRadius: '12px',
-                  border: '1.5px solid #F2DADA', background: 'transparent',
-                  cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <span style={{ color: '#C0553F' }}><TrashIcon /></span>
-                <span style={{ fontSize: '14px', fontWeight: 500, color: '#C0553F' }}>
-                  Excluir minha conta
-                </span>
-              </button>
+              <ExportDataButton />
+              <DeleteAccountButton />
             </div>
           </div>
         </div>

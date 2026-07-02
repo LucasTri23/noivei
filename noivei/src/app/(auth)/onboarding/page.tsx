@@ -9,7 +9,7 @@ interface IbgeMunicipio {
   microrregiao: { mesorregiao: { UF: { sigla: string } } }
 }
 
-type PlanChoice = 'free' | 'premium_monthly' | 'premium_plus_monthly'
+type PlanChoice = 'free' | 'premium_monthly' | 'premium_plus_once'
 
 interface FormData {
   brideName:  string
@@ -28,25 +28,25 @@ const PLANS: { id: PlanChoice; name: string; price: string; desc: string; featur
     id: 'free',
     name: 'Gratuito',
     price: 'R$ 0',
-    desc: 'Para começar o planejamento',
+    desc: 'Ideal para conhecer a plataforma',
     highlight: false,
-    features: ['Checklist básico', 'Até 50 convidados', 'Timeline', 'Site do casal'],
+    features: ['Checklist', 'Timeline', 'Até 50 convidados', 'Dashboard básico'],
   },
   {
     id: 'premium_monthly',
-    name: 'Ideal',
-    price: 'R$ 29/mês',
-    desc: 'O mais escolhido pelos casais',
+    name: 'Premium',
+    price: 'R$ 29,90/mês',
+    desc: 'Esse é o plano que a maioria dos casais escolhe',
     highlight: true,
-    features: ['Tudo do Gratuito', 'Convidados ilimitados', 'Organização de mesas', 'Financeiro completo', 'RSVP online'],
+    features: ['Tudo do Gratuito', 'Até 250 convidados', 'Site do casal', 'Organização de mesas', 'Financeiro completo', 'RSVP ilimitado'],
   },
   {
-    id: 'premium_plus_monthly',
-    name: 'Completo',
-    price: 'R$ 49/mês',
-    desc: 'Experiência sem limites',
+    id: 'premium_plus_once',
+    name: 'Premium Plus',
+    price: 'R$ 299 único',
+    desc: 'Tudo liberado, IA completa, mais armazenamento e personalização',
     highlight: false,
-    features: ['Tudo do Ideal', 'Múltiplos casamentos', 'Exportar relatórios', 'Suporte prioritário'],
+    features: ['Tudo do Premium', 'Convidados ilimitados', 'IA completa', 'Suporte prioritário'],
   },
 ]
 

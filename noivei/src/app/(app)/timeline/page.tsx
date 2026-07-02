@@ -44,7 +44,7 @@ export default function TimelinePage() {
             {/* Month header */}
             <div
               className="font-display mb-4"
-              style={{ fontSize: '22px', fontWeight: 500, color: '#C6943A', letterSpacing: '0.01em' }}
+              style={{ fontSize: '22px', fontWeight: 500, color: 'var(--wedding-color)', letterSpacing: '0.01em' }}
             >
               {group.month}
             </div>
@@ -67,12 +67,12 @@ export default function TimelinePage() {
                 const dotColor = item.highlight
                   ? '#C89070'
                   : item.done
-                  ? '#C6943A'
+                  ? 'var(--wedding-color)'
                   : '#FFFFFF'
                 const dotBorder = item.highlight
                   ? '#C89070'
                   : item.done
-                  ? '#C6943A'
+                  ? 'var(--wedding-color)'
                   : '#D8C6A6'
 
                 return (
@@ -97,7 +97,7 @@ export default function TimelinePage() {
                         borderRadius: '50%',
                         background: dotColor,
                         border: `2px solid ${dotBorder}`,
-                        boxShadow: item.done || item.highlight ? `0 0 0 3px rgba(198,148,58,0.18)` : 'none',
+                        boxShadow: item.done || item.highlight ? '0 0 0 3px color-mix(in srgb, var(--wedding-color) 18%, transparent)' : 'none',
                         zIndex: 1,
                       }}
                     >
@@ -132,7 +132,7 @@ export default function TimelinePage() {
                         style={{
                           fontSize: '15px',
                           fontWeight: 600,
-                          color: item.highlight ? '#E0B870' : '#3C2818',
+                          color: item.highlight ? 'var(--wedding-color-light)' : '#3C2818',
                         }}
                       >
                         {item.title}

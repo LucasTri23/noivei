@@ -75,10 +75,10 @@ export default function ChecklistPage() {
         <button
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
-            background: '#C6943A', color: '#fff', border: 'none',
+            background: 'var(--wedding-color)', color: '#fff', border: 'none',
             borderRadius: '12px', padding: '11px 18px',
             fontWeight: 600, fontSize: '14px', cursor: 'pointer',
-            boxShadow: '0 6px 16px rgba(198,148,58,0.32)',
+            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
           }}
         >
           <PlusIcon /> Adicionar tarefa
@@ -89,13 +89,13 @@ export default function ChecklistPage() {
       <div className="mb-6 rounded-2xl bg-white p-5" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.07)' }}>
         <div className="mb-2 flex items-center justify-between">
           <span style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818' }}>Progresso geral</span>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#C6943A' }}>{pct}%</span>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color)' }}>{pct}%</span>
         </div>
         <div style={{ height: '10px', borderRadius: '99px', background: '#EBDDD0', overflow: 'hidden' }}>
           <div
             style={{
               height: '100%', borderRadius: '99px',
-              background: 'linear-gradient(90deg, #E0B870, #9A7020)',
+              background: 'linear-gradient(90deg, var(--wedding-color-light), var(--wedding-color-dark))',
               width: `${pct}%`, transition: 'width 0.4s ease',
             }}
           />
@@ -111,7 +111,7 @@ export default function ChecklistPage() {
             style={{
               padding: '7px 16px', borderRadius: '99px', fontSize: '13.5px',
               fontWeight: 600, cursor: 'pointer', border: 'none',
-              background: filter === f ? '#C6943A' : '#FBF5EE',
+              background: filter === f ? 'var(--wedding-color)' : 'var(--wedding-color-subtle)',
               color: filter === f ? '#fff' : '#9A7A60',
               transition: 'all 0.18s',
             }}
@@ -143,7 +143,7 @@ export default function ChecklistPage() {
                 </span>
                 <span style={{
                   fontSize: '12px', fontWeight: 600, padding: '3px 10px',
-                  borderRadius: '99px', background: '#F1E6D4', color: '#9A7020',
+                  borderRadius: '99px', background: '#F1E6D4', color: 'var(--wedding-color-dark)',
                 }}>
                   {groupDone}/{group.items.length}
                 </span>
@@ -166,7 +166,7 @@ export default function ChecklistPage() {
                         style={{
                           width: '22px', height: '22px', borderRadius: '6px',
                           border: isDone ? 'none' : '2px solid #D8C6A6',
-                          background: isDone ? '#C6943A' : 'transparent',
+                          background: isDone ? 'var(--wedding-color)' : 'transparent',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0, transition: 'all 0.18s',
                         }}

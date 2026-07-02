@@ -31,7 +31,7 @@ export default function MobileBottomNav() {
             key={href}
             href={href}
             className="flex flex-col items-center gap-0.5 px-2.5 py-1"
-            style={{ color: active ? '#C6943A' : '#C8B4A0' }}
+            style={{ color: active ? 'var(--wedding-color)' : '#C8B4A0' }}
           >
             <Icon size={23} strokeWidth={active ? 2.1 : 1.7} />
             <span style={{ fontSize: '10.5px', fontWeight: 600 }}>{label}</span>

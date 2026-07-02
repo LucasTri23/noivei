@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
+import { deriveWeddingColorScale } from '@/lib/theme/wedding-color'
 import Sidebar from '@/components/layout/sidebar'
 import MobileTopBar from '@/components/layout/mobile-top-bar'
 import MobileBottomNav from '@/components/layout/mobile-bottom-nav'
@@ -12,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('couple_names')
+    .select('couple_names, wedding_color')
     .eq('user_id', user.id)
     .is('deleted_at', null)
     .order('created_at')
@@ -29,21 +31,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .maybeSingle()
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
-  const planId      = subscription?.plan_id ?? 'free'
-  const planLabels: Record<string, string> = {
-    free: 'Plano Gratuito',
-    premium_monthly: 'Plano Premium',
-    premium_once: 'Plano Premium',
-    premium_plus_monthly: 'Plano Exclusivo',
-    premium_plus_once: 'Plano Exclusivo',
-  }
-  const planLabel = planLabels[planId] ?? 'Plano Gratuito'
-  const initial   = coupleNames.charAt(0).toUpperCase()
+  const planId      = (subscription?.plan_id ?? 'free') as PlanId
+  const planLabel   = `Plano ${PLAN_NAMES[planId] ?? 'Gratuito'}`
+  const initial     = coupleNames.charAt(0).toUpperCase()
+
+  // Cor do casamento sobrescreve o dourado padrão apenas nos planos pagos
+  const colorScale =
+    isPaidPlan(planId) && wedding?.wedding_color
+      ? deriveWeddingColorScale(wedding.wedding_color)
+      : null
+
+  const weddingColorVars = colorScale
+    ? ({
+        '--wedding-color':        colorScale.color,
+        '--wedding-color-light':  colorScale.light,
+        '--wedding-color-dark':   colorScale.dark,
+        '--wedding-color-subtle': colorScale.subtle,
+      } as React.CSSProperties)
+    : undefined
 
   return (
     <div
       className="flex min-h-screen"
-      style={{ background: '#FAF5F0', fontFamily: 'var(--font-body)', color: '#3C2818' }}
+      style={{
+        background: 'var(--bg)',
+        fontFamily: 'var(--font-body)',
+        color: 'var(--fg)',
+        ...weddingColorVars,
+      }}
     >
       <Sidebar coupleNames={coupleNames} plan={planLabel} initial={initial} />
 

@@ -33,7 +33,7 @@ function GuestChip({ name, draggable = true, onDragStart }: {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '6px',
         padding: '5px 10px', borderRadius: '99px',
-        background: '#FBF5EE', border: '1px solid #EBDDD0',
+        background: 'var(--wedding-color-subtle)', border: '1px solid #EBDDD0',
         fontSize: '12.5px', fontWeight: 500, color: '#3C2818',
         cursor: draggable ? 'grab' : 'default',
         userSelect: 'none',
@@ -41,7 +41,7 @@ function GuestChip({ name, draggable = true, onDragStart }: {
     >
       <div style={{
         width: '20px', height: '20px', borderRadius: '50%',
-        background: 'rgba(198,148,58,0.18)', color: '#C6943A',
+        background: 'color-mix(in srgb, var(--wedding-color) 18%, transparent)', color: 'var(--wedding-color)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '10px', fontWeight: 700, flexShrink: 0,
       }}>
@@ -135,7 +135,7 @@ export default function MesasPage() {
             onDrop={() => handleDrop('unassigned')}
             style={{
               minHeight: '220px', borderRadius: '18px', padding: '14px',
-              border: '2px dashed #EBDDD0', background: '#FBF5EE',
+              border: '2px dashed #EBDDD0', background: 'var(--wedding-color-subtle)',
               display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'flex-start',
             }}
           >
@@ -160,7 +160,7 @@ export default function MesasPage() {
             <div
               style={{
                 gridColumn: '1 / -1', borderRadius: '18px', padding: '40px',
-                border: '2px dashed #EBDDD0', background: '#FBF5EE',
+                border: '2px dashed #EBDDD0', background: 'var(--wedding-color-subtle)',
                 textAlign: 'center', color: '#9A7A60', fontSize: '14px',
               }}
             >
@@ -197,8 +197,8 @@ export default function MesasPage() {
                     style={{
                       fontSize: '12px', fontWeight: 700, padding: '2px 9px',
                       borderRadius: '99px',
-                      background: full ? '#F6E4DE' : '#FBF5EE',
-                      color: full ? '#C0553F' : '#9A7020',
+                      background: full ? '#F6E4DE' : 'var(--wedding-color-subtle)',
+                      color: full ? '#C0553F' : 'var(--wedding-color-dark)',
                     }}
                   >
                     {table.guests.length}/{table.cap}

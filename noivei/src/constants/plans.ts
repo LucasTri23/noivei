@@ -12,8 +12,8 @@ export const PLAN_NAMES: Record<PlanId, string> = {
   free:                 'Gratuito',
   premium_monthly:      'Premium',
   premium_once:         'Premium',
-  premium_plus_monthly: 'Exclusivo',
-  premium_plus_once:    'Exclusivo',
+  premium_plus_monthly: 'Premium Plus',
+  premium_plus_once:    'Premium Plus',
 }
 
 export const PAID_PLANS: PlanId[] = [

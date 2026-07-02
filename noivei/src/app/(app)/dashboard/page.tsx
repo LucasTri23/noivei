@@ -75,10 +75,10 @@ export default async function DashboardPage() {
         >
           <div
             className="pointer-events-none absolute inset-0"
-            style={{ backgroundImage: 'radial-gradient(rgba(198,148,58,0.18) 1.3px, transparent 1.5px)', backgroundSize: '26px 26px' }}
+            style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 18%, transparent) 1.3px, transparent 1.5px)', backgroundSize: '26px 26px' }}
           />
           <div className="relative">
-            <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: '#E0B870' }}>
+            <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
               Faltam
             </div>
             {daysLeft !== null ? (
@@ -86,10 +86,10 @@ export default async function DashboardPage() {
                 <span className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(60px,8vw,88px)', lineHeight: 0.9 }}>
                   {daysLeft}
                 </span>
-                <span className="font-display" style={{ fontStyle: 'italic', fontSize: '28px', color: '#E0B870' }}>dias</span>
+                <span className="font-display" style={{ fontStyle: 'italic', fontSize: '28px', color: 'var(--wedding-color-light)' }}>dias</span>
               </div>
             ) : (
-              <p className="font-display mt-2" style={{ fontStyle: 'italic', fontSize: '22px', color: '#E0B870' }}>
+              <p className="font-display mt-2" style={{ fontStyle: 'italic', fontSize: '22px', color: 'var(--wedding-color-light)' }}>
                 Adicione a data do casamento nas configurações
               </p>
             )}
@@ -106,7 +106,7 @@ export default async function DashboardPage() {
           <div className="relative" style={{ width: '130px', height: '130px' }}>
             <svg width="130" height="130" viewBox="0 0 130 130">
               <circle cx="65" cy="65" r="54" fill="none" stroke="#EBDDD0" strokeWidth="13" />
-              <circle cx="65" cy="65" r="54" fill="none" stroke="#C6943A" strokeWidth="13" strokeLinecap="round" strokeDasharray="339" strokeDashoffset="339" transform="rotate(-90 65 65)" />
+              <circle cx="65" cy="65" r="54" fill="none" stroke="var(--wedding-color)" strokeWidth="13" strokeLinecap="round" strokeDasharray="339" strokeDashoffset="339" transform="rotate(-90 65 65)" />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="font-display" style={{ fontWeight: 600, fontSize: '40px', color: '#3C2818' }}>0%</span>
@@ -135,9 +135,9 @@ export default async function DashboardPage() {
               key={href}
               href={href}
               className="flex flex-col gap-3 rounded-2xl p-4 transition-colors"
-              style={{ background: '#FBF5EE', border: '1px solid #EBDDD0', textDecoration: 'none', color: '#3C2818' }}
+              style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #EBDDD0', textDecoration: 'none', color: '#3C2818' }}
             >
-              <span style={{ color: '#C6943A' }}><Icon size={22} /></span>
+              <span style={{ color: 'var(--wedding-color)' }}><Icon size={22} /></span>
               <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{label}</div>
             </a>
           ))}

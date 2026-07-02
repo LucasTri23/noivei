@@ -53,10 +53,10 @@ export default function FinanceiroPage() {
         <button
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
-            background: '#C6943A', color: '#fff', border: 'none',
+            background: 'var(--wedding-color)', color: '#fff', border: 'none',
             borderRadius: '12px', padding: '11px 18px',
             fontWeight: 600, fontSize: '14px', cursor: 'pointer',
-            boxShadow: '0 6px 16px rgba(198,148,58,0.32)',
+            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
           }}
         >
           <PlusIcon /> Lançar gasto
@@ -70,10 +70,10 @@ export default function FinanceiroPage() {
       >
         <div
           className="pointer-events-none absolute inset-0"
-          style={{ backgroundImage: 'radial-gradient(rgba(198,148,58,0.18) 1.3px, transparent 1.5px)', backgroundSize: '28px 28px' }}
+          style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 18%, transparent) 1.3px, transparent 1.5px)', backgroundSize: '28px 28px' }}
         />
         <div className="relative">
-          <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: '#E0B870', marginBottom: '4px' }}>
+          <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)', marginBottom: '4px' }}>
             Orçamento total
           </div>
           <div className="font-display" style={{ fontSize: 'clamp(42px,6vw,60px)', fontWeight: 500, lineHeight: 1, marginBottom: '16px' }}>
@@ -85,7 +85,7 @@ export default function FinanceiroPage() {
             <div
               style={{
                 height: '100%', borderRadius: '99px',
-                background: 'linear-gradient(90deg, #E0B870, #C6943A)',
+                background: 'linear-gradient(90deg, var(--wedding-color-light), var(--wedding-color))',
                 width: `${PCT}%`,
               }}
             />
@@ -97,7 +97,7 @@ export default function FinanceiroPage() {
           {/* Mini cards */}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             {[
-              { label: 'Gasto', value: fmt(SPENT), color: '#E0B870' },
+              { label: 'Gasto', value: fmt(SPENT), color: 'var(--wedding-color-light)' },
               { label: 'Disponível', value: fmt(available), color: 'rgba(250,240,230,0.65)' },
             ].map((mc) => (
               <div
@@ -169,7 +169,7 @@ export default function FinanceiroPage() {
               <div
                 key={i}
                 className="flex items-center gap-4 rounded-xl p-4"
-                style={{ background: '#FBF5EE', border: '1px solid #F0E8DE' }}
+                style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #F0E8DE' }}
               >
                 {/* Check icon */}
                 <div

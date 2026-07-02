@@ -23,7 +23,7 @@ const STATS = {
 
 const STATUS_STYLE: Record<Status, { label: string; color: string; bg: string }> = {
   confirmado: { label: 'Confirmado', color: '#5E8B6A', bg: '#E9EFE6' },
-  pendente:   { label: 'Pendente',   color: '#9A7020', bg: '#FBF5EE' },
+  pendente:   { label: 'Pendente',   color: 'var(--wedding-color-dark)', bg: 'var(--wedding-color-subtle)' },
   recusado:   { label: 'Recusado',   color: '#C0553F', bg: '#F6E4DE' },
 }
 
@@ -75,8 +75,8 @@ export default function ConvidadosPage() {
           <button
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
-              background: 'transparent', color: '#C6943A',
-              border: '1.5px solid #C6943A', borderRadius: '12px',
+              background: 'transparent', color: 'var(--wedding-color)',
+              border: '1.5px solid var(--wedding-color)', borderRadius: '12px',
               padding: '10px 16px', fontWeight: 600, fontSize: '14px', cursor: 'pointer',
             }}
           >
@@ -85,10 +85,10 @@ export default function ConvidadosPage() {
           <button
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
-              background: '#C6943A', color: '#fff', border: 'none',
+              background: 'var(--wedding-color)', color: '#fff', border: 'none',
               borderRadius: '12px', padding: '10px 16px',
               fontWeight: 600, fontSize: '14px', cursor: 'pointer',
-              boxShadow: '0 6px 16px rgba(198,148,58,0.32)',
+              boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
             }}
           >
             <PlusIcon /> Convidado
@@ -101,7 +101,7 @@ export default function ConvidadosPage() {
         {[
           { label: 'Total', value: STATS.total, color: '#3C2818' },
           { label: 'Confirmados', value: STATS.confirmado, color: '#5E8B6A' },
-          { label: 'Pendentes', value: STATS.pendente, color: '#9A7020' },
+          { label: 'Pendentes', value: STATS.pendente, color: 'var(--wedding-color-dark)' },
           { label: 'Recusados', value: STATS.recusado, color: '#C0553F' },
         ].map((s) => (
           <div
@@ -128,7 +128,7 @@ export default function ConvidadosPage() {
             style={{
               padding: '7px 16px', borderRadius: '99px', fontSize: '13.5px',
               fontWeight: 600, cursor: 'pointer', border: 'none',
-              background: filter === f.key ? '#C6943A' : '#FBF5EE',
+              background: filter === f.key ? 'var(--wedding-color)' : 'var(--wedding-color-subtle)',
               color: filter === f.key ? '#fff' : '#9A7A60',
               transition: 'all 0.18s',
             }}
@@ -153,7 +153,7 @@ export default function ConvidadosPage() {
               <div
                 style={{
                   width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-                  background: 'rgba(198,148,58,0.14)', color: '#C6943A',
+                  background: 'color-mix(in srgb, var(--wedding-color) 14%, transparent)', color: 'var(--wedding-color)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontWeight: 700, fontSize: '16px',
                 }}

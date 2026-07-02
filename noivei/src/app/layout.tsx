@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Cormorant_Garamond, Hanken_Grotesk } from 'next/font/google'
+import ThemeProvider from '@/components/theme-provider'
 import './globals.css'
 
 const cormorant = Cormorant_Garamond({
@@ -52,10 +53,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-full bg-[var(--bg)] text-[var(--fg)] antialiased">
-        <a href="#main-content" className="skip-link">
-          Ir para o conteúdo principal
-        </a>
-        <main id="main-content">{children}</main>
+        <ThemeProvider>
+          <a href="#main-content" className="skip-link">
+            Ir para o conteúdo principal
+          </a>
+          <main id="main-content">{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   )

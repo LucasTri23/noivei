@@ -1,0 +1,154 @@
+'use client'
+
+import { useState, useSyncExternalStore } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
+import { createSupabaseBrowser } from '@/lib/supabase/browser'
+
+const emptySubscribe = () => () => {}
+
+interface AppearanceSettingsProps {
+  weddingId:    string | null
+  weddingColor: string
+  isPaid:       boolean
+}
+
+const DEFAULT_COLOR = '#C6943A'
+
+export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: AppearanceSettingsProps) {
+  const router = useRouter()
+  const { theme, setTheme } = useTheme()
+  const [color, setColor]   = useState(weddingColor || DEFAULT_COLOR)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+  const [error, setError]   = useState('')
+
+  // next-themes só conhece o tema no cliente — evita mismatch de hidratação
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false)
+
+  async function saveColor() {
+    if (!weddingId) return
+    setSaving(true)
+    setError('')
+    setSaved(false)
+
+    const supabase = createSupabaseBrowser()
+    const { error: dbError } = await supabase
+      .from('weddings')
+      .update({ wedding_color: color })
+      .eq('id', weddingId)
+
+    setSaving(false)
+    if (dbError) {
+      setError('Não foi possível salvar a cor. Tente novamente.')
+      return
+    }
+    setSaved(true)
+    router.refresh()
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Tema claro/escuro */}
+      <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+        <h2 className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: '#3C2818', margin: '0 0 4px' }}>
+          Tema
+        </h2>
+        <p style={{ fontSize: '13.5px', color: '#9A7A60', margin: '0 0 16px' }}>
+          Escolha entre o modo claro e o modo escuro.
+        </p>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {[
+            { value: 'light', label: 'Claro' },
+            { value: 'dark',  label: 'Escuro' },
+          ].map(({ value, label }) => {
+            const active = mounted && theme === value
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTheme(value)}
+                style={{
+                  flex: 1, maxWidth: '160px', padding: '12px', borderRadius: '12px',
+                  border: `1.5px solid ${active ? 'var(--wedding-color)' : '#EBDDD0'}`,
+                  background: active ? 'var(--wedding-color-subtle)' : 'transparent',
+                  color: active ? 'var(--wedding-color-dark)' : '#9A7A60',
+                  fontWeight: active ? 700 : 500, fontSize: '14px',
+                  cursor: 'pointer', transition: 'all 0.18s',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Cor do casamento */}
+      <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', opacity: isPaid ? 1 : 0.85 }}>
+        <h2 className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: '#3C2818', margin: '0 0 4px' }}>
+          Cor do casamento
+        </h2>
+        <p style={{ fontSize: '13.5px', color: '#9A7A60', margin: '0 0 16px', lineHeight: 1.5 }}>
+          A cor escolhida pelo casal colore todo o app — botões, destaques e o site de vocês.
+        </p>
+
+        {isPaid ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => { setColor(e.target.value); setSaved(false) }}
+                aria-label="Cor do casamento"
+                style={{
+                  width: '56px', height: '40px', border: '1.5px solid #EBDDD0',
+                  borderRadius: '10px', padding: '3px', background: '#fff', cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#3C2818', fontFamily: 'monospace' }}>
+                {color.toUpperCase()}
+              </span>
+              <button
+                type="button"
+                onClick={saveColor}
+                disabled={saving}
+                style={{
+                  background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                  borderRadius: '12px', padding: '11px 20px', fontWeight: 600, fontSize: '14px',
+                  cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? 'Salvando…' : 'Salvar cor'}
+              </button>
+            </div>
+            {error && (
+              <p style={{ fontSize: '13px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', marginTop: '12px' }}>
+                {error}
+              </p>
+            )}
+            {saved && (
+              <p style={{ fontSize: '13px', color: '#5E8B6A', background: '#E9EFE6', padding: '10px 14px', borderRadius: '10px', marginTop: '12px' }}>
+                Cor do casamento atualizada.
+              </p>
+            )}
+          </>
+        ) : (
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: '12px',
+              border: '1.5px dashed #EBDDD0', borderRadius: '12px', padding: '14px 16px',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8B4A0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span style={{ fontSize: '13.5px', color: '#9A7A60', lineHeight: 1.5 }}>
+              Disponível nos planos <strong>Premium</strong> e <strong>Premium Plus</strong>.
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
