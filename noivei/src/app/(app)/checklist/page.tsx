@@ -16,34 +16,8 @@ interface Group {
   items: ChecklistItem[]
 }
 
-const GROUPS: Group[] = [
-  {
-    title: '12+ meses antes',
-    items: [
-      { id: 'c1', label: 'Definir o orçamento total', due: 'Concluído', defaultDone: true },
-      { id: 'c2', label: 'Escolher e reservar o local', due: 'Concluído', defaultDone: true },
-      { id: 'c3', label: 'Montar lista inicial de convidados', due: 'Concluído', defaultDone: true },
-      { id: 'c4', label: 'Contratar o cerimonialista', due: '2 semanas', defaultDone: false },
-    ],
-  },
-  {
-    title: '6 a 9 meses antes',
-    items: [
-      { id: 'c5', label: 'Fechar buffet e cardápio', due: '1 mês', defaultDone: false },
-      { id: 'c6', label: 'Contratar fotógrafo e vídeo', due: 'Hoje', defaultDone: false },
-      { id: 'c7', label: 'Escolher o traje dos noivos', due: '3 semanas', defaultDone: false },
-      { id: 'c8', label: 'Definir a decoração e flores', due: '6 semanas', defaultDone: false },
-    ],
-  },
-  {
-    title: '3 meses antes',
-    items: [
-      { id: 'c9', label: 'Enviar os convites', due: '2 meses', defaultDone: false },
-      { id: 'c10', label: 'Prova do bolo e doces', due: '10 semanas', defaultDone: false },
-      { id: 'c11', label: 'Montar o cronograma do dia', due: '3 meses', defaultDone: false },
-    ],
-  },
-]
+// Sem dados padrão ainda — cada casal começa com a checklist vazia até definirmos o template
+const GROUPS: Group[] = []
 
 const ALL_ITEMS = GROUPS.flatMap((g) => g.items)
 
@@ -71,7 +45,7 @@ export default function ChecklistPage() {
 
   const total = ALL_ITEMS.length
   const done = ALL_ITEMS.filter((i) => checks[i.id]).length
-  const pct = Math.round((done / total) * 100)
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   function toggle(id: string) {
     setChecks((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -149,6 +123,14 @@ export default function ChecklistPage() {
 
       {/* Groups */}
       <div className="flex flex-col gap-5">
+        {GROUPS.length === 0 && (
+          <div
+            className="rounded-2xl bg-white p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: '#9A7A60', fontSize: '14px' }}
+          >
+            Nenhuma tarefa ainda. Adicione a primeira tarefa acima.
+          </div>
+        )}
         {GROUPS.map((group) => {
           const visible = group.items.filter(filterItem)
           if (visible.length === 0) return null

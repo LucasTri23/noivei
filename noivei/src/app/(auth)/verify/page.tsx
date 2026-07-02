@@ -13,12 +13,12 @@ function VerifyForm() {
   const [loading, setLoading] = useState(false)
 
   const refs = [
-    useRef<HTMLInputElement>(null), // eslint-disable-line react-hooks/rules-of-hooks
-    useRef<HTMLInputElement>(null), // eslint-disable-line react-hooks/rules-of-hooks
-    useRef<HTMLInputElement>(null), // eslint-disable-line react-hooks/rules-of-hooks
-    useRef<HTMLInputElement>(null), // eslint-disable-line react-hooks/rules-of-hooks
-    useRef<HTMLInputElement>(null), // eslint-disable-line react-hooks/rules-of-hooks
-    useRef<HTMLInputElement>(null), // eslint-disable-line react-hooks/rules-of-hooks
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
   ]
 
   function handleChange(idx: number, val: string) {

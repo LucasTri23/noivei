@@ -11,20 +11,15 @@ interface Guest {
   status: Status
 }
 
-const GUESTS: Guest[] = [
-  { name: 'Tia Rosa', group: 'Família', status: 'confirmado' },
-  { name: 'Tio Léo', group: 'Família', status: 'confirmado' },
-  { name: 'Duda Martins', group: 'Amigos', status: 'confirmado' },
-  { name: 'Gabi Souza', group: 'Amigos', status: 'pendente' },
-  { name: 'Thiago Reis', group: 'Amigos', status: 'confirmado' },
-  { name: 'Manu Costa', group: 'Amigos em comum', status: 'recusado' },
-  { name: 'Vó Ivone', group: 'Família', status: 'confirmado' },
-  { name: 'Prima Ana', group: 'Família', status: 'pendente' },
-  { name: 'Carlos & Bia', group: 'Amigos em comum', status: 'confirmado' },
-  { name: 'Léo Prado', group: 'Amigos', status: 'confirmado' },
-]
+// Sem dados padrão ainda — lista vazia até o casal cadastrar convidados
+const GUESTS: Guest[] = []
 
-const STATS = { total: 140, confirmado: 96, pendente: 32, recusado: 12 }
+const STATS = {
+  total:      GUESTS.length,
+  confirmado: GUESTS.filter((g) => g.status === 'confirmado').length,
+  pendente:   GUESTS.filter((g) => g.status === 'pendente').length,
+  recusado:   GUESTS.filter((g) => g.status === 'recusado').length,
+}
 
 const STATUS_STYLE: Record<Status, { label: string; color: string; bg: string }> = {
   confirmado: { label: 'Confirmado', color: '#5E8B6A', bg: '#E9EFE6' },

@@ -35,8 +35,11 @@ export default async function DashboardPage() {
     ? new Date(wedding.wedding_date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
     : null
 
+  // Server Component: renderiza por request, então ler o relógio aqui é intencional
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now()
   const daysLeft = wedding?.wedding_date
-    ? Math.max(0, Math.ceil((new Date(wedding.wedding_date).getTime() - Date.now()) / 86400000))
+    ? Math.max(0, Math.ceil((new Date(wedding.wedding_date).getTime() - now) / 86400000))
     : null
 
   return (

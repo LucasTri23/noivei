@@ -12,25 +12,13 @@ interface Payment {
   date: string
 }
 
-const CATEGORIES: Category[] = [
-  { name: 'Buffet & bebidas',   total: 28000, spent: 12000, color: '#C6943A' },
-  { name: 'Espaço / local',     total: 14000, spent: 14000, color: '#9A7020' },
-  { name: 'Fotografia & vídeo', total: 9000,  spent: 1500,  color: '#C89070' },
-  { name: 'Decoração & flores', total: 8000,  spent: 0,     color: '#A87050' },
-  { name: 'Traje & beleza',     total: 6500,  spent: 0,     color: '#9A7A60' },
-  { name: 'Música & DJ',        total: 4500,  spent: 0,     color: '#8A9B7A' },
-]
+// Sem dados padrão ainda — financeiro vazio até definirmos o template
+const CATEGORIES: Category[] = []
+const PAYMENTS: Payment[] = []
 
-const PAYMENTS: Payment[] = [
-  { vendor: 'Kingdom Hall Centro', note: 'Sinal do espaço',      amount: 'R$ 7.000',  date: '12 jun' },
-  { vendor: 'Foto Ateliê Luz',     note: 'Entrada — 1ª parcela', amount: 'R$ 1.500',  date: '20 jun' },
-  { vendor: 'Buffet Sabor & Arte', note: 'Reserva de data',      amount: 'R$ 5.000',  date: '28 jun' },
-]
-
-const BUDGET  = 72000
-const SPENT   = 27400
-const PCT     = Math.round((SPENT / BUDGET) * 100)
-const CIRC    = 2 * Math.PI * 54 // 339.3
+const BUDGET  = 0
+const SPENT   = 0
+const PCT     = BUDGET > 0 ? Math.round((SPENT / BUDGET) * 100) : 0
 
 function fmt(n: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(n)
@@ -140,6 +128,9 @@ export default function FinanceiroPage() {
             Por categoria
           </h3>
           <div className="flex flex-col gap-4">
+            {CATEGORIES.length === 0 && (
+              <p style={{ fontSize: '13.5px', color: '#9A7A60' }}>Nenhuma categoria lançada ainda.</p>
+            )}
             {CATEGORIES.map((cat) => {
               const pct = cat.total > 0 ? Math.round((cat.spent / cat.total) * 100) : 0
               return (
@@ -171,6 +162,9 @@ export default function FinanceiroPage() {
             Pagamentos recentes
           </h3>
           <div className="flex flex-col gap-3">
+            {PAYMENTS.length === 0 && (
+              <p style={{ fontSize: '13.5px', color: '#9A7A60' }}>Nenhum pagamento lançado ainda.</p>
+            )}
             {PAYMENTS.map((p, i) => (
               <div
                 key={i}

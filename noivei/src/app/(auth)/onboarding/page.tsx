@@ -12,8 +12,8 @@ interface IbgeMunicipio {
 type PlanChoice = 'free' | 'premium_monthly' | 'premium_plus_monthly'
 
 interface FormData {
-  partner1:   string
-  partner2:   string
+  brideName:  string
+  groomName:  string
   date:       string
   city:       string
   guests:     string
@@ -106,8 +106,8 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false)
   const [cities, setCities]   = useState<string[]>([])
   const [data, setData]     = useState<FormData>({
-    partner1:  '',
-    partner2:  '',
+    brideName: '',
+    groomName: '',
     date:      '',
     city:      '',
     guests:    '',
@@ -135,11 +135,13 @@ export default function OnboardingPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    const coupleNames = [data.partner1, data.partner2].filter(Boolean).join(' & ') || 'Meu Casamento'
+    const coupleNames = [data.brideName, data.groomName].filter(Boolean).join(' & ') || 'Meu Casamento'
 
     await supabase.from('weddings').insert({
       user_id:      user.id,
       couple_names: coupleNames,
+      bride_name:   data.brideName || null,
+      groom_name:   data.groomName || null,
       wedding_date: data.date || null,
       city:         data.city || null,
     })
@@ -198,18 +200,18 @@ export default function OnboardingPage() {
             <div style={inputStyle}>
               <HeartIcon />
               <input
-                value={data.partner1}
-                onChange={(e) => set('partner1', e.target.value)}
-                placeholder="Nome de um dos noivos"
+                value={data.brideName}
+                onChange={(e) => set('brideName', e.target.value)}
+                placeholder="Nome da noiva"
                 style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
               />
             </div>
             <div style={inputStyle}>
               <HeartIcon />
               <input
-                value={data.partner2}
-                onChange={(e) => set('partner2', e.target.value)}
-                placeholder="Nome do outro"
+                value={data.groomName}
+                onChange={(e) => set('groomName', e.target.value)}
+                placeholder="Nome do noivo"
                 style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
               />
             </div>

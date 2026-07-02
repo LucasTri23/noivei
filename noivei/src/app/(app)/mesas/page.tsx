@@ -14,16 +14,10 @@ interface State {
   tables: Table[]
 }
 
+// Sem dados padrão ainda — mesas vazias até definirmos o template
 const INITIAL: State = {
-  unassigned: ['Tia Márcia', 'Vô Antônio', 'Bruno Alves', 'Carla Dias', 'Pedro Nunes', 'Juliana R.', 'Marcos F.', 'Beatriz L.', 'Rafael S.', 'Lorena M.'],
-  tables: [
-    { id: 't1', label: 'Mesa dos noivos',  cap: 6, guests: ['Sofia', 'Ramon', 'Dona Cleide', 'Sr. Jorge'] },
-    { id: 't2', label: 'Família (noiva)',  cap: 8, guests: ['Tia Rosa', 'Tio Léo', 'Prima Ana'] },
-    { id: 't3', label: 'Família (noivo)',  cap: 8, guests: ['Vó Ivone', 'Tio Cesar'] },
-    { id: 't4', label: 'Amigos',           cap: 8, guests: ['Duda', 'Gabi', 'Thiago'] },
-    { id: 't5', label: 'Padrinhos',        cap: 8, guests: ['Léo', 'Manu'] },
-    { id: 't6', label: 'Trabalho',         cap: 6, guests: [] },
-  ],
+  unassigned: [],
+  tables: [],
 }
 
 function GuestChip({ name, draggable = true, onDragStart }: {
@@ -162,6 +156,17 @@ export default function MesasPage() {
 
         {/* Tables grid */}
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))' }}>
+          {state.tables.length === 0 && (
+            <div
+              style={{
+                gridColumn: '1 / -1', borderRadius: '18px', padding: '40px',
+                border: '2px dashed #EBDDD0', background: '#FBF5EE',
+                textAlign: 'center', color: '#9A7A60', fontSize: '14px',
+              }}
+            >
+              Nenhuma mesa criada ainda.
+            </div>
+          )}
           {state.tables.map((table) => {
             const full = table.guests.length >= table.cap
             return (

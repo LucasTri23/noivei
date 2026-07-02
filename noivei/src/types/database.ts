@@ -43,6 +43,8 @@ export interface Wedding {
   id:             string
   user_id:        string
   couple_names:   string
+  bride_name:     string | null
+  groom_name:     string | null
   wedding_date:   string
   venue:          string | null
   city:           string | null

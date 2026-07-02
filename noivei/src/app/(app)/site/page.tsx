@@ -152,19 +152,13 @@ export default function SitePage() {
                 className="font-display"
                 style={{ fontSize: 'clamp(48px,8vw,80px)', fontWeight: 500, color: '#3C2818', lineHeight: 0.95 }}
               >
-                Sofia & Ramon
+                Seu Nome & Seu Par
               </div>
               <div
                 className="font-display"
-                style={{ fontStyle: 'italic', fontSize: '28px', color: '#C6943A', marginTop: '8px' }}
+                style={{ fontStyle: 'italic', fontSize: '22px', color: '#9A7020', marginTop: '12px' }}
               >
-                &amp;
-              </div>
-              <div
-                className="font-display"
-                style={{ fontStyle: 'italic', fontSize: '22px', color: '#9A7020', marginTop: '4px' }}
-              >
-                18 de julho de 2027
+                Data do seu casamento
               </div>
 
               <button

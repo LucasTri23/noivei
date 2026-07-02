@@ -10,43 +10,8 @@ interface TimelineGroup {
   items: TimelineItem[]
 }
 
-const TIMELINE: TimelineGroup[] = [
-  {
-    month: 'Julho 2026',
-    items: [
-      { title: 'Orçamento definido', note: 'Concluído', done: true },
-      { title: 'Local reservado', note: 'R$ 14.000 · sinal pago', done: true },
-    ],
-  },
-  {
-    month: 'Setembro 2026',
-    items: [
-      { title: 'Contratar cerimonialista', note: 'Em cotação', done: false },
-      { title: 'Fotografia e vídeo', note: '3 propostas recebidas', done: false },
-    ],
-  },
-  {
-    month: 'Janeiro 2027',
-    items: [
-      { title: 'Fechar buffet e cardápio', note: 'Degustação agendada', done: false },
-      { title: 'Decoração e flores', note: 'A definir', done: false },
-    ],
-  },
-  {
-    month: 'Abril 2027',
-    items: [
-      { title: 'Enviar convites', note: '140 convidados', done: false },
-      { title: 'Prova do traje', note: 'A agendar', done: false },
-    ],
-  },
-  {
-    month: 'Julho 2027',
-    items: [
-      { title: 'Cronograma final do dia', note: 'Semana do casamento', done: false },
-      { title: 'O grande dia', note: 'Kingdom Hall Centro', done: false, highlight: true },
-    ],
-  },
-]
+// Sem dados padrão ainda — timeline vazia até definirmos o template
+const TIMELINE: TimelineGroup[] = []
 
 export default function TimelinePage() {
   return (
@@ -66,6 +31,14 @@ export default function TimelinePage() {
 
       {/* Timeline */}
       <div style={{ position: 'relative' }}>
+        {TIMELINE.length === 0 && (
+          <div
+            className="rounded-2xl bg-white p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: '#9A7A60', fontSize: '14px' }}
+          >
+            Nenhuma etapa cadastrada ainda.
+          </div>
+        )}
         {TIMELINE.map((group, gi) => (
           <div key={group.month} style={{ marginBottom: '40px' }}>
             {/* Month header */}
