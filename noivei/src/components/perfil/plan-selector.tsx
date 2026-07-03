@@ -213,7 +213,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
   return (
     <div>
       {/* Cards */}
-      <div className="grid gap-4 mb-8" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px,1fr))' }}>
+      <div className="grid gap-4 mb-8" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px,1fr))', paddingTop: '14px' }}>
         {cards.map((card) => {
           const isCurrent = card.target === currentPlanId
           const isSwitchingThis = switching === card.target

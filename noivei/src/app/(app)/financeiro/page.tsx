@@ -1,3 +1,5 @@
+import { createSupabaseServer } from '@/lib/supabase/server'
+
 interface Category {
   name: string
   total: number
@@ -16,10 +18,6 @@ interface Payment {
 const CATEGORIES: Category[] = []
 const PAYMENTS: Payment[] = []
 
-const BUDGET  = 0
-const SPENT   = 0
-const PCT     = BUDGET > 0 ? Math.round((SPENT / BUDGET) * 100) : 0
-
 function fmt(n: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(n)
 }
@@ -32,7 +30,20 @@ function PlusIcon() {
   )
 }
 
-export default function FinanceiroPage() {
+export default async function FinanceiroPage() {
+  const supabase = await createSupabaseServer()
+  const { data: wedding } = await supabase
+    .from('weddings')
+    .select('budget')
+    .is('deleted_at', null)
+    .order('created_at')
+    .limit(1)
+    .maybeSingle()
+
+  // Orçamento vem de weddings.budget (centavos), definido em Perfil > Dados do casamento
+  const BUDGET    = wedding?.budget ? wedding.budget / 100 : 0
+  const SPENT     = 0 // TODO: somar financial_entries.paid_amount quando o módulo Financeiro for implementado
+  const PCT       = BUDGET > 0 ? Math.round((SPENT / BUDGET) * 100) : 0
   const available = BUDGET - SPENT
 
   return (

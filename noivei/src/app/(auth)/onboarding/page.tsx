@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import DatePicker from '@/components/ui/date-picker'
 
 interface IbgeMunicipio {
   nome: string
@@ -61,13 +62,6 @@ function HeartIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6943A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-    </svg>
-  )
-}
-function CalIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A7A60" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
     </svg>
   )
 }
@@ -241,15 +235,11 @@ export default function OnboardingPage() {
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-            <div style={inputStyle}>
-              <CalIcon />
-              <input
-                type="date"
-                value={data.date}
-                onChange={(e) => set('date', e.target.value)}
-                style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
-              />
-            </div>
+            <DatePicker
+              value={data.date}
+              onChange={(value) => set('date', value)}
+              placeholder="Data do casamento"
+            />
             <div style={inputStyle}>
               <MapPinIcon />
               <input

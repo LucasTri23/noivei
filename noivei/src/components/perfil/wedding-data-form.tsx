@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import Spinner from '@/components/ui/spinner'
+import DatePicker from '@/components/ui/date-picker'
+import CurrencyInput from '@/components/ui/currency-input'
 import type { WeddingStyle } from '@/types/database'
 
 const STYLE_OPTIONS: { value: WeddingStyle; label: string }[] = [
@@ -26,7 +28,7 @@ const WeddingDataSchema = z.object({
   wedding_date: z.string().optional(),
   venue:        z.string().trim().max(160, 'Local muito longo').optional(),
   city:         z.string().trim().max(120, 'Cidade muito longa').optional(),
-  budget:       z.string().optional(),
+  budget:       z.number().nullable().optional(),
   style:        z.union([z.enum(['rustico', 'classico', 'moderno', 'boho', 'minimalista', 'romantico', 'outro']), z.literal('')]).optional(),
 })
 type WeddingDataFields = z.infer<typeof WeddingDataSchema>
@@ -52,7 +54,7 @@ const labelStyle: React.CSSProperties = {
 }
 const inputStyle: React.CSSProperties = {
   border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
-  fontSize: '15px', color: 'var(--fg)', background: '#FFFFFF', outline: 'none', width: '100%',
+  fontSize: '15px', color: 'var(--fg)', background: 'var(--surface)', outline: 'none', width: '100%',
 }
 
 export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormProps) {
@@ -62,7 +64,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
   const [loading, setLoading]         = useState(false)
   const showSpinner = useDelayedLoading(loading)
 
-  const { register, handleSubmit, formState: { errors } } = useForm<WeddingDataFields>({
+  const { register, handleSubmit, control, formState: { errors } } = useForm<WeddingDataFields>({
     resolver: zodResolver(WeddingDataSchema),
     defaultValues: {
       bride_name:   initial.bride_name ?? '',
@@ -70,7 +72,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
       wedding_date: initial.wedding_date ?? '',
       venue:        initial.venue ?? '',
       city:         initial.city ?? '',
-      budget:       initial.budget != null ? String(initial.budget / 100) : '',
+      budget:       initial.budget,
       style:        initial.style ?? '',
     },
   })
@@ -79,13 +81,6 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
     setLoading(true)
     setServerError('')
     setSaved(false)
-
-    const budgetNumber = data.budget ? Number(data.budget.replace(',', '.')) : null
-    if (budgetNumber !== null && (Number.isNaN(budgetNumber) || budgetNumber < 0)) {
-      setServerError('Orçamento inválido.')
-      setLoading(false)
-      return
-    }
 
     const brideName = data.bride_name?.trim() || null
     const groomName = data.groom_name?.trim() || null
@@ -100,7 +95,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
         wedding_date: data.wedding_date || null,
         venue:        data.venue?.trim() || null,
         city:         data.city?.trim() || null,
-        budget:       budgetNumber !== null ? Math.round(budgetNumber * 100) : null,
+        budget:       data.budget ?? null,
         style:        data.style || null,
         ...(coupleNames ? { couple_names: coupleNames } : {}),
       })
@@ -133,7 +128,18 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))' }}>
         <div style={fieldWrapStyle}>
           <label style={labelStyle} htmlFor="wedding_date">Data do casamento</label>
-          <input id="wedding_date" {...register('wedding_date')} type="date" style={inputStyle} />
+          <Controller
+            name="wedding_date"
+            control={control}
+            render={({ field }) => (
+              <DatePicker
+                id="wedding_date"
+                value={field.value ?? ''}
+                onChange={field.onChange}
+                placeholder="Selecione a data"
+              />
+            )}
+          />
         </div>
         <div style={fieldWrapStyle}>
           <label style={labelStyle} htmlFor="style">Estilo do casamento</label>
@@ -159,8 +165,14 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
           {errors.city && <p style={{ fontSize: '12px', color: '#C0553F' }}>{errors.city.message}</p>}
         </div>
         <div style={fieldWrapStyle}>
-          <label style={labelStyle} htmlFor="budget">Orçamento estimado (R$)</label>
-          <input id="budget" {...register('budget')} type="number" min="0" step="0.01" placeholder="Ex: 50000" style={inputStyle} />
+          <label style={labelStyle} htmlFor="budget">Orçamento estimado</label>
+          <Controller
+            name="budget"
+            control={control}
+            render={({ field }) => (
+              <CurrencyInput id="budget" value={field.value ?? null} onChange={field.onChange} />
+            )}
+          />
         </div>
       </div>
 
@@ -171,7 +183,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
       )}
       {saved && (
         <p style={{ fontSize: '13.5px', color: '#5E8B6A', background: '#E9EFE6', padding: '10px 14px', borderRadius: '10px', margin: 0 }}>
-          Dados do casamento salvos com sucesso.
+          Dados do casamento salvos com sucesso. O orçamento já aparece na aba Financeiro.
         </p>
       )}
 
