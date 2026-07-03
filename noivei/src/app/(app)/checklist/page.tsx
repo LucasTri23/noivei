@@ -64,11 +64,11 @@ export default function ChecklistPage() {
         <div>
           <h1
             className="font-display"
-            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
           >
             Checklist
           </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', marginTop: '4px' }}>
+          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
             {done} de {total} tarefas concluídas
           </p>
         </div>
@@ -86,9 +86,9 @@ export default function ChecklistPage() {
       </div>
 
       {/* Progress bar */}
-      <div className="mb-6 rounded-2xl bg-white p-5" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.07)' }}>
+      <div className="mb-6 rounded-2xl bg-[var(--surface)] p-5" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.07)' }}>
         <div className="mb-2 flex items-center justify-between">
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818' }}>Progresso geral</span>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)' }}>Progresso geral</span>
           <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color)' }}>{pct}%</span>
         </div>
         <div style={{ height: '10px', borderRadius: '99px', background: '#EBDDD0', overflow: 'hidden' }}>
@@ -125,8 +125,8 @@ export default function ChecklistPage() {
       <div className="flex flex-col gap-5">
         {GROUPS.length === 0 && (
           <div
-            className="rounded-2xl bg-white p-10 text-center"
-            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: '#9A7A60', fontSize: '14px' }}
+            className="rounded-2xl bg-[var(--surface)] p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
           >
             Nenhuma tarefa ainda. Adicione a primeira tarefa acima.
           </div>
@@ -136,9 +136,9 @@ export default function ChecklistPage() {
           if (visible.length === 0) return null
           const groupDone = group.items.filter((i) => checks[i.id]).length
           return (
-            <div key={group.title} className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+            <div key={group.title} className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
               <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F3EAE0' }}>
-                <span className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: '#3C2818' }}>
+                <span className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: 'var(--fg)' }}>
                   {group.title}
                 </span>
                 <span style={{
@@ -187,7 +187,7 @@ export default function ChecklistPage() {
                         {item.label}
                       </span>
                       {/* Due */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#9A7A60', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--muted-fg)', flexShrink: 0 }}>
                         <ClockIcon />
                         <span style={{ fontSize: '12.5px' }}>{item.due}</span>
                       </div>

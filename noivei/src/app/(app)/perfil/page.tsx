@@ -67,7 +67,7 @@ export default async function PerfilPage() {
       <div className="mb-6">
         <h1
           className="font-display"
-          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
         >
           Perfil &amp; configurações
         </h1>
@@ -77,7 +77,7 @@ export default async function PerfilPage() {
         {/* Left column */}
         <div className="flex flex-col gap-4">
           {/* Profile card */}
-          <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.07)' }}>
+          <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.07)' }}>
             <div className="flex items-center gap-4 mb-5">
               <div
                 style={{
@@ -92,11 +92,11 @@ export default async function PerfilPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   className="font-display"
-                  style={{ fontSize: '24px', fontWeight: 500, color: '#3C2818', lineHeight: 1.1 }}
+                  style={{ fontSize: '24px', fontWeight: 500, color: 'var(--fg)', lineHeight: 1.1 }}
                 >
                   {coupleNames}
                 </div>
-                <div style={{ fontSize: '13.5px', color: '#9A7A60', marginTop: '3px', wordBreak: 'break-word' }}>
+                <div style={{ fontSize: '13.5px', color: 'var(--muted-fg)', marginTop: '3px', wordBreak: 'break-word' }}>
                   {email}
                 </div>
               </div>
@@ -115,7 +115,7 @@ export default async function PerfilPage() {
           </div>
 
           {/* Menu list */}
-          <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+          <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
             {MENU_ITEMS.map((item, idx) => (
               <Link
                 key={item.label}
@@ -137,7 +137,7 @@ export default async function PerfilPage() {
                 >
                   {item.icon}
                 </div>
-                <span style={{ flex: 1, fontSize: '14.5px', fontWeight: 500, color: '#3C2818' }}>
+                <span style={{ flex: 1, fontSize: '14.5px', fontWeight: 500, color: 'var(--fg)' }}>
                   {item.label}
                 </span>
                 <span style={{ color: '#C8B4A0' }}><ChevronRightIcon /></span>
@@ -146,7 +146,7 @@ export default async function PerfilPage() {
           </div>
 
           {/* Sair da conta */}
-          <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+          <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
             <LogoutButton />
           </div>
         </div>
@@ -200,8 +200,8 @@ export default async function PerfilPage() {
           </div>
 
           {/* LGPD card */}
-          <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-            <h3 className="font-display mb-4" style={{ fontSize: '20px', fontWeight: 500, color: '#3C2818' }}>
+          <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+            <h3 className="font-display mb-4" style={{ fontSize: '20px', fontWeight: 500, color: 'var(--fg)' }}>
               Privacidade (LGPD)
             </h3>
             <div className="flex flex-col gap-3">

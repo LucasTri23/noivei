@@ -6,6 +6,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import Spinner from '@/components/ui/spinner'
 import type { WeddingStyle } from '@/types/database'
 
 const STYLE_OPTIONS: { value: WeddingStyle; label: string }[] = [
@@ -46,11 +48,11 @@ const fieldWrapStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: '6px',
 }
 const labelStyle: React.CSSProperties = {
-  fontSize: '13px', fontWeight: 600, color: '#3C2818',
+  fontSize: '13px', fontWeight: 600, color: 'var(--fg)',
 }
 const inputStyle: React.CSSProperties = {
   border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
-  fontSize: '15px', color: '#3C2818', background: '#FFFFFF', outline: 'none', width: '100%',
+  fontSize: '15px', color: 'var(--fg)', background: '#FFFFFF', outline: 'none', width: '100%',
 }
 
 export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormProps) {
@@ -58,6 +60,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
   const [serverError, setServerError] = useState('')
   const [saved, setSaved]             = useState(false)
   const [loading, setLoading]         = useState(false)
+  const showSpinner = useDelayedLoading(loading)
 
   const { register, handleSubmit, formState: { errors } } = useForm<WeddingDataFields>({
     resolver: zodResolver(WeddingDataSchema),
@@ -176,6 +179,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
         type="submit"
         disabled={loading}
         style={{
+          display: 'flex', alignItems: 'center', gap: '9px',
           background: 'var(--wedding-color)', color: '#fff', border: 'none',
           borderRadius: '12px', padding: '14px 22px', fontWeight: 600, fontSize: '15px',
           cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
@@ -183,6 +187,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
           alignSelf: 'flex-start',
         }}
       >
+        {showSpinner && <Spinner size={15} color="#fff" />}
         {loading ? 'Salvando…' : 'Salvar alterações'}
       </button>
     </form>

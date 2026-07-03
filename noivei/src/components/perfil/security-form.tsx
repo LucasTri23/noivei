@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import Spinner from '@/components/ui/spinner'
 
 const PasswordSchema = z.object({
   password:        z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
@@ -17,16 +19,17 @@ type PasswordFields = z.infer<typeof PasswordSchema>
 
 const inputStyle: React.CSSProperties = {
   border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
-  fontSize: '15px', color: '#3C2818', background: '#FFFFFF', outline: 'none', width: '100%',
+  fontSize: '15px', color: 'var(--fg)', background: '#FFFFFF', outline: 'none', width: '100%',
 }
 const labelStyle: React.CSSProperties = {
-  fontSize: '13px', fontWeight: 600, color: '#3C2818',
+  fontSize: '13px', fontWeight: 600, color: 'var(--fg)',
 }
 
 export default function SecurityForm() {
   const [serverError, setServerError] = useState('')
   const [saved, setSaved]             = useState(false)
   const [loading, setLoading]         = useState(false)
+  const showSpinner = useDelayedLoading(loading)
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<PasswordFields>({
     resolver: zodResolver(PasswordSchema),
@@ -96,6 +99,7 @@ export default function SecurityForm() {
         type="submit"
         disabled={loading}
         style={{
+          display: 'flex', alignItems: 'center', gap: '9px',
           background: 'var(--wedding-color)', color: '#fff', border: 'none',
           borderRadius: '12px', padding: '14px 22px', fontWeight: 600, fontSize: '15px',
           cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
@@ -103,6 +107,7 @@ export default function SecurityForm() {
           alignSelf: 'flex-start',
         }}
       >
+        {showSpinner && <Spinner size={15} color="#fff" />}
         {loading ? 'Alterando…' : 'Alterar senha'}
       </button>
     </form>

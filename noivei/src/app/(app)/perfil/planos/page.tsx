@@ -1,10 +1,14 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { PlanId } from '@/constants/plans'
+import { PLAN_IDS, type PlanId } from '@/constants/plans'
 import PlanSelector from '@/components/perfil/plan-selector'
 
 export const metadata = { title: 'Planos' }
+
+const DISPLAYED_PLAN_IDS: PlanId[] = [
+  PLAN_IDS.FREE, PLAN_IDS.PREMIUM_MONTHLY, PLAN_IDS.PREMIUM_ONCE, PLAN_IDS.PLUS_ONCE,
+]
 
 export default async function PlanosPage() {
   const supabase = await createSupabaseServer()
@@ -20,20 +24,31 @@ export default async function PlanosPage() {
     .limit(1)
     .maybeSingle()
 
+  // Preços vêm do banco (tabela `plans`), nunca hardcoded — assim um painel
+  // administrativo que edite `plans.price_brl` no futuro reflete aqui sem deploy.
+  const { data: plans } = await supabase
+    .from('plans')
+    .select('id, price_brl')
+    .in('id', DISPLAYED_PLAN_IDS)
+
+  const prices = Object.fromEntries(
+    (plans ?? []).map((p) => [p.id, p.price_brl as number]),
+  ) as Record<PlanId, number>
+
   const currentPlanId = (subscription?.plan_id ?? 'free') as PlanId
 
   return (
     <div>
-      <Link href="/perfil" style={{ fontSize: '13.5px', color: '#9A7A60', textDecoration: 'none' }}>
+      <Link href="/perfil" style={{ fontSize: '13.5px', color: 'var(--muted-fg)', textDecoration: 'none' }}>
         ← Voltar ao perfil
       </Link>
       <h1
         className="font-display"
-        style={{ fontWeight: 500, fontSize: 'clamp(28px,4vw,38px)', lineHeight: 1.05, color: '#3C2818', margin: '10px 0 6px' }}
+        style={{ fontWeight: 500, fontSize: 'clamp(28px,4vw,38px)', lineHeight: 1.05, color: 'var(--fg)', margin: '10px 0 6px' }}
       >
         Planos
       </h1>
-      <p style={{ fontSize: '14.5px', color: '#9A7A60', margin: '0 0 28px' }}>
+      <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 28px' }}>
         Compare os planos e escolha o ideal para o casamento de vocês. Você pode mudar quando quiser.
       </p>
 
@@ -41,6 +56,7 @@ export default async function PlanosPage() {
         userId={user.id}
         currentPlanId={currentPlanId}
         subscriptionId={subscription?.id ?? null}
+        prices={prices}
       />
     </div>
   )

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import Spinner from '@/components/ui/spinner'
 import type { Guest } from '@/types/database'
 
 function DownloadIcon() {
@@ -48,6 +50,7 @@ function buildGuestsCsv(guests: Guest[]): string {
 export default function ExportDataButton() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const showSpinner = useDelayedLoading(loading)
 
   async function handleExport() {
     setLoading(true)
@@ -116,7 +119,7 @@ export default function ExportDataButton() {
           opacity: loading ? 0.7 : 1,
         }}
       >
-        <span style={{ color: 'var(--wedding-color)' }}><DownloadIcon /></span>
+        <span style={{ color: 'var(--wedding-color)' }}>{showSpinner ? <Spinner size={16} color="var(--wedding-color)" /> : <DownloadIcon />}</span>
         <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--wedding-color)' }}>
           {loading ? 'Gerando arquivo…' : 'Exportar meus dados'}
         </span>

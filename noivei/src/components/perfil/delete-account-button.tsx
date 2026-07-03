@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import Modal from '@/components/ui/modal'
+import Spinner from '@/components/ui/spinner'
 
 function TrashIcon() {
   return (
@@ -21,6 +23,7 @@ export default function DeleteAccountButton() {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const showSpinner = useDelayedLoading(loading)
 
   async function handleDelete() {
     setLoading(true)
@@ -69,7 +72,7 @@ export default function DeleteAccountButton() {
       </button>
 
       <Modal open={open} onClose={() => { if (!loading) setOpen(false) }} title="Excluir minha conta">
-        <p style={{ fontSize: '14px', color: '#9A7A60', lineHeight: 1.6, margin: '0 0 18px' }}>
+        <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: '0 0 18px' }}>
           Seu casamento e todos os dados serão marcados para exclusão e removidos
           definitivamente em 30 dias, conforme a LGPD. Nesse período, você pode
           reativar a conta entrando em contato com o suporte. Deseja continuar?
@@ -86,7 +89,7 @@ export default function DeleteAccountButton() {
             style={{
               flex: 1, padding: '12px', borderRadius: '12px',
               border: '1.5px solid #EBDDD0', background: 'transparent',
-              color: '#3C2818', fontWeight: 600, fontSize: '14px',
+              color: 'var(--fg)', fontWeight: 600, fontSize: '14px',
               cursor: loading ? 'not-allowed' : 'pointer',
             }}
           >
@@ -96,11 +99,13 @@ export default function DeleteAccountButton() {
             onClick={handleDelete}
             disabled={loading}
             style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
               background: '#C0553F', color: '#fff', fontWeight: 700, fontSize: '14px',
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
             }}
           >
+            {showSpinner && <Spinner size={15} color="#fff" />}
             {loading ? 'Excluindo…' : 'Sim, excluir'}
           </button>
         </div>

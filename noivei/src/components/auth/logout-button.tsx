@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import Spinner from '@/components/ui/spinner'
 
 function LogoutIcon() {
   return (
@@ -17,6 +19,7 @@ function LogoutIcon() {
 export default function LogoutButton() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const showSpinner = useDelayedLoading(loading)
 
   async function handleLogout() {
     setLoading(true)
@@ -45,7 +48,7 @@ export default function LogoutButton() {
           flexShrink: 0,
         }}
       >
-        <LogoutIcon />
+        {showSpinner ? <Spinner size={16} color="#C0553F" /> : <LogoutIcon />}
       </div>
       <span style={{ flex: 1, fontSize: '14.5px', fontWeight: 500, color: '#C0553F' }}>
         {loading ? 'Saindo…' : 'Sair da conta'}

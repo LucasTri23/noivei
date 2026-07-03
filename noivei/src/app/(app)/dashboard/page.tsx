@@ -46,17 +46,17 @@ export default async function DashboardPage() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: '#9A7A60' }}>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted-fg)' }}>
           Olá, {coupleNames}
         </div>
         <h1
           className="font-display"
-          style={{ fontWeight: 500, fontSize: 'clamp(34px, 4.6vw, 46px)', margin: '2px 0 0', lineHeight: 1.05, color: '#3C2818' }}
+          style={{ fontWeight: 500, fontSize: 'clamp(34px, 4.6vw, 46px)', margin: '2px 0 0', lineHeight: 1.05, color: 'var(--fg)' }}
         >
           {daysLeft !== null ? 'Seu grande dia está chegando' : 'Bem-vindos ao Wednest'}
         </h1>
         {wedding?.city && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '14px', color: '#9A7A60' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '14px', color: 'var(--muted-fg)' }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             {wedding.city}
           </div>
@@ -102,24 +102,24 @@ export default async function DashboardPage() {
         </div>
 
         {/* Progress circle */}
-        <div className="flex flex-col items-center justify-center rounded-3xl bg-white p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
+        <div className="flex flex-col items-center justify-center rounded-3xl bg-[var(--surface)] p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
           <div className="relative" style={{ width: '130px', height: '130px' }}>
             <svg width="130" height="130" viewBox="0 0 130 130">
               <circle cx="65" cy="65" r="54" fill="none" stroke="#EBDDD0" strokeWidth="13" />
               <circle cx="65" cy="65" r="54" fill="none" stroke="var(--wedding-color)" strokeWidth="13" strokeLinecap="round" strokeDasharray="339" strokeDashoffset="339" transform="rotate(-90 65 65)" />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-display" style={{ fontWeight: 600, fontSize: '40px', color: '#3C2818' }}>0%</span>
+              <span className="font-display" style={{ fontWeight: 600, fontSize: '40px', color: 'var(--fg)' }}>0%</span>
             </div>
           </div>
-          <div className="font-display mt-3.5" style={{ fontSize: '23px', color: '#3C2818' }}>Planejamento</div>
-          <div style={{ fontSize: '13px', color: '#9A7A60', marginTop: '2px' }}>0 tarefas concluídas</div>
+          <div className="font-display mt-3.5" style={{ fontSize: '23px', color: 'var(--fg)' }}>Planejamento</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>0 tarefas concluídas</div>
         </div>
       </div>
 
       {/* Quick links */}
-      <div className="rounded-[22px] bg-white p-6" style={{ boxShadow: '0 10px 26px rgba(60,40,24,0.06)' }}>
-        <h3 className="font-display mb-4" style={{ fontWeight: 500, fontSize: '24px', color: '#3C2818' }}>
+      <div className="rounded-[22px] bg-[var(--surface)] p-6" style={{ boxShadow: '0 10px 26px rgba(60,40,24,0.06)' }}>
+        <h3 className="font-display mb-4" style={{ fontWeight: 500, fontSize: '24px', color: 'var(--fg)' }}>
           Sua jornada
         </h3>
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
@@ -135,7 +135,7 @@ export default async function DashboardPage() {
               key={href}
               href={href}
               className="flex flex-col gap-3 rounded-2xl p-4 transition-colors"
-              style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #EBDDD0', textDecoration: 'none', color: '#3C2818' }}
+              style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #EBDDD0', textDecoration: 'none', color: 'var(--fg)' }}
             >
               <span style={{ color: 'var(--wedding-color)' }}><Icon size={22} /></span>
               <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{label}</div>

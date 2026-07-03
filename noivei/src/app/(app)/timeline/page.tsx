@@ -20,11 +20,11 @@ export default function TimelinePage() {
       <div className="mb-8">
         <h1
           className="font-display"
-          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
         >
           Timeline do casamento
         </h1>
-        <p style={{ fontSize: '14px', color: '#9A7A60', marginTop: '4px' }}>
+        <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
           Acompanhe cada etapa da sua jornada rumo ao grande dia
         </p>
       </div>
@@ -33,8 +33,8 @@ export default function TimelinePage() {
       <div style={{ position: 'relative' }}>
         {TIMELINE.length === 0 && (
           <div
-            className="rounded-2xl bg-white p-10 text-center"
-            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: '#9A7A60', fontSize: '14px' }}
+            className="rounded-2xl bg-[var(--surface)] p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
           >
             Nenhuma etapa cadastrada ainda.
           </div>

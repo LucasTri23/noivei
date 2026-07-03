@@ -23,7 +23,7 @@ export default function MobileTopBar() {
           <circle cx="28" cy="28" r="17" stroke="url(#mtg)" strokeWidth="5" fill="none" />
           <circle cx="48" cy="28" r="17" stroke="url(#mtg)" strokeWidth="5" fill="none" />
         </svg>
-        <span className="font-display font-medium" style={{ fontSize: '24px', color: '#3C2818', letterSpacing: '0.02em' }}>
+        <span className="font-display font-medium" style={{ fontSize: '24px', color: 'var(--fg)', letterSpacing: '0.02em' }}>
           Wednest
         </span>
       </Link>

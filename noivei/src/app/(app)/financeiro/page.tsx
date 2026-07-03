@@ -42,11 +42,11 @@ export default function FinanceiroPage() {
         <div>
           <h1
             className="font-display"
-            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
           >
             Financeiro
           </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', marginTop: '4px' }}>
+          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
             Controle o orçamento do seu casamento
           </p>
         </div>
@@ -123,21 +123,21 @@ export default function FinanceiroPage() {
       {/* Two columns */}
       <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))' }}>
         {/* Categories */}
-        <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-          <h3 className="font-display mb-5" style={{ fontSize: '21px', fontWeight: 500, color: '#3C2818' }}>
+        <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+          <h3 className="font-display mb-5" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
             Por categoria
           </h3>
           <div className="flex flex-col gap-4">
             {CATEGORIES.length === 0 && (
-              <p style={{ fontSize: '13.5px', color: '#9A7A60' }}>Nenhuma categoria lançada ainda.</p>
+              <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)' }}>Nenhuma categoria lançada ainda.</p>
             )}
             {CATEGORIES.map((cat) => {
               const pct = cat.total > 0 ? Math.round((cat.spent / cat.total) * 100) : 0
               return (
                 <div key={cat.name}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '13.5px', fontWeight: 500, color: '#3C2818' }}>{cat.name}</span>
-                    <span style={{ fontSize: '12.5px', color: '#9A7A60' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--fg)' }}>{cat.name}</span>
+                    <span style={{ fontSize: '12.5px', color: 'var(--muted-fg)' }}>
                       {fmt(cat.spent)} / {fmt(cat.total)}
                     </span>
                   </div>
@@ -157,13 +157,13 @@ export default function FinanceiroPage() {
         </div>
 
         {/* Recent payments */}
-        <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-          <h3 className="font-display mb-5" style={{ fontSize: '21px', fontWeight: 500, color: '#3C2818' }}>
+        <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+          <h3 className="font-display mb-5" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
             Pagamentos recentes
           </h3>
           <div className="flex flex-col gap-3">
             {PAYMENTS.length === 0 && (
-              <p style={{ fontSize: '13.5px', color: '#9A7A60' }}>Nenhum pagamento lançado ainda.</p>
+              <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)' }}>Nenhum pagamento lançado ainda.</p>
             )}
             {PAYMENTS.map((p, i) => (
               <div
@@ -185,13 +185,13 @@ export default function FinanceiroPage() {
                 </div>
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#3C2818' }}>{p.vendor}</div>
-                  <div style={{ fontSize: '12px', color: '#9A7A60', marginTop: '2px' }}>{p.note}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{p.vendor}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>{p.note}</div>
                 </div>
                 {/* Amount + date */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#3C2818' }}>{p.amount}</div>
-                  <div style={{ fontSize: '11.5px', color: '#9A7A60', marginTop: '2px' }}>{p.date}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{p.amount}</div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>{p.date}</div>
                 </div>
               </div>
             ))}

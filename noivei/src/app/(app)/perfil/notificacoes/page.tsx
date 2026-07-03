@@ -18,20 +18,20 @@ export default async function NotificacoesPage() {
 
   return (
     <div style={{ maxWidth: '720px' }}>
-      <Link href="/perfil" style={{ fontSize: '13.5px', color: '#9A7A60', textDecoration: 'none' }}>
+      <Link href="/perfil" style={{ fontSize: '13.5px', color: 'var(--muted-fg)', textDecoration: 'none' }}>
         ← Voltar ao perfil
       </Link>
       <h1
         className="font-display"
-        style={{ fontWeight: 500, fontSize: 'clamp(28px,4vw,38px)', lineHeight: 1.05, color: '#3C2818', margin: '10px 0 6px' }}
+        style={{ fontWeight: 500, fontSize: 'clamp(28px,4vw,38px)', lineHeight: 1.05, color: 'var(--fg)', margin: '10px 0 6px' }}
       >
         Notificações
       </h1>
-      <p style={{ fontSize: '14.5px', color: '#9A7A60', margin: '0 0 24px' }}>
+      <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 24px' }}>
         Escolha sobre o que você quer ser avisado(a).
       </p>
 
-      <div className="rounded-2xl bg-white p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+      <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
         <NotificationSettings
           userId={user.id}
           initial={{

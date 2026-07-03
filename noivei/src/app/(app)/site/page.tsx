@@ -54,11 +54,11 @@ export default function SitePage() {
         <div>
           <h1
             className="font-display"
-            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
           >
             Site do casal
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '14px', color: '#9A7A60' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '14px', color: 'var(--muted-fg)' }}>
             <GlobeIcon />
             <span>wednest.com/seu-casamento</span>
           </div>
@@ -107,7 +107,7 @@ export default function SitePage() {
         </div>
 
         {/* Browser preview */}
-        <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 10px 28px rgba(60,40,24,0.10)' }}>
+        <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 10px 28px rgba(60,40,24,0.10)' }}>
           {/* Browser bar */}
           <div
             style={{
@@ -126,7 +126,7 @@ export default function SitePage() {
               style={{
                 flex: 1, padding: '5px 14px', borderRadius: '8px',
                 background: '#FFFFFF', border: '1px solid #EBDDD0',
-                fontSize: '12.5px', color: '#9A7A60',
+                fontSize: '12.5px', color: 'var(--muted-fg)',
               }}
             >
               wednest.com/seu-casamento
@@ -150,7 +150,7 @@ export default function SitePage() {
             <div style={{ position: 'relative', textAlign: 'center', padding: '0 24px' }}>
               <div
                 className="font-display"
-                style={{ fontSize: 'clamp(48px,8vw,80px)', fontWeight: 500, color: '#3C2818', lineHeight: 0.95 }}
+                style={{ fontSize: 'clamp(48px,8vw,80px)', fontWeight: 500, color: 'var(--fg)', lineHeight: 0.95 }}
               >
                 Seu Nome & Seu Par
               </div>

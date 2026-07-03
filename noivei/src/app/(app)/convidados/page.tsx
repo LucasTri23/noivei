@@ -63,11 +63,11 @@ export default function ConvidadosPage() {
         <div>
           <h1
             className="font-display"
-            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
           >
             Convidados
           </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', marginTop: '4px' }}>
+          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
             Gerencie sua lista de convidados e confirmações
           </p>
         </div>
@@ -99,20 +99,20 @@ export default function ConvidadosPage() {
       {/* Stats */}
       <div className="mb-6 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))' }}>
         {[
-          { label: 'Total', value: STATS.total, color: '#3C2818' },
+          { label: 'Total', value: STATS.total, color: 'var(--fg)' },
           { label: 'Confirmados', value: STATS.confirmado, color: '#5E8B6A' },
           { label: 'Pendentes', value: STATS.pendente, color: 'var(--wedding-color-dark)' },
           { label: 'Recusados', value: STATS.recusado, color: '#C0553F' },
         ].map((s) => (
           <div
             key={s.label}
-            className="rounded-2xl bg-white p-5"
+            className="rounded-2xl bg-[var(--surface)] p-5"
             style={{ boxShadow: '0 6px 18px rgba(60,40,24,0.07)', textAlign: 'center' }}
           >
             <div className="font-display" style={{ fontSize: '38px', fontWeight: 600, color: s.color, lineHeight: 1 }}>
               {s.value}
             </div>
-            <div style={{ fontSize: '12.5px', color: '#9A7A60', marginTop: '4px', fontWeight: 500 }}>
+            <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '4px', fontWeight: 500 }}>
               {s.label}
             </div>
           </div>
@@ -139,7 +139,7 @@ export default function ConvidadosPage() {
       </div>
 
       {/* Guest list */}
-      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+      <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
         {visible.map((guest, idx) => {
           const st = STATUS_STYLE[guest.status]
           const initial = guest.name.charAt(0).toUpperCase()
@@ -162,10 +162,10 @@ export default function ConvidadosPage() {
               </div>
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '14.5px', fontWeight: 600, color: '#3C2818' }}>
+                <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
                   {guest.name}
                 </div>
-                <div style={{ fontSize: '12.5px', color: '#9A7A60', marginTop: '1px' }}>
+                <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
                   {guest.group}
                 </div>
               </div>
@@ -182,7 +182,7 @@ export default function ConvidadosPage() {
           )
         })}
         {visible.length === 0 && (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#9A7A60', fontSize: '14px' }}>
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
             Nenhum convidado encontrado para este filtro.
           </div>
         )}

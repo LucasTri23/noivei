@@ -34,7 +34,7 @@ function GuestChip({ name, draggable = true, onDragStart }: {
         display: 'inline-flex', alignItems: 'center', gap: '6px',
         padding: '5px 10px', borderRadius: '99px',
         background: 'var(--wedding-color-subtle)', border: '1px solid #EBDDD0',
-        fontSize: '12.5px', fontWeight: 500, color: '#3C2818',
+        fontSize: '12.5px', fontWeight: 500, color: 'var(--fg)',
         cursor: draggable ? 'grab' : 'default',
         userSelect: 'none',
       }}
@@ -110,11 +110,11 @@ export default function MesasPage() {
       <div className="mb-6">
         <h1
           className="font-display"
-          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: '#3C2818' }}
+          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
         >
           Organização das mesas
         </h1>
-        <p style={{ fontSize: '14px', color: '#9A7A60', marginTop: '4px' }}>
+        <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
           Arraste os convidados para as mesas · {totalGuests}/{totalCap} lugares preenchidos
         </p>
       </div>
@@ -125,7 +125,7 @@ export default function MesasPage() {
           <div
             style={{
               fontSize: '12px', fontWeight: 700, letterSpacing: '0.14em',
-              textTransform: 'uppercase', color: '#9A7A60', marginBottom: '10px',
+              textTransform: 'uppercase', color: 'var(--muted-fg)', marginBottom: '10px',
             }}
           >
             Sem mesa ({state.unassigned.length})
@@ -161,7 +161,7 @@ export default function MesasPage() {
               style={{
                 gridColumn: '1 / -1', borderRadius: '18px', padding: '40px',
                 border: '2px dashed #EBDDD0', background: 'var(--wedding-color-subtle)',
-                textAlign: 'center', color: '#9A7A60', fontSize: '14px',
+                textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px',
               }}
             >
               Nenhuma mesa criada ainda.
@@ -175,7 +175,7 @@ export default function MesasPage() {
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => handleDrop(table.id)}
                 style={{
-                  borderRadius: '18px', background: '#FFFFFF',
+                  borderRadius: '18px', background: 'var(--surface)',
                   border: `2px dashed ${full ? '#EBDDD0' : '#EBDDD0'}`,
                   overflow: 'hidden',
                   boxShadow: '0 4px 14px rgba(60,40,24,0.06)',
@@ -190,7 +190,7 @@ export default function MesasPage() {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   }}
                 >
-                  <span style={{ fontSize: '13.5px', fontWeight: 600, color: '#3C2818' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)' }}>
                     {table.label}
                   </span>
                   <span

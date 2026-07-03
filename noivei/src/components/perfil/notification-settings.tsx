@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import Spinner from '@/components/ui/spinner'
 
 interface NotificationSettingsProps {
   userId: string
@@ -16,16 +18,20 @@ interface ToggleRowProps {
   description: string
   checked:     boolean
   disabled:    boolean
+  saving:      boolean
   onChange:    (value: boolean) => void
 }
 
-function ToggleRow({ title, description, checked, disabled, onChange }: ToggleRowProps) {
+function ToggleRow({ title, description, checked, disabled, saving, onChange }: ToggleRowProps) {
+  const showSpinner = useDelayedLoading(saving)
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 0' }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: '14.5px', fontWeight: 600, color: '#3C2818' }}>{title}</div>
-        <div style={{ fontSize: '13px', color: '#9A7A60', marginTop: '2px', lineHeight: 1.5 }}>{description}</div>
+        <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>{title}</div>
+        <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px', lineHeight: 1.5 }}>{description}</div>
       </div>
+      {showSpinner && <Spinner size={16} color="var(--muted-fg)" />}
       <button
         type="button"
         role="switch"
@@ -53,14 +59,14 @@ function ToggleRow({ title, description, checked, disabled, onChange }: ToggleRo
 }
 
 export default function NotificationSettings({ userId, initial }: NotificationSettingsProps) {
-  const [prefs, setPrefs]     = useState(initial)
-  const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState('')
+  const [prefs, setPrefs]         = useState(initial)
+  const [savingKey, setSavingKey] = useState<'notify_timeline' | 'notify_rsvp' | null>(null)
+  const [error, setError]         = useState('')
 
   async function save(key: 'notify_timeline' | 'notify_rsvp', value: boolean) {
     const previous = prefs
     setPrefs((p) => ({ ...p, [key]: value }))
-    setSaving(true)
+    setSavingKey(key)
     setError('')
 
     const supabase = createSupabaseBrowser()
@@ -69,7 +75,7 @@ export default function NotificationSettings({ userId, initial }: NotificationSe
       .update({ [key]: value })
       .eq('id', userId)
 
-    setSaving(false)
+    setSavingKey(null)
     if (dbError) {
       setPrefs(previous)
       setError('Não foi possível salvar sua preferência. Tente novamente.')
@@ -82,7 +88,8 @@ export default function NotificationSettings({ userId, initial }: NotificationSe
         title="Timeline"
         description="Lembretes de tarefas e prazos que estão chegando."
         checked={prefs.notify_timeline}
-        disabled={saving}
+        disabled={savingKey !== null}
+        saving={savingKey === 'notify_timeline'}
         onChange={(v) => save('notify_timeline', v)}
       />
       <div style={{ height: '1px', background: '#F8F3EE' }} />
@@ -90,7 +97,8 @@ export default function NotificationSettings({ userId, initial }: NotificationSe
         title="Respostas dos convidados"
         description="Avisos quando alguém confirmar ou recusar o convite (RSVP)."
         checked={prefs.notify_rsvp}
-        disabled={saving}
+        disabled={savingKey !== null}
+        saving={savingKey === 'notify_rsvp'}
         onChange={(v) => save('notify_rsvp', v)}
       />
       {error && (

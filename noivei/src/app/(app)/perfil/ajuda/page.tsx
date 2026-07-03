@@ -28,20 +28,20 @@ const FAQ = [
 export default function AjudaPage() {
   return (
     <div style={{ maxWidth: '720px' }}>
-      <Link href="/perfil" style={{ fontSize: '13.5px', color: '#9A7A60', textDecoration: 'none' }}>
+      <Link href="/perfil" style={{ fontSize: '13.5px', color: 'var(--muted-fg)', textDecoration: 'none' }}>
         ← Voltar ao perfil
       </Link>
       <h1
         className="font-display"
-        style={{ fontWeight: 500, fontSize: 'clamp(28px,4vw,38px)', lineHeight: 1.05, color: '#3C2818', margin: '10px 0 6px' }}
+        style={{ fontWeight: 500, fontSize: 'clamp(28px,4vw,38px)', lineHeight: 1.05, color: 'var(--fg)', margin: '10px 0 6px' }}
       >
         Ajuda
       </h1>
-      <p style={{ fontSize: '14.5px', color: '#9A7A60', margin: '0 0 24px' }}>
+      <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 24px' }}>
         Perguntas frequentes sobre o Noivei.
       </p>
 
-      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+      <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
         {FAQ.map((item, idx) => (
           <details
             key={item.q}
@@ -50,12 +50,12 @@ export default function AjudaPage() {
             <summary
               style={{
                 padding: '16px 20px', cursor: 'pointer', listStyle: 'none',
-                fontSize: '14.5px', fontWeight: 600, color: '#3C2818',
+                fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)',
               }}
             >
               {item.q}
             </summary>
-            <p style={{ padding: '0 20px 16px', margin: 0, fontSize: '13.5px', color: '#9A7A60', lineHeight: 1.6 }}>
+            <p style={{ padding: '0 20px 16px', margin: 0, fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.6 }}>
               {item.a}
             </p>
           </details>
@@ -63,12 +63,12 @@ export default function AjudaPage() {
       </div>
 
       <div
-        className="rounded-2xl bg-white p-6 mt-4"
+        className="rounded-2xl bg-[var(--surface)] p-6 mt-4"
         style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}
       >
         <div style={{ flex: 1, minWidth: '200px' }}>
-          <div style={{ fontSize: '14.5px', fontWeight: 600, color: '#3C2818' }}>Não encontrou o que procurava?</div>
-          <div style={{ fontSize: '13px', color: '#9A7A60', marginTop: '2px' }}>
+          <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>Não encontrou o que procurava?</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>
             Nossa equipe responde em até 1 dia útil.
           </div>
         </div>
