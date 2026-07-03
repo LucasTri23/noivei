@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
@@ -78,9 +78,10 @@ const CATEGORIES: ComparisonCategory[] = [
   },
 ]
 
-const cellStyle: React.CSSProperties = {
-  padding: '11px 14px', fontSize: '13px', color: 'var(--fg)',
-  borderBottom: '1px solid #F8F3EE', textAlign: 'center', minWidth: '130px',
+function featureLine(label: string, value: string): { text: string; included: boolean } {
+  if (value === '❌') return { text: label, included: false }
+  if (value === '✅') return { text: label, included: true }
+  return { text: `${label}: ${value.replace(/^✅\s*/, '')}`, included: true }
 }
 
 export default function PlanSelector({ userId, currentPlanId, subscriptionId, prices }: PlanSelectorProps) {
@@ -127,7 +128,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
     target:     PlanId
     highlight:  boolean
     desc:       string
-    highlights: string[]
     priceNode:  React.ReactNode
   }
 
@@ -139,7 +139,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
       target: PLAN_IDS.FREE,
       highlight: false,
       desc: 'Ideal para conhecer a plataforma.',
-      highlights: ['Checklist e timeline básicos', 'Até 50 convidados', 'RSVP até 50 confirmações'],
       priceNode: (
         <div>
           <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(prices[PLAN_IDS.FREE])}</span>
@@ -153,7 +152,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
       target: premiumTarget,
       highlight: true,
       desc: 'Esse é o plano que a maioria dos casais escolhe.',
-      highlights: ['Convidados até 250', 'Site do casal + mesas + presentes', 'Financeiro completo'],
       priceNode: (
         <div>
           <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
@@ -200,7 +198,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
       target: PLAN_IDS.PLUS_ONCE,
       highlight: false,
       desc: 'Indicado para quem quer tudo liberado, IA completa, mais armazenamento e personalização.',
-      highlights: ['Convidados ilimitados', 'IA completa + insights', 'Backup avançado + suporte prioritário'],
       priceNode: (
         <div>
           <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(prices[PLAN_IDS.PLUS_ONCE])}</span>
@@ -251,14 +248,38 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
                 {card.desc}
               </p>
 
-              <ul style={{ listStyle: 'none', margin: '0 0 20px', padding: 0, display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                {card.highlights.map((h) => (
-                  <li key={h} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', color: 'var(--fg)' }}>
-                    <span style={{ color: 'var(--wedding-color)', fontWeight: 700, lineHeight: 1.4 }}>✓</span>
-                    <span>{h}</span>
-                  </li>
+              <div style={{ flex: 1, marginBottom: '20px' }}>
+                {CATEGORIES.map((category) => (
+                  <div key={category.title} style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                      color: 'var(--muted-fg)', marginBottom: '8px',
+                    }}>
+                      {category.title}
+                    </div>
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                      {category.rows.map((row) => {
+                        const { text, included } = featureLine(row.feature, row[card.key])
+                        return (
+                          <li
+                            key={row.feature}
+                            style={{
+                              display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px',
+                              color: included ? 'var(--fg)' : 'var(--muted-fg)',
+                              opacity: included ? 1 : 0.6,
+                            }}
+                          >
+                            <span style={{ color: included ? 'var(--wedding-color)' : 'var(--muted-fg)', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}>
+                              {included ? '✓' : '✕'}
+                            </span>
+                            <span>{text}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
 
               <button
                 type="button"
@@ -293,54 +314,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
           {success}
         </p>
       )}
-
-      {/* Comparison table */}
-      <h2 className="font-display" style={{ fontSize: '22px', fontWeight: 500, color: 'var(--fg)', margin: '0 0 14px' }}>
-        Compare todos os recursos
-      </h2>
-      <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ ...cellStyle, textAlign: 'left', fontWeight: 700, minWidth: '160px', background: '#FDFAF6' }}>Recurso</th>
-                <th style={{ ...cellStyle, fontWeight: 700, background: '#FDFAF6' }}>🆓 Gratuito</th>
-                <th style={{ ...cellStyle, fontWeight: 700, background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)' }}>💎 Premium</th>
-                <th style={{ ...cellStyle, fontWeight: 700, background: '#FDFAF6' }}>👑 Premium Plus</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CATEGORIES.map((category) => (
-                <Fragment key={category.title}>
-                  <tr>
-                    <td
-                      colSpan={4}
-                      style={{
-                        padding: '10px 14px', fontSize: '11.5px', fontWeight: 700,
-                        letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-fg)',
-                        background: '#FBF9F6', borderBottom: '1px solid #F0E8DE', borderTop: '1px solid #F0E8DE',
-                        textAlign: 'left',
-                      }}
-                    >
-                      {category.title}
-                    </td>
-                  </tr>
-                  {category.rows.map((row, idx) => (
-                    <tr key={row.feature}>
-                      <td style={{ ...cellStyle, textAlign: 'left', fontWeight: 600, borderBottom: idx < category.rows.length - 1 ? '1px solid #F8F3EE' : 'none' }}>
-                        {row.feature}
-                      </td>
-                      <td style={{ ...cellStyle, color: 'var(--muted-fg)', borderBottom: idx < category.rows.length - 1 ? '1px solid #F8F3EE' : 'none' }}>{row.free}</td>
-                      <td style={{ ...cellStyle, background: 'color-mix(in srgb, var(--wedding-color-subtle) 45%, transparent)', borderBottom: idx < category.rows.length - 1 ? '1px solid #F8F3EE' : 'none' }}>{row.premium}</td>
-                      <td style={{ ...cellStyle, borderBottom: idx < category.rows.length - 1 ? '1px solid #F8F3EE' : 'none' }}>{row.plus}</td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   )
 }
