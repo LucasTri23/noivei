@@ -1,25 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { CHECKLIST_CATEGORIES } from '@/lib/checklist/catalog'
+import type { ChecklistItem } from '@/types/database'
 
 type Filter = 'todas' | 'pendentes' | 'concluidas'
 
-interface ChecklistItem {
-  id: string
-  label: string
-  due: string
-  defaultDone: boolean
+const FILTER_LABELS: Record<Filter, string> = {
+  todas:      'Todas',
+  pendentes:  'Pendentes',
+  concluidas: 'Concluídas',
 }
-
-interface Group {
-  title: string
-  items: ChecklistItem[]
-}
-
-// Sem dados padrão ainda — cada casal começa com a checklist vazia até definirmos o template
-const GROUPS: Group[] = []
-
-const ALL_ITEMS = GROUPS.flatMap((g) => g.items)
 
 function PlusIcon() {
   return (
@@ -37,23 +29,92 @@ function ClockIcon() {
   )
 }
 
+function formatDue(dueDate: string | null): string | null {
+  if (!dueDate) return null
+  const [y, m, d] = dueDate.split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 export default function ChecklistPage() {
-  const [filter, setFilter] = useState<Filter>('todas')
-  const [checks, setChecks] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(ALL_ITEMS.map((i) => [i.id, i.defaultDone]))
-  )
+  const [filter, setFilter]   = useState<Filter>('todas')
+  const [loading, setLoading] = useState(true)
+  const [items, setItems]     = useState<ChecklistItem[]>([])
 
-  const total = ALL_ITEMS.length
-  const done = ALL_ITEMS.filter((i) => checks[i.id]).length
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  useEffect(() => {
+    let cancelled = false
+    const supabase = createSupabaseBrowser()
 
-  function toggle(id: string) {
-    setChecks((prev) => ({ ...prev, [id]: !prev[id] }))
+    async function load() {
+      const { data: wedding } = await supabase
+        .from('weddings')
+        .select('id')
+        .is('deleted_at', null)
+        .order('created_at')
+        .limit(1)
+        .maybeSingle()
+
+      if (!wedding) {
+        if (!cancelled) setLoading(false)
+        return
+      }
+
+      const { data } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('wedding_id', wedding.id)
+        .eq('is_archived', false)
+        .eq('is_dismissed', false)
+        .order('sort_order')
+
+      if (!cancelled) {
+        setItems((data ?? []) as ChecklistItem[])
+        setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const total = items.length
+  const done  = items.filter((i) => i.completed).length
+  const pct   = total > 0 ? Math.round((done / total) * 100) : 0
+
+  // Agrupa por categoria na ordem do catálogo; categorias fora do catálogo (tarefas avulsas) vão para o fim
+  const groups = useMemo(() => {
+    const known = CHECKLIST_CATEGORIES.filter((cat) => items.some((i) => i.category === cat))
+    const extra = [...new Set(items.map((i) => i.category ?? 'Outras tarefas'))]
+      .filter((cat) => !(CHECKLIST_CATEGORIES as readonly string[]).includes(cat))
+    return [...known, ...extra].map((cat) => ({
+      title: cat,
+      items: items.filter((i) => (i.category ?? 'Outras tarefas') === cat),
+    }))
+  }, [items])
+
+  async function toggle(item: ChecklistItem) {
+    const completed = !item.completed
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, completed } : i)))
+
+    const supabase = createSupabaseBrowser()
+    const { error } = await supabase.from('checklist_items').update({ completed }).eq('id', item.id)
+    if (error) {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, completed: !completed } : i)))
+    }
+  }
+
+  async function dismiss(item: ChecklistItem) {
+    const previous = items
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+
+    const supabase = createSupabaseBrowser()
+    const { error } = await supabase.from('checklist_items').update({ is_dismissed: true }).eq('id', item.id)
+    if (error) setItems(previous)
   }
 
   function filterItem(item: ChecklistItem) {
-    if (filter === 'pendentes') return !checks[item.id]
-    if (filter === 'concluidas') return checks[item.id]
+    if (filter === 'pendentes') return !item.completed
+    if (filter === 'concluidas') return item.completed
     return true
   }
 
@@ -72,6 +133,7 @@ export default function ChecklistPage() {
             {done} de {total} tarefas concluídas
           </p>
         </div>
+        {/* TODO Sprint 2: criação de tarefa avulsa (sem catalog_key) */}
         <button
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
@@ -116,25 +178,33 @@ export default function ChecklistPage() {
               transition: 'all 0.18s',
             }}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {FILTER_LABELS[f]}
           </button>
         ))}
       </div>
 
       {/* Groups */}
       <div className="flex flex-col gap-5">
-        {GROUPS.length === 0 && (
+        {loading && (
           <div
             className="rounded-2xl bg-[var(--surface)] p-10 text-center"
             style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
           >
-            Nenhuma tarefa ainda. Adicione a primeira tarefa acima.
+            Carregando seu checklist…
           </div>
         )}
-        {GROUPS.map((group) => {
+        {!loading && groups.length === 0 && (
+          <div
+            className="rounded-2xl bg-[var(--surface)] p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
+          >
+            Nenhuma tarefa ainda. Complete o onboarding para gerar o checklist personalizado do casal.
+          </div>
+        )}
+        {groups.map((group) => {
           const visible = group.items.filter(filterItem)
           if (visible.length === 0) return null
-          const groupDone = group.items.filter((i) => checks[i.id]).length
+          const groupDone = group.items.filter((i) => i.completed).length
           return (
             <div key={group.title} className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
               <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F3EAE0' }}>
@@ -150,16 +220,17 @@ export default function ChecklistPage() {
               </div>
               <div>
                 {visible.map((item, idx) => {
-                  const isDone = checks[item.id]
+                  const isDone = item.completed
+                  const due = formatDue(item.due_date)
                   return (
                     <div
                       key={item.id}
-                      className="flex items-center gap-4 px-5 py-4 cursor-pointer"
+                      className="group flex items-center gap-4 px-5 py-4 cursor-pointer"
                       style={{
                         borderBottom: idx < visible.length - 1 ? '1px solid #F8F3EE' : 'none',
                         transition: 'background 0.15s',
                       }}
-                      onClick={() => toggle(item.id)}
+                      onClick={() => toggle(item)}
                     >
                       {/* Checkbox */}
                       <div
@@ -186,11 +257,28 @@ export default function ChecklistPage() {
                       }}>
                         {item.label}
                       </span>
+                      {/* Não se aplica */}
+                      {!isDone && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); dismiss(item) }}
+                          title="Marcar como não se aplica"
+                          className="opacity-0 transition-opacity group-hover:opacity-100"
+                          style={{
+                            border: 'none', background: 'transparent', cursor: 'pointer',
+                            fontSize: '12px', color: 'var(--muted-fg)', padding: '2px 6px',
+                            flexShrink: 0, textDecoration: 'underline',
+                          }}
+                        >
+                          não se aplica
+                        </button>
+                      )}
                       {/* Due */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--muted-fg)', flexShrink: 0 }}>
-                        <ClockIcon />
-                        <span style={{ fontSize: '12.5px' }}>{item.due}</span>
-                      </div>
+                      {due && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--muted-fg)', flexShrink: 0 }}>
+                          <ClockIcon />
+                          <span style={{ fontSize: '12.5px' }}>{due}</span>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

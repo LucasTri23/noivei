@@ -1,19 +1,74 @@
-interface TimelineItem {
+import { createSupabaseServer } from '@/lib/supabase/server'
+import { TIMELINE_PHASES } from '@/lib/checklist/catalog'
+import type { ChecklistItem } from '@/types/database'
+
+interface TimelineCard {
   title: string
   note: string
   done: boolean
-  highlight?: boolean
+  highlight: boolean
 }
 
 interface TimelineGroup {
-  month: string
-  items: TimelineItem[]
+  phase: string
+  window: string
+  items: TimelineCard[]
 }
 
-// Sem dados padrão ainda — timeline vazia até definirmos o template
-const TIMELINE: TimelineGroup[] = []
+function formatDue(dueDate: string | null): string | null {
+  if (!dueDate) return null
+  const [y, m, d] = dueDate.split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
 
-export default function TimelinePage() {
+export default async function TimelinePage() {
+  const supabase = await createSupabaseServer()
+
+  const { data: wedding } = await supabase
+    .from('weddings')
+    .select('id, wedding_date')
+    .is('deleted_at', null)
+    .order('created_at')
+    .limit(1)
+    .maybeSingle()
+
+  let items: ChecklistItem[] = []
+  if (wedding) {
+    const { data } = await supabase
+      .from('checklist_items')
+      .select('*')
+      .eq('wedding_id', wedding.id)
+      .eq('is_archived', false)
+      .eq('is_dismissed', false)
+      .order('sort_order')
+    items = (data ?? []) as ChecklistItem[]
+  }
+
+  // Mesma lista do Checklist, agrupada pela fase (§5 do doc); fases vazias somem.
+  // Dentro da fase: por due_date (offset) e depois pela ordem do catálogo (categoria).
+  const groups: TimelineGroup[] = TIMELINE_PHASES.map((phase) => {
+    const phaseItems = items
+      .filter((item) => item.phase === phase.id)
+      .sort((a, b) => {
+        if (a.due_date && b.due_date && a.due_date !== b.due_date) {
+          return a.due_date.localeCompare(b.due_date)
+        }
+        if (a.due_date && !b.due_date) return -1
+        if (!a.due_date && b.due_date) return 1
+        return a.sort_order - b.sort_order
+      })
+      .map((item) => ({
+        title: item.label,
+        note: [item.category, formatDue(item.due_date)].filter(Boolean).join(' · ') || 'Sem prazo fixo',
+        done: item.completed,
+        highlight: phase.id === 'o-grande-dia',
+      }))
+    return { phase: phase.label, window: phase.window, items: phaseItems }
+  }).filter((group) => group.items.length > 0)
+
+  const hasDate = Boolean(wedding?.wedding_date)
+
   return (
     <div>
       {/* Header */}
@@ -25,28 +80,35 @@ export default function TimelinePage() {
           Timeline do casamento
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
-          Acompanhe cada etapa da sua jornada rumo ao grande dia
+          {hasDate
+            ? 'Acompanhe cada etapa da sua jornada rumo ao grande dia'
+            : 'Defina a data do casamento para ativar os prazos de cada fase'}
         </p>
       </div>
 
       {/* Timeline */}
       <div style={{ position: 'relative' }}>
-        {TIMELINE.length === 0 && (
+        {groups.length === 0 && (
           <div
             className="rounded-2xl bg-[var(--surface)] p-10 text-center"
             style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
           >
-            Nenhuma etapa cadastrada ainda.
+            Nenhuma etapa ainda. Complete o onboarding para gerar a timeline personalizada do casal.
           </div>
         )}
-        {TIMELINE.map((group, gi) => (
-          <div key={group.month} style={{ marginBottom: '40px' }}>
-            {/* Month header */}
-            <div
-              className="font-display mb-4"
-              style={{ fontSize: '22px', fontWeight: 500, color: 'var(--wedding-color)', letterSpacing: '0.01em' }}
-            >
-              {group.month}
+        {groups.map((group, gi) => (
+          <div key={group.phase} style={{ marginBottom: '40px' }}>
+            {/* Phase header */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '16px' }}>
+              <span
+                className="font-display"
+                style={{ fontSize: '22px', fontWeight: 500, color: 'var(--wedding-color)', letterSpacing: '0.01em' }}
+              >
+                {group.phase}
+              </span>
+              <span style={{ fontSize: '12.5px', color: 'var(--muted-fg)' }}>
+                {group.window} · {group.items.filter((i) => i.done).length} de {group.items.length} concluídas
+              </span>
             </div>
 
             {/* Items */}
@@ -57,7 +119,7 @@ export default function TimelinePage() {
                   position: 'absolute',
                   left: '9px',
                   top: '12px',
-                  bottom: gi < TIMELINE.length - 1 ? '-28px' : '12px',
+                  bottom: gi < groups.length - 1 ? '-28px' : '12px',
                   width: '2px',
                   background: '#EBDDD0',
                 }}
@@ -133,6 +195,7 @@ export default function TimelinePage() {
                           fontSize: '15px',
                           fontWeight: 600,
                           color: item.highlight ? 'var(--wedding-color-light)' : '#3C2818',
+                          textDecoration: item.done ? 'line-through' : 'none',
                         }}
                       >
                         {item.title}

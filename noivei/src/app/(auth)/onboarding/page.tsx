@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import DatePicker from '@/components/ui/date-picker'
+import { DEFAULT_ANSWERS, deriveFacts, type WeddingAnswers } from '@/lib/checklist/facts'
+import { generateChecklistItems } from '@/lib/checklist/generate'
 
 interface IbgeMunicipio {
   nome: string
@@ -18,11 +20,22 @@ interface FormData {
   date:       string
   city:       string
   guests:     string
-  hasVenue:   boolean | null
   plan:       PlanChoice
 }
 
-const TOTAL_STEPS = 4
+// Passos: nomes · grande dia · cerimônia · festa · fornecedores · trajes e convites · depois do sim · plano
+const TOTAL_STEPS = 8
+
+// Q3 → weddings.budget (centavos), para a aba Financeiro nascer com o orçamento da faixa
+// escolhida (refinável depois em Perfil > Dados do casamento). Faixas fechadas usam o teto
+// ("até 30" → 30 mil) ou o ponto médio; a faixa aberta usa o piso (150 mil).
+const BUDGET_RANGE_CENTS: Record<WeddingAnswers['orcamento'], number | null> = {
+  ate_30:   3_000_000,
+  '30_80':  5_500_000,
+  '80_150': 11_500_000,
+  '150_mais': 15_000_000,
+  nao_sei:  null,
+}
 
 const PLANS: { id: PlanChoice; name: string; price: string; desc: string; features: string[]; highlight: boolean }[] = [
   {
@@ -50,6 +63,146 @@ const PLANS: { id: PlanChoice; name: string; price: string; desc: string; featur
     features: ['Tudo do Premium', 'Convidados ilimitados', 'IA completa', 'Suporte prioritário'],
   },
 ]
+
+// ── Opções do questionário (§3 do doc de regras) ──
+
+type Option<T extends string> = { val: T; label: string }
+
+const ORCAMENTO_OPTS: Option<WeddingAnswers['orcamento']>[] = [
+  { val: 'ate_30',   label: 'Até R$ 30 mil' },
+  { val: '30_80',    label: 'R$ 30–80 mil' },
+  { val: '80_150',   label: 'R$ 80–150 mil' },
+  { val: '150_mais', label: 'R$ 150 mil+' },
+  { val: 'nao_sei',  label: 'Ainda não sabemos' },
+]
+const ORGANIZACAO_OPTS: Option<WeddingAnswers['organizacao']>[] = [
+  { val: 'so_nos',      label: 'Só nós dois' },
+  { val: 'com_familia', label: 'Com ajuda de família/amigos' },
+]
+const ASSESSORIA_OPTS: Option<WeddingAnswers['assessoria']>[] = [
+  { val: 'completa', label: 'Assessoria completa' },
+  { val: 'dia',      label: 'Só "assessoria do dia"' },
+  { val: 'nao',      label: 'Não vamos contratar' },
+  { val: 'nao_sei',  label: 'Ainda não sabemos' },
+]
+const CIVIL_OPTS: Option<WeddingAnswers['civil']>[] = [
+  { val: 'cartorio',   label: 'No cartório' },
+  { val: 'no_local',   label: 'Civil no local da festa' },
+  { val: 'ja_casados', label: 'Já somos casados no civil' },
+  { val: 'sem_civil',  label: 'Não teremos civil agora' },
+  { val: 'nao_sei',    label: 'Ainda não sabemos' },
+]
+const CERIMONIA_OPTS: Option<WeddingAnswers['cerimonia']>[] = [
+  { val: 'catolica',       label: 'Católica' },
+  { val: 'outra_religiao', label: 'Evangélica ou outra religião' },
+  { val: 'simbolica',      label: 'Celebrante simbólico' },
+  { val: 'nao',            label: 'Não teremos' },
+  { val: 'nao_sei',        label: 'Ainda não sabemos' },
+]
+const LOCAL_OPTS: Option<WeddingAnswers['local']>[] = [
+  { val: 'espaco_cidade', label: 'Espaço de eventos na nossa cidade' },
+  { val: 'campo',         label: 'Campo ou fazenda' },
+  { val: 'praia',         label: 'Praia' },
+  { val: 'casa',          label: 'Em casa' },
+  { val: 'outra_cidade',  label: 'Outra cidade' },
+  { val: 'outro_pais',    label: 'Outro país' },
+  { val: 'nao_sei',       label: 'Ainda não sabemos' },
+]
+const REGIME_OPTS: Option<WeddingAnswers['regime_bens']>[] = [
+  { val: 'comunhao_parcial', label: 'Comunhão parcial (padrão)' },
+  { val: 'outro',            label: 'Outro regime' },
+  { val: 'nao_sei',          label: 'Ainda não sabemos' },
+]
+const SOBRENOME_OPTS: Option<WeddingAnswers['alterar_sobrenome']>[] = [
+  { val: 'sim',     label: 'Sim' },
+  { val: 'nao',     label: 'Não' },
+  { val: 'nao_sei', label: 'Ainda não sabemos' },
+]
+const RECEPCAO_OPTS: Option<WeddingAnswers['recepcao']>[] = [
+  { val: 'festa_pista', label: 'Festa completa com pista' },
+  { val: 'sem_pista',   label: 'Recepção sem pista (almoço/jantar)' },
+  { val: 'nao',         label: 'Não teremos recepção' },
+  { val: 'nao_sei',     label: 'Ainda não sabemos' },
+]
+const MUSICA_OPTS: Option<WeddingAnswers['musica']>[] = [
+  { val: 'dj',       label: 'DJ' },
+  { val: 'banda',    label: 'Banda' },
+  { val: 'dj_banda', label: 'DJ + banda' },
+  { val: 'playlist', label: 'Playlist própria' },
+  { val: 'nao_sei',  label: 'Ainda não sabemos' },
+]
+const BEBIDAS_OPTS: Option<WeddingAnswers['bebidas']>[] = [
+  { val: 'open_bar',   label: 'Open bar completo' },
+  { val: 'simples',    label: 'Cerveja, vinho e drinks simples' },
+  { val: 'sem_alcool', label: 'Sem álcool' },
+  { val: 'nao_sei',    label: 'Ainda não sabemos' },
+]
+const CRIANCAS_OPTS: Option<WeddingAnswers['criancas']>[] = [
+  { val: 'muitas',  label: 'Sim, muitas' },
+  { val: 'algumas', label: 'Algumas' },
+  { val: 'nao',     label: 'Não (festa só para adultos)' },
+  { val: 'nao_sei', label: 'Ainda não sabemos' },
+]
+const CORTEJO_OPTS: Option<WeddingAnswers['cortejo'][number]>[] = [
+  { val: 'padrinhos',       label: 'Padrinhos e madrinhas' },
+  { val: 'daminhas_pajens', label: 'Daminhas e pajens' },
+]
+const FORNECEDORES_OPTS: Option<WeddingAnswers['fornecedores'][number]>[] = [
+  { val: 'buffet',                label: 'Buffet' },
+  { val: 'fotografia',            label: 'Fotografia' },
+  { val: 'filmagem',              label: 'Filmagem' },
+  { val: 'doces',                 label: 'Doces e bem-casados' },
+  { val: 'bolo',                  label: 'Bolo' },
+  { val: 'flores_decoracao',      label: 'Flores e decoração' },
+  { val: 'carro_cerimonia',       label: 'Carro da cerimônia' },
+  { val: 'cabine_fotos',          label: 'Cabine de fotos' },
+  { val: 'iluminacao_cenica',     label: 'Iluminação cênica' },
+  { val: 'som_estrutura',         label: 'Som e estrutura' },
+  { val: 'beleza',                label: 'Beleza (cabelo e maquiagem)' },
+  { val: 'transporte_convidados', label: 'Transporte de convidados' },
+]
+const TRAJE_OPTS: Option<WeddingAnswers['traje_noiva']>[] = [
+  { val: 'sob_medida', label: 'Sob medida' },
+  { val: 'pronto',     label: 'Pronto (comprar)' },
+  { val: 'alugado',    label: 'Alugado' },
+  { val: 'nao_sei',    label: 'Ainda não sei' },
+]
+const SIM_NAO_OPTS: Option<'sim' | 'nao' | 'nao_sei'>[] = [
+  { val: 'sim',     label: 'Sim' },
+  { val: 'nao',     label: 'Não' },
+  { val: 'nao_sei', label: 'Ainda não sabemos' },
+]
+const CONVITES_OPTS: Option<WeddingAnswers['convites']>[] = [
+  { val: 'impressos', label: 'Impressos' },
+  { val: 'digitais',  label: 'Digitais' },
+  { val: 'os_dois',   label: 'Os dois' },
+  { val: 'nao_sei',   label: 'Ainda não sabemos' },
+]
+const RSVP_OPTS: Option<WeddingAnswers['rsvp']>[] = [
+  { val: 'online',  label: 'Online (site/WhatsApp)' },
+  { val: 'manual',  label: 'Manual (telefone/pessoalmente)' },
+  { val: 'nao_sei', label: 'Ainda não sabemos' },
+]
+const LUA_DE_MEL_OPTS: Option<WeddingAnswers['lua_de_mel']>[] = [
+  { val: 'internacional', label: 'Internacional' },
+  { val: 'nacional',      label: 'Nacional' },
+  { val: 'adiar',         label: 'Vamos adiar (minimoon depois)' },
+  { val: 'nao',           label: 'Não teremos' },
+  { val: 'nao_sei',       label: 'Ainda não sabemos' },
+]
+const MOMENTOS_OPTS: Option<WeddingAnswers['momentos'][number]>[] = [
+  { val: 'making_of',  label: 'Making of' },
+  { val: 'first_look', label: 'First look' },
+  { val: 'votos',      label: 'Votos personalizados' },
+]
+const EVENTOS_OPTS: Option<WeddingAnswers['eventos'][number]>[] = [
+  { val: 'cha_panela',    label: 'Chá de panela' },
+  { val: 'cha_bar',       label: 'Chá bar ou chá de casa nova' },
+  { val: 'despedida',     label: 'Despedida de solteiro(a)' },
+  { val: 'jantar_ensaio', label: 'Jantar de ensaio' },
+]
+
+// ── Ícones ──
 
 function BackIcon() {
   return (
@@ -88,29 +241,132 @@ function CheckIcon() {
   )
 }
 
+// ── Estilos e blocos reutilizáveis ──
+
 const inputStyle = {
   display: 'flex', alignItems: 'center', gap: '12px',
   border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '13px 15px',
   background: '#FFFFFF',
 } as React.CSSProperties
 
+function pillStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '10px 14px', borderRadius: '12px',
+    border: `1.5px solid ${active ? '#C6943A' : '#EBDDD0'}`,
+    background: active ? '#FBF5EE' : '#FFFFFF',
+    color: active ? '#9A7020' : '#9A7A60',
+    fontWeight: active ? 700 : 500, fontSize: '13.5px',
+    cursor: 'pointer', transition: 'all 0.18s', textAlign: 'left',
+  }
+}
+
+function Question({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '8px' }}>{label}</div>
+      {children}
+    </div>
+  )
+}
+
+function ChoiceGroup<T extends string>({ options, value, onChange }: {
+  options: Option<T>[]
+  value: T
+  onChange: (val: T) => void
+}) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+      {options.map((opt) => (
+        <button key={opt.val} type="button" onClick={() => onChange(opt.val)} style={pillStyle(value === opt.val)}>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function MultiGroup<T extends string>({ options, values, onToggle, onClear, noneLabel }: {
+  options: Option<T>[]
+  values: readonly T[]
+  onToggle: (val: T) => void
+  onClear?: () => void
+  noneLabel?: string
+}) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+      {options.map((opt) => (
+        <button key={opt.val} type="button" onClick={() => onToggle(opt.val)} style={pillStyle(values.includes(opt.val))}>
+          {opt.label}
+        </button>
+      ))}
+      {noneLabel && onClear && (
+        <button type="button" onClick={onClear} style={pillStyle(values.length === 0)}>
+          {noneLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function StepTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <>
+      <h1 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(26px,3.4vw,34px)', margin: '0 0 4px', color: '#3C2818' }}>
+        {title}
+      </h1>
+      <p style={{ fontSize: '14px', color: '#9A7A60', margin: '0 0 24px' }}>{subtitle}</p>
+    </>
+  )
+}
+
+function NextButton({ onClick, label = 'Continuar', disabled = false }: { onClick: () => void; label?: string; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '100%', background: '#C6943A', color: '#fff', border: 'none',
+        borderRadius: '12px', padding: '15px', fontWeight: 600, fontSize: '15px',
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.7 : 1,
+        boxShadow: '0 10px 24px rgba(198,148,58,0.32)',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+type MultiKey = 'cortejo' | 'fornecedores' | 'momentos' | 'eventos'
+
 export default function OnboardingPage() {
   const router = useRouter()
-  const [step, setStep]     = useState(0)
+  const [step, setStep]       = useState(0)
   const [loading, setLoading] = useState(false)
   const [cities, setCities]   = useState<string[]>([])
-  const [data, setData]     = useState<FormData>({
+  const [data, setData]       = useState<FormData>({
     brideName: '',
     groomName: '',
     date:      '',
     city:      '',
     guests:    '',
-    hasVenue:  null,
     plan:      'free',
   })
+  const [answers, setAnswers] = useState<WeddingAnswers>(DEFAULT_ANSWERS)
 
   function set<K extends keyof FormData>(key: K, val: FormData[K]) {
     setData((d) => ({ ...d, [key]: val }))
+  }
+
+  function setAnswer<K extends keyof WeddingAnswers>(key: K, val: WeddingAnswers[K]) {
+    setAnswers((a) => ({ ...a, [key]: val }))
+  }
+
+  function toggleMulti(key: MultiKey, val: string) {
+    setAnswers((a) => {
+      const arr  = a[key] as string[]
+      const next = arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]
+      return { ...a, [key]: next } as WeddingAnswers
+    })
   }
 
   // Carrega a lista de cidades do IBGE uma vez, para autocompletar o campo "Cidade"
@@ -130,20 +386,47 @@ export default function OnboardingPage() {
     if (!user) { router.push('/login'); return }
 
     const coupleNames = [data.brideName, data.groomName].filter(Boolean).join(' & ') || 'Meu Casamento'
+    const guestsNum   = Number.parseInt(data.guests, 10)
+    const convidados  = Number.isFinite(guestsNum) && guestsNum > 0 ? guestsNum : null
+    const finalAnswers: WeddingAnswers = { ...answers, convidados }
+    const weddingDate = data.date || null
 
-    await supabase.from('weddings').insert({
-      user_id:      user.id,
-      couple_names: coupleNames,
-      bride_name:   data.brideName || null,
-      groom_name:   data.groomName || null,
-      wedding_date: data.date || null,
-      city:         data.city || null,
-    })
+    const { data: wedding } = await supabase
+      .from('weddings')
+      .insert({
+        user_id:      user.id,
+        couple_names: coupleNames,
+        bride_name:   data.brideName || null,
+        groom_name:   data.groomName || null,
+        wedding_date: weddingDate,
+        city:         data.city || null,
+        // Conexões com outras abas: Q3 alimenta o Financeiro (weddings.budget) e
+        // Q2 alimenta Convidados (weddings.guest_limit) — refináveis depois no Perfil.
+        budget:       BUDGET_RANGE_CENTS[answers.orcamento],
+        ...(convidados !== null ? { guest_limit: convidados } : {}),
+      })
+      .select('id')
+      .single()
+
+    if (wedding) {
+      await supabase.from('wedding_preferences').insert({
+        wedding_id: wedding.id,
+        answers:    finalAnswers,
+      })
+
+      try {
+        const facts = deriveFacts(finalAnswers, weddingDate)
+        await generateChecklistItems(supabase, wedding.id, facts, weddingDate)
+      } catch {
+        // Checklist pode ser regenerado depois — não bloqueia a entrada no dashboard
+      }
+    }
 
     router.push('/dashboard')
   }
 
   const progressPct = ((step + 1) / TOTAL_STEPS) * 100
+  const stack: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }
 
   return (
     <div>
@@ -180,15 +463,10 @@ export default function OnboardingPage() {
         </button>
       )}
 
-      {/* ── STEP 1: Names ── */}
+      {/* ── STEP 1: Nomes ── */}
       {step === 0 && (
         <div>
-          <h1 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(26px,3.4vw,34px)', margin: '0 0 4px', color: '#3C2818' }}>
-            Quem são os noivos?
-          </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', margin: '0 0 24px' }}>
-            Vamos personalizar o seu espaço no Wednest.
-          </p>
+          <StepTitle title="Quem são os noivos?" subtitle="Vamos personalizar o seu espaço no Wednest." />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
             <div style={inputStyle}>
@@ -211,79 +489,41 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <button
-            onClick={() => setStep(1)}
-            style={{
-              width: '100%', background: '#C6943A', color: '#fff', border: 'none',
-              borderRadius: '12px', padding: '15px', fontWeight: 600, fontSize: '15px',
-              cursor: 'pointer', boxShadow: '0 10px 24px rgba(198,148,58,0.32)',
-            }}
-          >
-            Continuar
-          </button>
+          <NextButton onClick={() => setStep(1)} />
         </div>
       )}
 
-      {/* ── STEP 2: Date + City ── */}
+      {/* ── STEP 2: Sobre o grande dia (Q1–Q5) ── */}
       {step === 1 && (
         <div>
-          <h1 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(26px,3.4vw,34px)', margin: '0 0 4px', color: '#3C2818' }}>
-            Quando é o grande dia?
-          </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', margin: '0 0 24px' }}>
-            Montaremos sua timeline a partir daqui.
-          </p>
+          <StepTitle title="Sobre o grande dia" subtitle="Data, tamanho e quem organiza — a base de tudo." />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-            <DatePicker
-              value={data.date}
-              onChange={(value) => set('date', value)}
-              placeholder="Data do casamento"
-            />
-            <div style={inputStyle}>
-              <MapPinIcon />
-              <input
-                list="cities-list"
-                value={data.city}
-                onChange={(e) => set('city', e.target.value)}
-                placeholder="Cidade do casamento"
-                style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
+          <div style={stack}>
+            <Question label="Quando será o casamento? (deixe em branco se ainda não decidiram)">
+              <DatePicker
+                value={data.date}
+                onChange={(value) => set('date', value)}
+                placeholder="Data do casamento"
               />
-              <datalist id="cities-list">
-                {cities.map((c) => <option key={c} value={c} />)}
-              </datalist>
-            </div>
-          </div>
+            </Question>
 
-          <button
-            onClick={() => setStep(2)}
-            style={{
-              width: '100%', background: '#C6943A', color: '#fff', border: 'none',
-              borderRadius: '12px', padding: '15px', fontWeight: 600, fontSize: '15px',
-              cursor: 'pointer', boxShadow: '0 10px 24px rgba(198,148,58,0.32)',
-            }}
-          >
-            Continuar
-          </button>
-        </div>
-      )}
-
-      {/* ── STEP 3: Guests + Venue ── */}
-      {step === 2 && (
-        <div>
-          <h1 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(26px,3.4vw,34px)', margin: '0 0 4px', color: '#3C2818' }}>
-            Sobre os convidados
-          </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', margin: '0 0 24px' }}>
-            Nos ajude a calibrar o seu planejamento.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
-            {/* Guests estimate */}
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '8px' }}>
-                Quantas pessoas você pretende convidar?
+            <Question label="Em qual cidade?">
+              <div style={inputStyle}>
+                <MapPinIcon />
+                <input
+                  list="cities-list"
+                  value={data.city}
+                  onChange={(e) => set('city', e.target.value)}
+                  placeholder="Cidade do casamento"
+                  style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
+                />
+                <datalist id="cities-list">
+                  {cities.map((c) => <option key={c} value={c} />)}
+                </datalist>
               </div>
+            </Question>
+
+            <Question label="Quantos convidados vocês esperam?">
               <div style={inputStyle}>
                 <UsersIcon />
                 <input
@@ -296,62 +536,187 @@ export default function OnboardingPage() {
                   style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
                 />
               </div>
-            </div>
+            </Question>
 
-            {/* Has venue */}
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '10px' }}>
-                Você já tem o local do casamento?
-              </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {[
-                  { val: true,  label: 'Sim, já tenho' },
-                  { val: false, label: 'Ainda não' },
-                ].map(({ val, label }) => {
-                  const active = data.hasVenue === val
-                  return (
-                    <button
-                      key={String(val)}
-                      onClick={() => set('hasVenue', val)}
-                      style={{
-                        flex: 1, padding: '12px', borderRadius: '12px',
-                        border: `1.5px solid ${active ? '#C6943A' : '#EBDDD0'}`,
-                        background: active ? '#FBF5EE' : '#FFFFFF',
-                        color: active ? '#9A7020' : '#9A7A60',
-                        fontWeight: active ? 700 : 500, fontSize: '14px',
-                        cursor: 'pointer', transition: 'all 0.18s',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <Question label="Qual a faixa de orçamento total?">
+              <ChoiceGroup options={ORCAMENTO_OPTS} value={answers.orcamento} onChange={(v) => setAnswer('orcamento', v)} />
+            </Question>
+
+            <Question label="Quem participa da organização?">
+              <ChoiceGroup options={ORGANIZACAO_OPTS} value={answers.organizacao} onChange={(v) => setAnswer('organizacao', v)} />
+            </Question>
+
+            <Question label="Vão contratar assessoria/cerimonial?">
+              <ChoiceGroup options={ASSESSORIA_OPTS} value={answers.assessoria} onChange={(v) => setAnswer('assessoria', v)} />
+            </Question>
           </div>
 
-          <button
-            onClick={() => setStep(3)}
-            style={{
-              width: '100%', background: '#C6943A', color: '#fff', border: 'none',
-              borderRadius: '12px', padding: '15px', fontWeight: 600, fontSize: '15px',
-              cursor: 'pointer', boxShadow: '0 10px 24px rgba(198,148,58,0.32)',
-            }}
-          >
-            Continuar
-          </button>
+          <NextButton onClick={() => setStep(2)} />
         </div>
       )}
 
-      {/* ── STEP 4: Plan ── */}
+      {/* ── STEP 3: A cerimônia (Q6–Q10) ── */}
+      {step === 2 && (
+        <div>
+          <StepTitle title="A cerimônia" subtitle="Civil, religiosa e o lugar do sim." />
+
+          <div style={stack}>
+            <Question label="Como será o casamento civil?">
+              <ChoiceGroup options={CIVIL_OPTS} value={answers.civil} onChange={(v) => setAnswer('civil', v)} />
+            </Question>
+
+            <Question label="Terá cerimônia religiosa ou simbólica?">
+              <ChoiceGroup options={CERIMONIA_OPTS} value={answers.cerimonia} onChange={(v) => setAnswer('cerimonia', v)} />
+            </Question>
+
+            <Question label="Onde será?">
+              <ChoiceGroup options={LOCAL_OPTS} value={answers.local} onChange={(v) => setAnswer('local', v)} />
+            </Question>
+
+            <Question label="Vocês já sabem o regime de bens?">
+              <ChoiceGroup options={REGIME_OPTS} value={answers.regime_bens} onChange={(v) => setAnswer('regime_bens', v)} />
+            </Question>
+
+            <Question label="Alguém vai alterar o sobrenome?">
+              <ChoiceGroup options={SOBRENOME_OPTS} value={answers.alterar_sobrenome} onChange={(v) => setAnswer('alterar_sobrenome', v)} />
+            </Question>
+          </div>
+
+          <NextButton onClick={() => setStep(3)} />
+        </div>
+      )}
+
+      {/* ── STEP 4: A festa (Q11–Q15) ── */}
       {step === 3 && (
         <div>
-          <h1 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(24px,3.2vw,32px)', margin: '0 0 4px', color: '#3C2818' }}>
-            Escolha seu plano
-          </h1>
-          <p style={{ fontSize: '14px', color: '#9A7A60', margin: '0 0 20px' }}>
-            Você pode mudar de plano quando quiser.
-          </p>
+          <StepTitle title="A festa" subtitle="Como vocês imaginam a celebração." />
+
+          <div style={stack}>
+            <Question label="Como será a recepção?">
+              <ChoiceGroup options={RECEPCAO_OPTS} value={answers.recepcao} onChange={(v) => setAnswer('recepcao', v)} />
+            </Question>
+
+            <Question label="Música da festa">
+              <ChoiceGroup options={MUSICA_OPTS} value={answers.musica} onChange={(v) => setAnswer('musica', v)} />
+            </Question>
+
+            <Question label="Bebidas">
+              <ChoiceGroup options={BEBIDAS_OPTS} value={answers.bebidas} onChange={(v) => setAnswer('bebidas', v)} />
+            </Question>
+
+            <Question label="Crianças entre os convidados?">
+              <ChoiceGroup options={CRIANCAS_OPTS} value={answers.criancas} onChange={(v) => setAnswer('criancas', v)} />
+            </Question>
+
+            <Question label="Terá cortejo? (marque todos que se aplicam)">
+              <MultiGroup
+                options={CORTEJO_OPTS}
+                values={answers.cortejo}
+                onToggle={(v) => toggleMulti('cortejo', v)}
+                onClear={() => setAnswer('cortejo', [])}
+                noneLabel="Nenhum"
+              />
+            </Question>
+          </div>
+
+          <NextButton onClick={() => setStep(4)} />
+        </div>
+      )}
+
+      {/* ── STEP 5: Fornecedores (Q16) ── */}
+      {step === 4 && (
+        <div>
+          <StepTitle title="Fornecedores" subtitle="O que vocês pretendem contratar? Marque todos que se aplicam." />
+
+          <div style={{ marginBottom: '24px' }}>
+            <MultiGroup
+              options={FORNECEDORES_OPTS}
+              values={answers.fornecedores}
+              onToggle={(v) => toggleMulti('fornecedores', v)}
+            />
+            <p style={{ fontSize: '12.5px', color: '#9A7A60', marginTop: '10px' }}>
+              DJ e banda já entram pela resposta de música. Cada item marcado gera as etapas de pesquisa, contrato e pagamento no seu checklist.
+            </p>
+          </div>
+
+          <NextButton onClick={() => setStep(5)} />
+        </div>
+      )}
+
+      {/* ── STEP 6: Trajes e convites (Q17–Q21) ── */}
+      {step === 5 && (
+        <div>
+          <StepTitle title="Trajes e convites" subtitle="O visual do casal e o convite para os convidados." />
+
+          <div style={stack}>
+            <Question label="Vestido da noiva">
+              <ChoiceGroup options={TRAJE_OPTS} value={answers.traje_noiva} onChange={(v) => setAnswer('traje_noiva', v)} />
+            </Question>
+
+            <Question label="Terno do noivo">
+              <ChoiceGroup options={TRAJE_OPTS} value={answers.traje_noivo} onChange={(v) => setAnswer('traje_noivo', v)} />
+            </Question>
+
+            <Question label="Segundo traje para a festa?">
+              <ChoiceGroup options={SIM_NAO_OPTS} value={answers.segundo_traje} onChange={(v) => setAnswer('segundo_traje', v)} />
+            </Question>
+
+            <Question label="Convites">
+              <ChoiceGroup options={CONVITES_OPTS} value={answers.convites} onChange={(v) => setAnswer('convites', v)} />
+            </Question>
+
+            <Question label="Vão enviar save the date?">
+              <ChoiceGroup options={SIM_NAO_OPTS} value={answers.save_the_date} onChange={(v) => setAnswer('save_the_date', v)} />
+            </Question>
+
+            <Question label="Como será a confirmação de presença (RSVP)?">
+              <ChoiceGroup options={RSVP_OPTS} value={answers.rsvp} onChange={(v) => setAnswer('rsvp', v)} />
+            </Question>
+          </div>
+
+          <NextButton onClick={() => setStep(6)} />
+        </div>
+      )}
+
+      {/* ── STEP 7: Depois do sim (Q22–Q24) ── */}
+      {step === 6 && (
+        <div>
+          <StepTitle title="Depois do sim" subtitle="Lua de mel, momentos especiais e celebrações ao redor." />
+
+          <div style={stack}>
+            <Question label="Lua de mel">
+              <ChoiceGroup options={LUA_DE_MEL_OPTS} value={answers.lua_de_mel} onChange={(v) => setAnswer('lua_de_mel', v)} />
+            </Question>
+
+            <Question label="Momentos especiais no dia (marque todos que se aplicam)">
+              <MultiGroup
+                options={MOMENTOS_OPTS}
+                values={answers.momentos}
+                onToggle={(v) => toggleMulti('momentos', v)}
+                onClear={() => setAnswer('momentos', [])}
+                noneLabel="Nenhum"
+              />
+            </Question>
+
+            <Question label="Eventos ao redor do casamento (marque todos que se aplicam)">
+              <MultiGroup
+                options={EVENTOS_OPTS}
+                values={answers.eventos}
+                onToggle={(v) => toggleMulti('eventos', v)}
+                onClear={() => setAnswer('eventos', [])}
+                noneLabel="Nenhum"
+              />
+            </Question>
+          </div>
+
+          <NextButton onClick={() => setStep(7)} />
+        </div>
+      )}
+
+      {/* ── STEP 8: Plano ── */}
+      {step === 7 && (
+        <div>
+          <StepTitle title="Escolha seu plano" subtitle="Você pode mudar de plano quando quiser." />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
             {PLANS.map((plan) => {
@@ -418,18 +783,11 @@ export default function OnboardingPage() {
             })}
           </div>
 
-          <button
+          <NextButton
             onClick={finish}
             disabled={loading}
-            style={{
-              width: '100%', background: '#C6943A', color: '#fff', border: 'none',
-              borderRadius: '12px', padding: '15px', fontWeight: 600, fontSize: '15px',
-              cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
-              boxShadow: '0 10px 24px rgba(198,148,58,0.32)',
-            }}
-          >
-            {loading ? 'Criando seu espaço…' : 'Começar a planejar →'}
-          </button>
+            label={loading ? 'Criando seu espaço…' : 'Começar a planejar →'}
+          />
         </div>
       )}
     </div>

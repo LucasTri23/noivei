@@ -73,13 +73,26 @@ export interface Guest {
 }
 
 export interface ChecklistItem {
-  id:          string
-  wedding_id:  string
-  label:       string
-  due_date:    string | null
-  completed:   boolean
-  sort_order:  number
-  created_at:  string
+  id:           string
+  wedding_id:   string
+  label:        string
+  category:     string | null
+  phase:        string | null
+  catalog_key:  string | null
+  due_date:     string | null
+  completed:    boolean
+  is_dismissed: boolean
+  is_archived:  boolean
+  sort_order:   number
+  created_at:   string
+}
+
+export interface WeddingPreferences {
+  id:         string
+  wedding_id: string
+  answers:    Record<string, Json | undefined>
+  created_at: string
+  updated_at: string
 }
 
 export interface FinancialEntry {
