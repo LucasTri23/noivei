@@ -1,0 +1,109 @@
+'use client'
+
+import { useState } from 'react'
+
+import Spinner from '@/components/ui/spinner'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import type { GuestStatus } from '@/types/database'
+
+interface RsvpFormProps {
+  token:         string
+  initialStatus: GuestStatus
+}
+
+type Answer = 'confirmado' | 'recusado'
+
+export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
+  const [status, setStatus]   = useState<GuestStatus>(initialStatus)
+  const [saving, setSaving]   = useState<Answer | null>(null)
+  const [saved, setSaved]     = useState(false)
+  const [error, setError]     = useState('')
+  const showSpinner = useDelayedLoading(saving !== null)
+
+  async function respond(answer: Answer) {
+    if (saving) return
+    setSaving(answer)
+    setError('')
+    setSaved(false)
+
+    const res = await fetch(`/api/v1/rsvp/${encodeURIComponent(token)}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ status: answer }),
+    })
+
+    setSaving(null)
+    if (!res.ok) {
+      setError('Não foi possível registrar sua resposta. Tente novamente.')
+      return
+    }
+
+    setStatus(answer)
+    setSaved(true)
+  }
+
+  const answered = status !== 'pendente'
+
+  return (
+    <div>
+      {answered && (
+        <p
+          style={{
+            fontSize: '14.5px', margin: '0 0 18px', padding: '12px 16px', borderRadius: '12px',
+            background: status === 'confirmado' ? '#E9EFE6' : '#F6E4DE',
+            color:      status === 'confirmado' ? '#5E8B6A' : '#C0553F',
+            fontWeight: 600,
+          }}
+        >
+          {saved
+            ? status === 'confirmado'
+              ? 'Presença confirmada! O casal vai adorar ter você lá. 🎉'
+              : 'Resposta registrada. Sentiremos sua falta!'
+            : status === 'confirmado'
+              ? 'Você já confirmou presença — mas pode mudar sua resposta abaixo.'
+              : 'Você recusou o convite — mas pode mudar sua resposta abaixo.'}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => respond('confirmado')}
+          disabled={saving !== null}
+          style={{
+            flex: 1, minWidth: '160px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            background: 'var(--wedding-color)', color: '#fff', border: 'none',
+            borderRadius: '14px', padding: '15px 20px',
+            fontWeight: 700, fontSize: '15px',
+            cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
+            boxShadow: '0 8px 20px color-mix(in srgb, var(--wedding-color) 35%, transparent)',
+          }}
+        >
+          {showSpinner && saving === 'confirmado' && <Spinner color="#fff" />}
+          Sim, estarei lá!
+        </button>
+        <button
+          onClick={() => respond('recusado')}
+          disabled={saving !== null}
+          style={{
+            flex: 1, minWidth: '160px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            background: 'transparent', color: 'var(--muted-fg)',
+            border: '1.5px solid var(--border)', borderRadius: '14px', padding: '15px 20px',
+            fontWeight: 600, fontSize: '15px',
+            cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
+          }}
+        >
+          {showSpinner && saving === 'recusado' && <Spinner />}
+          Não poderei ir
+        </button>
+      </div>
+
+      {error && (
+        <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', marginTop: '14px' }}>
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}

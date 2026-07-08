@@ -197,6 +197,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
           cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
           boxShadow: '0 10px 24px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
           alignSelf: 'flex-start',
+          marginTop: '8px',
         }}
       >
         {showSpinner && <Spinner size={15} color="#fff" />}

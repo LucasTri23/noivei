@@ -22,9 +22,11 @@ function GlobeIcon({ size }: { size: number }) {
 export default async function DashboardPage() {
   const supabase = await createSupabaseServer()
 
+  const { data: { user } } = await supabase.auth.getUser()
+
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('couple_names, wedding_date, city')
+    .select('id, couple_names, wedding_date, city')
     .is('deleted_at', null)
     .order('created_at')
     .limit(1)
@@ -41,6 +43,78 @@ export default async function DashboardPage() {
   const daysLeft = wedding?.wedding_date
     ? Math.max(0, Math.ceil((new Date(wedding.wedding_date).getTime() - now) / 86400000))
     : null
+
+  // Progresso real do checklist + indicadores de notificação
+  let checklistTotal = 0
+  let checklistDone  = 0
+  let overdueTasks   = 0
+  let pendingGuests  = 0
+  let notifyTimeline = true
+  let notifyRsvp     = true
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('notify_timeline, notify_rsvp')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    notifyTimeline = (profile?.notify_timeline as boolean | undefined) ?? true
+    notifyRsvp     = (profile?.notify_rsvp as boolean | undefined) ?? true
+  }
+
+  if (wedding?.id) {
+    const today = new Date(now).toLocaleDateString('sv-SE') // yyyy-mm-dd local
+
+    const [{ data: tasks }, { count: pendingCount }] = await Promise.all([
+      supabase
+        .from('checklist_items')
+        .select('completed, due_date')
+        .eq('wedding_id', wedding.id)
+        .eq('is_archived', false)
+        .eq('is_dismissed', false),
+      supabase
+        .from('guests')
+        .select('*', { count: 'exact', head: true })
+        .eq('wedding_id', wedding.id)
+        .eq('status', 'pendente'),
+    ])
+
+    const items = (tasks ?? []) as { completed: boolean; due_date: string | null }[]
+    checklistTotal = items.length
+    checklistDone  = items.filter((t) => t.completed).length
+    overdueTasks   = items.filter((t) => !t.completed && t.due_date !== null && t.due_date < today).length
+    pendingGuests  = pendingCount ?? 0
+  }
+
+  const progressPct = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0
+  // Círculo de progresso: circunferência ≈ 339 (r=54)
+  const dashOffset = Math.round(339 - (339 * progressPct) / 100)
+
+  const banners = [
+    ...(notifyTimeline && overdueTasks > 0
+      ? [{
+          key:   'overdue',
+          href:  '/checklist',
+          text:  overdueTasks === 1
+            ? '1 tarefa do checklist está atrasada'
+            : `${overdueTasks} tarefas do checklist estão atrasadas`,
+          cta:   'Ver checklist',
+          color: '#C0553F', bg: '#F6E4DE', border: '#E8C4B8',
+        }]
+      : []),
+    ...(notifyRsvp && pendingGuests > 0
+      ? [{
+          key:   'pending-rsvp',
+          href:  '/convidados',
+          text:  pendingGuests === 1
+            ? '1 convidado ainda não confirmou presença'
+            : `${pendingGuests} convidados ainda não confirmaram presença`,
+          cta:   'Ver convidados',
+          color: '#9A7020', bg: '#FBF0E0', border: '#E0B870',
+        }]
+      : []),
+  ]
 
   return (
     <div>
@@ -62,6 +136,34 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Notificações no app (respeitam profiles.notify_timeline / notify_rsvp) */}
+      {banners.length > 0 && (
+        <div className="mb-4 flex flex-col gap-3">
+          {banners.map((banner) => (
+            <a
+              key={banner.key}
+              href={banner.href}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4"
+              style={{
+                background: banner.bg, border: `1px solid ${banner.border}`,
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 600, color: banner.color }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <path d="M12 9v4M12 17h.01" />
+                </svg>
+                {banner.text}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: banner.color, textDecoration: 'underline' }}>
+                {banner.cta}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Countdown + Progress */}
       <div
@@ -106,14 +208,16 @@ export default async function DashboardPage() {
           <div className="relative" style={{ width: '130px', height: '130px' }}>
             <svg width="130" height="130" viewBox="0 0 130 130">
               <circle cx="65" cy="65" r="54" fill="none" stroke="#EBDDD0" strokeWidth="13" />
-              <circle cx="65" cy="65" r="54" fill="none" stroke="var(--wedding-color)" strokeWidth="13" strokeLinecap="round" strokeDasharray="339" strokeDashoffset="339" transform="rotate(-90 65 65)" />
+              <circle cx="65" cy="65" r="54" fill="none" stroke="var(--wedding-color)" strokeWidth="13" strokeLinecap="round" strokeDasharray="339" strokeDashoffset={dashOffset} transform="rotate(-90 65 65)" />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-display" style={{ fontWeight: 600, fontSize: '40px', color: 'var(--fg)' }}>0%</span>
+              <span className="font-display" style={{ fontWeight: 600, fontSize: '40px', color: 'var(--fg)' }}>{progressPct}%</span>
             </div>
           </div>
           <div className="font-display mt-3.5" style={{ fontSize: '23px', color: 'var(--fg)' }}>Planejamento</div>
-          <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>0 tarefas concluídas</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+            {checklistDone} de {checklistTotal} tarefas concluídas
+          </div>
         </div>
       </div>
 

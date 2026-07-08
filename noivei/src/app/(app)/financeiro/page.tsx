@@ -1,214 +1,40 @@
+import FinancialManager from '@/components/financial/financial-manager'
 import { createSupabaseServer } from '@/lib/supabase/server'
-
-interface Category {
-  name: string
-  total: number
-  spent: number
-  color: string
-}
-
-interface Payment {
-  vendor: string
-  note: string
-  amount: string
-  date: string
-}
-
-// Sem dados padrão ainda — financeiro vazio até definirmos o template
-const CATEGORIES: Category[] = []
-const PAYMENTS: Payment[] = []
-
-function fmt(n: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(n)
-}
-
-function PlusIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  )
-}
+import type { FinancialEntry } from '@/types/database'
 
 export default async function FinanceiroPage() {
   const supabase = await createSupabaseServer()
+
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('budget')
+    .select('id, budget')
     .is('deleted_at', null)
     .order('created_at')
     .limit(1)
     .maybeSingle()
 
-  // Orçamento vem de weddings.budget (centavos), definido em Perfil > Dados do casamento
-  const BUDGET    = wedding?.budget ? wedding.budget / 100 : 0
-  const SPENT     = 0 // TODO: somar financial_entries.paid_amount quando o módulo Financeiro for implementado
-  const PCT       = BUDGET > 0 ? Math.round((SPENT / BUDGET) * 100) : 0
-  const available = BUDGET - SPENT
+  if (!wedding) {
+    return (
+      <div
+        className="rounded-2xl bg-[var(--surface)] p-10 text-center"
+        style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
+      >
+        Complete o onboarding para começar a controlar o orçamento do casamento.
+      </div>
+    )
+  }
+
+  const { data: entries } = await supabase
+    .from('financial_entries')
+    .select('*')
+    .eq('wedding_id', wedding.id)
+    .order('created_at', { ascending: true })
 
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1
-            className="font-display"
-            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
-          >
-            Financeiro
-          </h1>
-          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
-            Controle o orçamento do seu casamento
-          </p>
-        </div>
-        <button
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'var(--wedding-color)', color: '#fff', border: 'none',
-            borderRadius: '12px', padding: '11px 18px',
-            fontWeight: 600, fontSize: '14px', cursor: 'pointer',
-            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
-          }}
-        >
-          <PlusIcon /> Lançar gasto
-        </button>
-      </div>
-
-      {/* Hero card */}
-      <div
-        className="relative overflow-hidden rounded-3xl p-8 mb-6"
-        style={{ background: 'linear-gradient(150deg, #2A1E10, #3A2A18)', color: '#FAF0E6' }}
-      >
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 18%, transparent) 1.3px, transparent 1.5px)', backgroundSize: '28px 28px' }}
-        />
-        <div className="relative">
-          <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)', marginBottom: '4px' }}>
-            Orçamento total
-          </div>
-          <div className="font-display" style={{ fontSize: 'clamp(42px,6vw,60px)', fontWeight: 500, lineHeight: 1, marginBottom: '16px' }}>
-            {fmt(BUDGET)}
-          </div>
-
-          {/* Progress bar */}
-          <div style={{ height: '10px', borderRadius: '99px', background: 'rgba(255,255,255,0.12)', overflow: 'hidden', marginBottom: '8px' }}>
-            <div
-              style={{
-                height: '100%', borderRadius: '99px',
-                background: 'linear-gradient(90deg, var(--wedding-color-light), var(--wedding-color))',
-                width: `${PCT}%`,
-              }}
-            />
-          </div>
-          <div style={{ fontSize: '13px', color: 'rgba(250,240,230,0.65)', marginBottom: '20px' }}>
-            {PCT}% do orçamento comprometido
-          </div>
-
-          {/* Mini cards */}
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'Gasto', value: fmt(SPENT), color: 'var(--wedding-color-light)' },
-              { label: 'Disponível', value: fmt(available), color: 'rgba(250,240,230,0.65)' },
-            ].map((mc) => (
-              <div
-                key={mc.label}
-                style={{
-                  padding: '12px 18px', borderRadius: '14px',
-                  background: 'rgba(255,255,255,0.08)',
-                  backdropFilter: 'blur(4px)',
-                }}
-              >
-                <div style={{ fontSize: '11px', color: 'rgba(250,240,230,0.55)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                  {mc.label}
-                </div>
-                <div className="font-display" style={{ fontSize: '22px', fontWeight: 500, color: mc.color }}>
-                  {mc.value}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Two columns */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))' }}>
-        {/* Categories */}
-        <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-          <h3 className="font-display mb-5" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
-            Por categoria
-          </h3>
-          <div className="flex flex-col gap-4">
-            {CATEGORIES.length === 0 && (
-              <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)' }}>Nenhuma categoria lançada ainda.</p>
-            )}
-            {CATEGORIES.map((cat) => {
-              const pct = cat.total > 0 ? Math.round((cat.spent / cat.total) * 100) : 0
-              return (
-                <div key={cat.name}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--fg)' }}>{cat.name}</span>
-                    <span style={{ fontSize: '12.5px', color: 'var(--muted-fg)' }}>
-                      {fmt(cat.spent)} / {fmt(cat.total)}
-                    </span>
-                  </div>
-                  <div style={{ height: '8px', borderRadius: '99px', background: '#F0E8DE', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        height: '100%', borderRadius: '99px',
-                        background: cat.color,
-                        width: `${pct}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Recent payments */}
-        <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-          <h3 className="font-display mb-5" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
-            Pagamentos recentes
-          </h3>
-          <div className="flex flex-col gap-3">
-            {PAYMENTS.length === 0 && (
-              <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)' }}>Nenhum pagamento lançado ainda.</p>
-            )}
-            {PAYMENTS.map((p, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 rounded-xl p-4"
-                style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #F0E8DE' }}
-              >
-                {/* Check icon */}
-                <div
-                  style={{
-                    width: '36px', height: '36px', borderRadius: '10px',
-                    background: '#E9EFE6', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E8B6A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{p.vendor}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>{p.note}</div>
-                </div>
-                {/* Amount + date */}
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{p.amount}</div>
-                  <div style={{ fontSize: '11.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>{p.date}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+    <FinancialManager
+      weddingId={wedding.id as string}
+      budgetCents={(wedding.budget as number | null) ?? null}
+      initialEntries={(entries ?? []) as FinancialEntry[]}
+    />
   )
 }

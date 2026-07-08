@@ -3,6 +3,7 @@ import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateGuestSchema, ListGuestsQuerySchema } from '@/lib/api/validation/guest.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { checkGuestLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { Guest } from '@/types/database'
 
@@ -58,6 +59,14 @@ export async function POST(req: Request, { params }: RouteContext) {
     const parsed = CreateGuestSchema.safeParse(body)
     if (!parsed.success) {
       return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsed.error.flatten())
+    }
+
+    const limitCheck = await checkGuestLimit(supabase, wid)
+    if (!limitCheck.allowed) {
+      return err(403, 'GUEST_LIMIT_REACHED', 'Limite de convidados do seu plano atingido.', {
+        current: limitCheck.current,
+        limit:   limitCheck.limit,
+      })
     }
 
     const { data, error } = await supabase

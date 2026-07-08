@@ -2,6 +2,7 @@ import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { ImportGuestRowSchema, type ImportGuestRow } from '@/lib/api/validation/guest.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { checkGuestLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { Guest } from '@/types/database'
 
@@ -70,6 +71,18 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     if (rowErrors.length > 0) {
       return err(400, 'CSV_INVALID', 'O CSV contém linhas inválidas.', rowErrors)
+    }
+
+    // Import é tudo-ou-nada: se o lote ultrapassar o limite do plano, rejeita inteiro
+    const limitCheck = await checkGuestLimit(supabase, wid)
+    if (limitCheck.current + guests.length > limitCheck.limit) {
+      return err(
+        403,
+        'GUEST_LIMIT_REACHED',
+        `A importação ultrapassaria o limite de ${limitCheck.limit} convidados do seu plano ` +
+          `(${limitCheck.current} cadastrados + ${guests.length} no arquivo). Nenhum convidado foi importado.`,
+        { current: limitCheck.current, limit: limitCheck.limit, attempted: guests.length },
+      )
     }
 
     const { data, error } = await supabase
