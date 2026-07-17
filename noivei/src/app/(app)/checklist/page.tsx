@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { CHECKLIST_CATEGORIES } from '@/lib/checklist/catalog'
 import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
+import DatePicker from '@/components/ui/date-picker'
+import Modal from '@/components/ui/modal'
 import type { ChecklistItem } from '@/types/database'
 
 type Filter = 'todas' | 'pendentes' | 'concluidas'
@@ -14,6 +17,27 @@ const FILTER_LABELS: Record<Filter, string> = {
   todas:      'Todas',
   pendentes:  'Pendentes',
   concluidas: 'Concluídas',
+}
+
+const FALLBACK_CATEGORY = 'Outras tarefas'
+const CATEGORY_OPTIONS  = [...CHECKLIST_CATEGORIES, FALLBACK_CATEGORY] as const
+
+// Tarefas avulsas ficam depois das geradas pelo catálogo dentro da categoria
+const MANUAL_SORT_ORDER = 9999
+
+const ManualTaskSchema = z.object({
+  label:    z.string().trim().min(1, 'Informe o título da tarefa.').max(200, 'O título pode ter no máximo 200 caracteres.'),
+  category: z.enum(CATEGORY_OPTIONS),
+  due_date: z.iso.date().nullable(),
+})
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px',
+}
+
+const fieldInputStyle: React.CSSProperties = {
+  width: '100%', border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
+  fontSize: '15px', background: 'var(--surface)', color: 'var(--fg)', outline: 'none',
 }
 
 function PlusIcon() {
@@ -28,6 +52,20 @@ function ClockIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <path d="M12 6v6l4 2" />
+    </svg>
+  )
+}
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
     </svg>
   )
 }
@@ -48,6 +86,15 @@ export default function ChecklistPage() {
   const [planId, setPlanId]         = useState<PlanId>('free')
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState('')
+
+  // Formulário de tarefa avulsa (catalog_key = null)
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [editingItem, setEditingItem]     = useState<ChecklistItem | null>(null)
+  const [formLabel, setFormLabel]         = useState('')
+  const [formCategory, setFormCategory]   = useState<string>(FALLBACK_CATEGORY)
+  const [formDueDate, setFormDueDate]     = useState('')
+  const [formError, setFormError]         = useState('')
+  const [saving, setSaving]               = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -165,6 +212,96 @@ export default function ChecklistPage() {
     if (error) setItems(previous)
   }
 
+  function openCreateTask() {
+    setEditingItem(null)
+    setFormLabel('')
+    setFormCategory(FALLBACK_CATEGORY)
+    setFormDueDate('')
+    setFormError('')
+    setTaskModalOpen(true)
+  }
+
+  function openEditTask(item: ChecklistItem) {
+    setEditingItem(item)
+    setFormLabel(item.label)
+    setFormCategory(
+      (CATEGORY_OPTIONS as readonly string[]).includes(item.category ?? '')
+        ? (item.category as string)
+        : FALLBACK_CATEGORY,
+    )
+    setFormDueDate(item.due_date ?? '')
+    setFormError('')
+    setTaskModalOpen(true)
+  }
+
+  async function saveTask(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!weddingId || saving) return
+
+    const parsed = ManualTaskSchema.safeParse({
+      label:    formLabel,
+      category: formCategory,
+      due_date: formDueDate === '' ? null : formDueDate,
+    })
+    if (!parsed.success) {
+      setFormError(parsed.error.issues[0]?.message ?? 'Dados inválidos.')
+      return
+    }
+
+    setSaving(true)
+    setFormError('')
+    const supabase = createSupabaseBrowser()
+
+    if (editingItem) {
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .update({ label: parsed.data.label, category: parsed.data.category, due_date: parsed.data.due_date })
+        .eq('id', editingItem.id)
+        .select()
+        .single()
+
+      setSaving(false)
+      if (error || !data) {
+        setFormError('Não foi possível salvar a tarefa. Tente novamente.')
+        return
+      }
+      setItems((prev) => prev.map((i) => (i.id === editingItem.id ? (data as ChecklistItem) : i)))
+    } else {
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .insert({
+          wedding_id:  weddingId,
+          label:       parsed.data.label,
+          category:    parsed.data.category,
+          due_date:    parsed.data.due_date,
+          catalog_key: null,
+          phase:       null,
+          sort_order:  MANUAL_SORT_ORDER,
+        })
+        .select()
+        .single()
+
+      setSaving(false)
+      if (error || !data) {
+        setFormError('Não foi possível criar a tarefa. Tente novamente.')
+        return
+      }
+      setItems((prev) => [...prev, data as ChecklistItem])
+    }
+
+    setTaskModalOpen(false)
+  }
+
+  async function removeManualTask(item: ChecklistItem) {
+    if (item.catalog_key !== null) return
+    const previous = items
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+
+    const supabase = createSupabaseBrowser()
+    const { error } = await supabase.from('checklist_items').delete().eq('id', item.id)
+    if (error) setItems(previous)
+  }
+
   function filterItem(item: ChecklistItem) {
     if (filter === 'pendentes') return !item.completed
     if (filter === 'concluidas') return item.completed
@@ -186,13 +323,15 @@ export default function ChecklistPage() {
             {done} de {total} tarefas concluídas
           </p>
         </div>
-        {/* TODO Sprint 2: criação de tarefa avulsa (sem catalog_key) */}
         <button
+          onClick={openCreateTask}
+          disabled={!weddingId}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             background: 'var(--wedding-color)', color: '#fff', border: 'none',
             borderRadius: '12px', padding: '11px 18px',
-            fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+            fontWeight: 600, fontSize: '14px',
+            cursor: weddingId ? 'pointer' : 'not-allowed', opacity: weddingId ? 1 : 0.6,
             boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
           }}
         >
@@ -340,8 +479,8 @@ export default function ChecklistPage() {
                       }}>
                         {item.label}
                       </span>
-                      {/* Não se aplica */}
-                      {!isDone && (
+                      {/* Não se aplica — só para tarefas do catálogo (o dismiss informa o motor de regras) */}
+                      {!isDone && item.catalog_key !== null && (
                         <button
                           onClick={(e) => { e.stopPropagation(); dismiss(item) }}
                           title="Marcar como não se aplica"
@@ -354,6 +493,33 @@ export default function ChecklistPage() {
                         >
                           não se aplica
                         </button>
+                      )}
+                      {/* Editar / excluir — só tarefas avulsas (catalog_key null) */}
+                      {item.catalog_key === null && (
+                        <div className="opacity-0 transition-opacity group-hover:opacity-100" style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEditTask(item) }}
+                            title="Editar tarefa"
+                            aria-label="Editar tarefa"
+                            style={{
+                              border: 'none', background: 'transparent', cursor: 'pointer',
+                              color: 'var(--muted-fg)', padding: '4px 6px', display: 'flex', alignItems: 'center',
+                            }}
+                          >
+                            <PencilIcon />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeManualTask(item) }}
+                            title="Excluir tarefa"
+                            aria-label="Excluir tarefa"
+                            style={{
+                              border: 'none', background: 'transparent', cursor: 'pointer',
+                              color: '#C0553F', padding: '4px 6px', display: 'flex', alignItems: 'center',
+                            }}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
                       )}
                       {/* Due */}
                       {due && (
@@ -370,6 +536,83 @@ export default function ChecklistPage() {
           )
         })}
       </div>
+
+      {/* Modal de tarefa avulsa */}
+      <Modal
+        open={taskModalOpen}
+        onClose={() => { if (!saving) setTaskModalOpen(false) }}
+        title={editingItem ? 'Editar tarefa' : 'Adicionar tarefa'}
+      >
+        <form onSubmit={saveTask} noValidate>
+          <div style={{ marginBottom: '16px' }}>
+            <label htmlFor="task-label" style={fieldLabelStyle}>Título *</label>
+            <input
+              id="task-label"
+              type="text"
+              value={formLabel}
+              onChange={(e) => setFormLabel(e.target.value)}
+              placeholder="Ex: Provar o bolo com a confeitaria"
+              maxLength={200}
+              autoFocus
+              style={fieldInputStyle}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label htmlFor="task-category" style={fieldLabelStyle}>Categoria</label>
+            <select
+              id="task-category"
+              value={formCategory}
+              onChange={(e) => setFormCategory(e.target.value)}
+              style={{ ...fieldInputStyle, cursor: 'pointer' }}
+            >
+              {CATEGORY_OPTIONS.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label htmlFor="task-due-date" style={fieldLabelStyle}>Data (opcional)</label>
+            <DatePicker
+              id="task-due-date"
+              value={formDueDate}
+              onChange={setFormDueDate}
+              placeholder="Selecione a data"
+            />
+          </div>
+
+          {formError && (
+            <p style={{ fontSize: '13px', color: '#C0553F', margin: '0 0 14px' }}>{formError}</p>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setTaskModalOpen(false)}
+              disabled={saving}
+              style={{
+                border: '1.5px solid #EBDDD0', background: 'transparent', color: 'var(--fg)',
+                borderRadius: '12px', padding: '11px 18px', fontWeight: 600, fontSize: '14px',
+                cursor: saving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '11px 22px', fontWeight: 600, fontSize: '14px',
+                cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+              }}
+            >
+              {saving ? 'Salvando…' : editingItem ? 'Salvar' : 'Adicionar'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
