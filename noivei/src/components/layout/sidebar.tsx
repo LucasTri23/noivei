@@ -10,8 +10,8 @@ const NAV = [
   { href: '/timeline',    label: 'Timeline',      icon: CalendarIcon },
   { href: '/convidados',  label: 'Convidados',    icon: UsersIcon },
   { href: '/financeiro',  label: 'Financeiro',    icon: WalletIcon },
-  { href: '/mesas',       label: 'Mesas',         icon: ArmchairIcon },
-  { href: '/site',        label: 'Site do casal', icon: GlobeIcon },
+  { href: '/mesas',       label: 'Mesas',         icon: ArmchairIcon, pro: true },
+  { href: '/site',        label: 'Site do casal', icon: GlobeIcon,    pro: true },
   { href: '/perfil',      label: 'Perfil',        icon: SettingsIcon },
 ]
 
@@ -19,9 +19,10 @@ interface SidebarProps {
   coupleNames: string
   plan: string
   initial: string
+  isFreePlan: boolean
 }
 
-export default function Sidebar({ coupleNames, plan, initial }: SidebarProps) {
+export default function Sidebar({ coupleNames, plan, initial, isFreePlan }: SidebarProps) {
   const pathname = usePathname()
 
   return (
@@ -47,7 +48,7 @@ export default function Sidebar({ coupleNames, plan, initial }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {NAV.map(({ href, label, icon: Icon, pro }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
             <Link
@@ -63,6 +64,18 @@ export default function Sidebar({ coupleNames, plan, initial }: SidebarProps) {
             >
               <Icon size={19} />
               <span style={{ fontWeight: active ? 600 : 500 }}>{label}</span>
+              {pro && isFreePlan && (
+                <span
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: '10px', fontWeight: 700, padding: '1px 8px',
+                    borderRadius: '99px', background: 'var(--wedding-color)', color: '#fff',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  PRO
+                </span>
+              )}
             </Link>
           )
         })}

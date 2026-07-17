@@ -60,7 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         ...weddingColorVars,
       }}
     >
-      <Sidebar coupleNames={coupleNames} plan={planLabel} initial={initial} />
+      <Sidebar coupleNames={coupleNames} plan={planLabel} initial={initial} isFreePlan={!isPaidPlan(planId)} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileTopBar />
