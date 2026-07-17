@@ -102,6 +102,14 @@ function t(input: TaskInput): CatalogTask {
   return { dismissable: false, condition: always, ...input }
 }
 
+/**
+ * Tarefa "sempre" do doc — a condição é literalmente incondicional (não depende de
+ * nenhuma resposta do questionário). É a base da checklist fixa do plano Gratuito.
+ */
+export function isUnconditionalTask(task: CatalogTask): boolean {
+  return task.condition === always
+}
+
 /** Categoria Recepção & Festa fica inteira oculta se Q11 = "não teremos recepção" (§4.5). */
 function withReception(inner: (f: WeddingFacts) => boolean): (f: WeddingFacts) => boolean {
   return (f) => f.recepcao !== 'nao' && inner(f)

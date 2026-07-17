@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { CHECKLIST_CATEGORIES } from '@/lib/checklist/catalog'
+import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
+import { isPaidPlan, type PlanId } from '@/constants/plans'
 import type { ChecklistItem } from '@/types/database'
 
 type Filter = 'todas' | 'pendentes' | 'concluidas'
@@ -37,9 +40,14 @@ function formatDue(dueDate: string | null): string | null {
 }
 
 export default function ChecklistPage() {
-  const [filter, setFilter]   = useState<Filter>('todas')
-  const [loading, setLoading] = useState(true)
-  const [items, setItems]     = useState<ChecklistItem[]>([])
+  const router = useRouter()
+  const [filter, setFilter]         = useState<Filter>('todas')
+  const [loading, setLoading]       = useState(true)
+  const [items, setItems]           = useState<ChecklistItem[]>([])
+  const [weddingId, setWeddingId]   = useState<string | null>(null)
+  const [planId, setPlanId]         = useState<PlanId>('free')
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -59,6 +67,20 @@ export default function ChecklistPage() {
         return
       }
 
+      // Plano ativo decide a ação do estado vazio (mesmo padrão do (app)/layout.tsx):
+      // Gratuito gera a checklist fixa aqui; pago vai para /checklist/personalizar.
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: subscription } = user
+        ? await supabase
+            .from('subscriptions')
+            .select('plan_id')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : { data: null }
+
       const { data } = await supabase
         .from('checklist_items')
         .select('*')
@@ -68,6 +90,8 @@ export default function ChecklistPage() {
         .order('sort_order')
 
       if (!cancelled) {
+        setWeddingId(wedding.id as string)
+        setPlanId(((subscription?.plan_id as string | undefined) ?? 'free') as PlanId)
         setItems((data ?? []) as ChecklistItem[])
         setLoading(false)
       }
@@ -76,6 +100,35 @@ export default function ChecklistPage() {
     load()
     return () => { cancelled = true }
   }, [])
+
+  async function start() {
+    if (!weddingId) return
+
+    if (isPaidPlan(planId)) {
+      router.push('/checklist/personalizar')
+      return
+    }
+
+    setGenerating(true)
+    setGenerateError('')
+    const supabase = createSupabaseBrowser()
+
+    try {
+      await generateFreeChecklistItems(supabase, weddingId)
+      const { data } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('wedding_id', weddingId)
+        .eq('is_archived', false)
+        .eq('is_dismissed', false)
+        .order('sort_order')
+      setItems((data ?? []) as ChecklistItem[])
+    } catch {
+      setGenerateError('Não foi possível gerar o checklist. Tente novamente.')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const total = items.length
   const done  = items.filter((i) => i.completed).length
@@ -193,12 +246,42 @@ export default function ChecklistPage() {
             Carregando seu checklist…
           </div>
         )}
-        {!loading && groups.length === 0 && (
+        {!loading && groups.length === 0 && !weddingId && (
           <div
             className="rounded-2xl bg-[var(--surface)] p-10 text-center"
             style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
           >
-            Nenhuma tarefa ainda. Complete o onboarding para gerar o checklist personalizado do casal.
+            Nenhuma tarefa ainda. Complete o onboarding para criar o espaço do casal.
+          </div>
+        )}
+        {!loading && groups.length === 0 && weddingId && (
+          <div
+            className="rounded-2xl bg-[var(--surface)] p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}
+          >
+            <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--fg)', margin: '0 0 6px' }}>
+              Seu checklist ainda não foi gerado
+            </p>
+            <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', margin: '0 0 20px' }}>
+              {isPaidPlan(planId)
+                ? 'Responda 6 etapas rápidas para gerarmos o checklist personalizado do casal.'
+                : 'Gere agora a lista com as tarefas essenciais de todo casamento.'}
+            </p>
+            <button
+              onClick={start}
+              disabled={generating}
+              style={{
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '13px 32px', fontWeight: 600, fontSize: '14.5px',
+                cursor: generating ? 'not-allowed' : 'pointer', opacity: generating ? 0.7 : 1,
+                boxShadow: '0 8px 20px color-mix(in srgb, var(--wedding-color) 28%, transparent)',
+              }}
+            >
+              {generating ? 'Gerando…' : 'Começar'}
+            </button>
+            {generateError && (
+              <p style={{ fontSize: '13px', color: '#C0553F', marginTop: '14px' }}>{generateError}</p>
+            )}
           </div>
         )}
         {groups.map((group) => {

@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { CHECKLIST_CATALOG, resolveOffsetDays, resolvePhase } from './catalog'
+import { CHECKLIST_CATALOG, resolveOffsetDays, resolvePhase, type CatalogTask } from './catalog'
 import type { WeddingFacts } from './facts'
 
 interface ExistingItem {
@@ -28,15 +28,19 @@ export function calcDueDate(weddingDate: string | null, offsetDays: number | nul
 }
 
 /**
- * Avalia todas as condições do catálogo e sincroniza checklist_items:
- * - condição verdadeira: insere se não existir; desarquiva se estava arquivada.
- * - condição falsa: deleta se pendente; arquiva se concluída (mantém histórico).
+ * Núcleo idempotente da sincronização: percorre o catálogo aplicando o predicado
+ * `isActive` a cada tarefa e materializa o resultado em checklist_items:
+ * - ativa: insere se não existir (idempotência via catalog_key); desarquiva se arquivada.
+ * - inativa: deleta se pendente; arquiva se concluída (mantém histórico).
+ * Compartilhado entre a geração personalizada (condições do questionário) e a
+ * checklist fixa do plano Gratuito (só tarefas incondicionais — generate-free.ts).
  */
-export async function generateChecklistItems(
+export async function syncCatalogItems(
   supabase: SupabaseClient<Database>,
   weddingId: string,
   facts: WeddingFacts,
   weddingDate: string | null,
+  isActive: (task: CatalogTask) => boolean,
 ): Promise<void> {
   const { data, error } = await supabase
     .from('checklist_items')
@@ -56,7 +60,7 @@ export async function generateChecklistItems(
   const deleteIds: string[] = []
 
   CHECKLIST_CATALOG.forEach((task, index) => {
-    const active = task.condition(facts)
+    const active = isActive(task)
     const existing = existingByKey.get(task.key)
 
     if (active) {
@@ -112,4 +116,17 @@ export async function generateChecklistItems(
       .in('id', deleteIds)
     if (deleteError) throw deleteError
   }
+}
+
+/**
+ * Geração personalizada (planos pagos): avalia as condições do catálogo sobre os
+ * fatos do casal (respostas Q1–Q24) e sincroniza checklist_items.
+ */
+export async function generateChecklistItems(
+  supabase: SupabaseClient<Database>,
+  weddingId: string,
+  facts: WeddingFacts,
+  weddingDate: string | null,
+): Promise<void> {
+  await syncCatalogItems(supabase, weddingId, facts, weddingDate, (task) => task.condition(facts))
 }

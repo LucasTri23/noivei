@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { TIMELINE_PHASES } from '@/lib/checklist/catalog'
 import type { ChecklistItem } from '@/types/database'
@@ -88,12 +89,26 @@ export default async function TimelinePage() {
 
       {/* Timeline */}
       <div style={{ position: 'relative' }}>
+        {/* A timeline lê os mesmos checklist_items — a ação de gerar mora só no Checklist */}
         {groups.length === 0 && (
           <div
             className="rounded-2xl bg-[var(--surface)] p-10 text-center"
-            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}
           >
-            Nenhuma etapa ainda. Complete o onboarding para gerar a timeline personalizada do casal.
+            <p style={{ fontSize: '14px', color: 'var(--muted-fg)', margin: '0 0 16px' }}>
+              A timeline nasce das tarefas do seu checklist — e ele ainda não foi gerado.
+            </p>
+            <Link
+              href="/checklist"
+              style={{
+                display: 'inline-block',
+                background: 'var(--wedding-color)', color: '#fff',
+                borderRadius: '12px', padding: '12px 28px', fontWeight: 600, fontSize: '14px',
+                boxShadow: '0 8px 20px color-mix(in srgb, var(--wedding-color) 28%, transparent)',
+              }}
+            >
+              Gerar minha lista no Checklist
+            </Link>
           </div>
         )}
         {groups.map((group, gi) => (
