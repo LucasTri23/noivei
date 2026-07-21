@@ -2,6 +2,7 @@ import WeddingPartyManager, {
   type ConfirmedGuest,
   type WeddingPartyEntryWithGuest,
 } from '@/components/wedding-party/wedding-party-manager'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import { checkWeddingPartyLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { WeddingPartyEntry } from '@/types/database'
@@ -10,7 +11,7 @@ interface EntryRow extends WeddingPartyEntry {
   guests: { name: string } | null
 }
 
-export default async function PadrinhosPage() {
+async function PadrinhosContent() {
   const supabase = await createSupabaseServer()
 
   const { data: wedding } = await supabase
@@ -60,5 +61,13 @@ export default async function PadrinhosPage() {
       confirmedGuests={(confirmedGuests ?? []) as ConfirmedGuest[]}
       entryLimit={limitCheck.limit}
     />
+  )
+}
+
+export default function PadrinhosPage() {
+  return (
+    <ModuleAccessGate module="padrinhos">
+      <PadrinhosContent />
+    </ModuleAccessGate>
   )
 }

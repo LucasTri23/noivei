@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateGalleryPhotoSchema } from '@/lib/api/validation/gallery-photo.schema'
@@ -29,6 +29,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'site')
 
     const { data, error } = await supabase
       .from('wedding_gallery_photos')
@@ -56,6 +57,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'site')
 
     const body = await parseJsonBody(req)
     const parsed = CreateGalleryPhotoSchema.safeParse(body)
@@ -122,6 +124,7 @@ export async function DELETE(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'site')
 
     const storagePath = new URL(req.url).searchParams.get('storage_path')
     if (!storagePath || !storagePath.startsWith(`${wid}/`)) {

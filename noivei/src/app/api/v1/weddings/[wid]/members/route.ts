@@ -2,6 +2,7 @@ import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseService } from '@/lib/supabase/service'
 import type { WeddingMember } from '@/types/database'
 
 interface RouteContext {
@@ -10,6 +11,7 @@ interface RouteContext {
 
 export interface WeddingMemberWithProfile extends WeddingMember {
   full_name: string | null
+  email:     string | null
 }
 
 interface ProfileRow {
@@ -27,7 +29,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
     const { data: memberRows, error: membersError } = await supabase
       .from('wedding_members')
-      .select('id, wedding_id, user_id, role, created_at')
+      .select('id, wedding_id, user_id, role, permissions, created_at')
       .eq('wedding_id', wid)
       .order('created_at', { ascending: true })
 
@@ -45,12 +47,30 @@ export async function GET(_req: Request, { params }: RouteContext) {
       : { data: [] as ProfileRow[] }
 
     const namesByUserId = new Map(
-      ((profileRows ?? []) as ProfileRow[]).map((p) => [p.id, p.full_name]),
+      ((profileRows ?? []) as ProfileRow[]).map((p) => [p.id, p.full_name || null]),
+    )
+
+    // full_name pode não existir (conta criada antes do trigger, ou nunca preenchido —
+    // fn_on_user_created grava '' por padrão, não NULL). E-mail é o identificador que
+    // sempre existe, então é o fallback — sem isso a lista mostrava "Sem nome" pra
+    // todo mundo sem jeito nenhum de saber quem é quem. profiles não guarda e-mail
+    // (fica só em auth.users), e o client autenticado comum não pode ler auth.users
+    // de outro usuário — por isso o lookup usa o client service role aqui, só depois
+    // de já ter confirmado (requireWeddingOwnership) que quem pediu pode ver a lista.
+    const serviceSupabase = createSupabaseService()
+    const emailsByUserId = new Map<string, string | null>(
+      await Promise.all(
+        userIds.map(async (id): Promise<[string, string | null]> => {
+          const { data } = await serviceSupabase.auth.admin.getUserById(id)
+          return [id, data.user?.email ?? null]
+        }),
+      ),
     )
 
     const result: WeddingMemberWithProfile[] = members.map((m) => ({
       ...m,
       full_name: namesByUserId.get(m.user_id) ?? null,
+      email:     emailsByUserId.get(m.user_id) ?? null,
     }))
 
     return ok(result)

@@ -1,9 +1,10 @@
 import GuestsManager from '@/components/guests/guests-manager'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import { checkGuestLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { Guest } from '@/types/database'
 
-export default async function ConvidadosPage() {
+async function ConvidadosContent() {
   const supabase = await createSupabaseServer()
 
   const { data: wedding } = await supabase
@@ -41,5 +42,13 @@ export default async function ConvidadosPage() {
       guestLimit={limitCheck.limit}
       rsvpMessageTemplate={wedding.rsvp_message_template as string | null}
     />
+  )
+}
+
+export default function ConvidadosPage() {
+  return (
+    <ModuleAccessGate module="convidados">
+      <ConvidadosContent />
+    </ModuleAccessGate>
   )
 }

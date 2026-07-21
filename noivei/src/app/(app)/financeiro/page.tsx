@@ -1,10 +1,11 @@
 import FinancialManager from '@/components/financial/financial-manager'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import { checkFinancialEntryLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
 import type { FinancialEntry, FinancialInstallment, FinancialQuote } from '@/types/database'
 
-export default async function FinanceiroPage() {
+async function FinanceiroContent() {
   const supabase = await createSupabaseServer()
 
   const { data: wedding } = await supabase
@@ -67,5 +68,13 @@ export default async function FinanceiroPage() {
       planId={planId as PlanId}
       entryLimit={limitCheck.limit}
     />
+  )
+}
+
+export default function FinanceiroPage() {
+  return (
+    <ModuleAccessGate module="financeiro">
+      <FinanceiroContent />
+    </ModuleAccessGate>
   )
 }

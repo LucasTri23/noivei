@@ -1,9 +1,10 @@
 import { requireWeddingOwner, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
+import { CreateInviteSchema } from '@/lib/api/validation/invite.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkMemberLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { WeddingInvite } from '@/types/database'
+import type { WeddingInvite, WeddingMemberPermissions } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ wid: string }>
@@ -35,13 +36,28 @@ export async function GET(_req: Request, { params }: RouteContext) {
   }
 }
 
-export async function POST(_req: Request, { params }: RouteContext) {
+export async function POST(req: Request, { params }: RouteContext) {
   try {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     const { wid } = await params
 
     await requireWeddingOwner(supabase, wid, user.id)
+
+    // Body é opcional: sem ele, o convite nasce com o default da coluna
+    // (full_access — papel "Noivo/Noiva"). Só é enviado quando o dono escolhe um
+    // papel restrito na tela de convite.
+    let permissions: WeddingMemberPermissions | undefined
+    try {
+      const rawBody = await req.json()
+      const parsedBody = CreateInviteSchema.safeParse(rawBody)
+      if (!parsedBody.success) {
+        return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsedBody.error.flatten())
+      }
+      permissions = parsedBody.data.permissions
+    } catch {
+      permissions = undefined
+    }
 
     const limitCheck = await checkMemberLimit(supabase, wid)
     if (!limitCheck.allowed) {
@@ -55,7 +71,11 @@ export async function POST(_req: Request, { params }: RouteContext) {
 
     const { data, error } = await supabase
       .from('wedding_invites')
-      .insert({ wedding_id: wid, created_by: user.id })
+      .insert({
+        wedding_id: wid,
+        created_by: user.id,
+        ...(permissions ? { permissions } : {}),
+      })
       .select()
       .single()
 

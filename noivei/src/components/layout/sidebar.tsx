@@ -3,30 +3,35 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils/cn'
+import type { WeddingModuleKey } from '@/types/database'
 
+// module ausente = item nunca restringível (dashboard, perfil) — não passa pelo
+// filtro de visibleModules abaixo, sempre aparece.
 const NAV = [
   { href: '/dashboard',   label: 'Início',        icon: HouseIcon },
-  { href: '/checklist',   label: 'Checklist',     icon: ListIcon },
-  { href: '/timeline',    label: 'Timeline',      icon: CalendarIcon },
-  { href: '/convidados',  label: 'Convidados',    icon: UsersIcon },
-  { href: '/financeiro',  label: 'Financeiro',    icon: WalletIcon },
-  { href: '/padrinhos',   label: 'Padrinhos & Entradas', icon: PartyIcon },
-  { href: '/mesas',       label: 'Mesas',         icon: ArmchairIcon, pro: true },
-  { href: '/site',        label: 'Site do casal', icon: GlobeIcon,    pro: true },
-  { href: '/presentes',   label: 'Lista de presentes', icon: GiftIcon, pro: true },
-  { href: '/arquivos',    label: 'Arquivos',      icon: FolderIcon,   pro: true },
+  { href: '/checklist',   label: 'Checklist',     icon: ListIcon,     module: 'checklist' as WeddingModuleKey },
+  { href: '/timeline',    label: 'Timeline',      icon: CalendarIcon, module: 'checklist' as WeddingModuleKey },
+  { href: '/convidados',  label: 'Convidados',    icon: UsersIcon,    module: 'convidados' as WeddingModuleKey },
+  { href: '/financeiro',  label: 'Financeiro',    icon: WalletIcon,   module: 'financeiro' as WeddingModuleKey },
+  { href: '/padrinhos',   label: 'Padrinhos & Entradas', icon: PartyIcon, module: 'padrinhos' as WeddingModuleKey },
+  { href: '/mesas',       label: 'Mesas',         icon: ArmchairIcon, pro: true, module: 'mesas' as WeddingModuleKey },
+  { href: '/site',        label: 'Site do casal', icon: GlobeIcon,    pro: true, module: 'site' as WeddingModuleKey },
+  { href: '/presentes',   label: 'Lista de presentes', icon: GiftIcon, pro: true, module: 'presentes' as WeddingModuleKey },
+  { href: '/arquivos',    label: 'Arquivos',      icon: FolderIcon,   pro: true, module: 'arquivos' as WeddingModuleKey },
   { href: '/perfil',      label: 'Perfil',        icon: SettingsIcon },
 ]
 
 interface SidebarProps {
-  coupleNames: string
-  plan: string
-  initial: string
-  isFreePlan: boolean
+  coupleNames:     string
+  plan:            string
+  initial:         string
+  isFreePlan:      boolean
+  visibleModules:  Record<WeddingModuleKey, boolean>
 }
 
-export default function Sidebar({ coupleNames, plan, initial, isFreePlan }: SidebarProps) {
+export default function Sidebar({ coupleNames, plan, initial, isFreePlan, visibleModules }: SidebarProps) {
   const pathname = usePathname()
+  const items = NAV.filter((item) => !item.module || visibleModules[item.module])
 
   return (
     <aside
@@ -51,7 +56,7 @@ export default function Sidebar({ coupleNames, plan, initial, isFreePlan }: Side
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5">
-        {NAV.map(({ href, label, icon: Icon, pro }) => {
+        {items.map(({ href, label, icon: Icon, pro }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
             <Link

@@ -7,8 +7,15 @@ import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { WEDDING_MODULE_KEYS } from '@/lib/api/validation/invite.schema'
+import { WEDDING_MODULE_LABELS } from '@/constants/wedding-modules'
 import { toastError, toastSuccess } from '@/store/toast.store'
-import type { WeddingInvite, WeddingMemberRole } from '@/types/database'
+import type {
+  WeddingInvite,
+  WeddingMemberPermissions,
+  WeddingMemberRole,
+  WeddingModuleKey,
+} from '@/types/database'
 
 interface WeddingMembersManagerProps {
   weddingId:   string
@@ -17,11 +24,86 @@ interface WeddingMembersManagerProps {
 }
 
 interface MemberRow {
-  id:         string
-  user_id:    string
-  role:       WeddingMemberRole
-  created_at: string
-  full_name:  string | null
+  id:          string
+  user_id:     string
+  role:        WeddingMemberRole
+  permissions: WeddingMemberPermissions
+  created_at:  string
+  full_name:   string | null
+  email:       string | null
+}
+
+type RoleChoice = 'noivo' | 'outro'
+
+type ModuleSelection = Partial<Record<WeddingModuleKey, boolean>>
+
+// full_name pode estar vazio (conta nunca preencheu o nome) — mostra o e-mail nesse
+// caso, é o único identificador que sempre existe. "Sem nome" sozinho não ajudava
+// o dono a saber quem é quem na lista.
+function displayName(member: Pick<MemberRow, 'full_name' | 'email'>): string {
+  return member.full_name || member.email || 'Sem nome'
+}
+
+// Resumo legível do papel do membro — "Dono"/"Noivo(a)" já aparecem como badge
+// separado (ver render abaixo), esta função só cobre o caso de papel restrito.
+function permissionsSummary(permissions: WeddingMemberPermissions): string {
+  if (permissions.full_access) return 'Acesso completo'
+  const active = WEDDING_MODULE_KEYS.filter((key) => permissions.modules?.[key])
+  if (active.length === 0) return 'Sem acesso a nenhum módulo'
+  return `Acesso: ${active.map((key) => WEDDING_MODULE_LABELS[key]).join(', ')}`
+}
+
+function roleToggleStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '9px 18px', borderRadius: '99px', fontSize: '13.5px',
+    fontWeight: 600, cursor: 'pointer', border: 'none',
+    background: active ? 'var(--wedding-color)' : 'var(--wedding-color-subtle)',
+    color: active ? '#fff' : '#9A7A60',
+    transition: 'all 0.18s',
+  }
+}
+
+interface ModuleSelectorProps {
+  roleChoice:      RoleChoice
+  onRoleChoice:    (role: RoleChoice) => void
+  modules:         ModuleSelection
+  onModulesChange: (modules: ModuleSelection) => void
+}
+
+function ModuleSelector({ roleChoice, onRoleChoice, modules, onModulesChange }: ModuleSelectorProps) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => onRoleChoice('noivo')} style={roleToggleStyle(roleChoice === 'noivo')}>
+          Noivo(a)
+        </button>
+        <button type="button" onClick={() => onRoleChoice('outro')} style={roleToggleStyle(roleChoice === 'outro')}>
+          Outro papel
+        </button>
+      </div>
+      {roleChoice === 'outro' && (
+        <div
+          className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2"
+          style={{ border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '14px 16px' }}
+        >
+          {WEDDING_MODULE_KEYS.map((key) => (
+            <label
+              key={key}
+              className="flex items-center gap-2"
+              style={{ fontSize: '13.5px', color: 'var(--fg)', cursor: 'pointer' }}
+            >
+              <input
+                type="checkbox"
+                checked={modules[key] === true}
+                onChange={(e) => onModulesChange({ ...modules, [key]: e.target.checked })}
+              />
+              {WEDDING_MODULE_LABELS[key]}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface ApiErrorBody {
@@ -44,6 +126,14 @@ function CopyIcon() {
   )
 }
 
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
+
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   const body = (await res.json().catch(() => null)) as ApiErrorBody | null
   return body?.error?.message ?? fallback
@@ -58,6 +148,14 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
   const [removing, setRemoving]       = useState<string | null>(null)
   const [revoking, setRevoking]       = useState<string | null>(null)
   const [memberToRemove, setMemberToRemove] = useState<MemberRow | null>(null)
+
+  const [inviteRole, setInviteRole]       = useState<RoleChoice>('noivo')
+  const [inviteModules, setInviteModules] = useState<ModuleSelection>({})
+
+  const [editingMember, setEditingMember]   = useState<MemberRow | null>(null)
+  const [editRole, setEditRole]             = useState<RoleChoice>('noivo')
+  const [editModules, setEditModules]       = useState<ModuleSelection>({})
+  const [savingPermissions, setSavingPermissions] = useState(false)
 
   const showLoadingSpinner = useDelayedLoading(loading)
 
@@ -103,7 +201,18 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
     if (creatingInvite) return
     setCreatingInvite(true)
 
-    const res = await fetch(`/api/v1/weddings/${weddingId}/invites`, { method: 'POST' })
+    // "Noivo(a)" = sem body (full_access, comportamento de hoje). "Outro papel" manda
+    // full_access: false + só os módulos marcados.
+    const permissions: WeddingMemberPermissions | undefined = inviteRole === 'outro'
+      ? { full_access: false, modules: inviteModules }
+      : undefined
+
+    const res = await fetch(`/api/v1/weddings/${weddingId}/invites`, {
+      method: 'POST',
+      ...(permissions
+        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ permissions }) }
+        : {}),
+    })
 
     if (!res.ok) {
       toastError(await readErrorMessage(res, 'Não foi possível gerar o convite.'))
@@ -114,6 +223,8 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
     const body = await res.json() as { data: WeddingInvite }
     setInvites((prev) => [body.data, ...prev])
     setCreatingInvite(false)
+    setInviteRole('noivo')
+    setInviteModules({})
     toastSuccess('Link de convite gerado.')
   }
 
@@ -161,6 +272,42 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
     toastSuccess('Membro removido.')
   }
 
+  function openEditPermissions(member: MemberRow) {
+    setEditingMember(member)
+    if (member.permissions.full_access) {
+      setEditRole('noivo')
+      setEditModules({})
+    } else {
+      setEditRole('outro')
+      setEditModules({ ...member.permissions.modules })
+    }
+  }
+
+  async function savePermissions() {
+    if (!editingMember || savingPermissions) return
+    setSavingPermissions(true)
+
+    const permissions: WeddingMemberPermissions = editRole === 'noivo'
+      ? { full_access: true }
+      : { full_access: false, modules: editModules }
+
+    const res = await fetch(`/api/v1/weddings/${weddingId}/members/${editingMember.user_id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ permissions }),
+    })
+
+    setSavingPermissions(false)
+    if (!res.ok) {
+      toastError(await readErrorMessage(res, 'Não foi possível atualizar as permissões.'))
+      return
+    }
+
+    setMembers((prev) => prev.map((m) => (m.user_id === editingMember.user_id ? { ...m, permissions } : m)))
+    setEditingMember(null)
+    toastSuccess('Permissões atualizadas.')
+  }
+
   const currentCount = members.length
   const limitReached = currentCount >= memberLimit
 
@@ -206,12 +353,17 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
                     fontSize: '15px', fontWeight: 700,
                   }}
                 >
-                  {(member.full_name ?? 'M').charAt(0).toUpperCase()}
+                  {displayName(member).charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>
-                    {member.full_name ?? 'Sem nome'} {isSelf && <span style={{ color: 'var(--muted-fg)', fontWeight: 500 }}>(você)</span>}
+                    {displayName(member)} {isSelf && <span style={{ color: 'var(--muted-fg)', fontWeight: 500 }}>(você)</span>}
                   </div>
+                  {member.role !== 'owner' && (
+                    <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+                      {permissionsSummary(member.permissions)}
+                    </div>
+                  )}
                 </div>
                 {member.role === 'owner' && (
                   <span
@@ -222,6 +374,19 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
                   >
                     Dono
                   </span>
+                )}
+                {isOwner && member.role !== 'owner' && (
+                  <button
+                    onClick={() => openEditPermissions(member)}
+                    title="Editar permissões"
+                    aria-label="Editar permissões"
+                    style={{
+                      border: 'none', background: 'transparent', color: 'var(--wedding-color)',
+                      cursor: 'pointer', padding: '6px', flexShrink: 0, display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    <PencilIcon />
+                  </button>
                 )}
                 {isOwner && member.role !== 'owner' && (
                   <button
@@ -272,18 +437,26 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
               </Link>
             </div>
           ) : (
-            <button
-              onClick={createInvite}
-              disabled={creatingInvite}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                background: 'var(--wedding-color)', color: '#fff', border: 'none',
-                borderRadius: '12px', padding: '11px 20px', fontWeight: 600, fontSize: '14px',
-                cursor: creatingInvite ? 'not-allowed' : 'pointer', opacity: creatingInvite ? 0.7 : 1,
-              }}
-            >
-              {creatingInvite ? 'Gerando…' : 'Gerar link de convite'}
-            </button>
+            <div className="flex flex-col gap-4">
+              <ModuleSelector
+                roleChoice={inviteRole}
+                onRoleChoice={setInviteRole}
+                modules={inviteModules}
+                onModulesChange={setInviteModules}
+              />
+              <button
+                onClick={createInvite}
+                disabled={creatingInvite}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', alignSelf: 'flex-start',
+                  background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                  borderRadius: '12px', padding: '11px 20px', fontWeight: 600, fontSize: '14px',
+                  cursor: creatingInvite ? 'not-allowed' : 'pointer', opacity: creatingInvite ? 0.7 : 1,
+                }}
+              >
+                {creatingInvite ? 'Gerando…' : 'Gerar link de convite'}
+              </button>
+            </div>
           )}
 
           {invites.length > 0 && (
@@ -336,7 +509,7 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
         title="Remover membro"
       >
         <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: '0 0 18px' }}>
-          {memberToRemove?.full_name ?? 'Este usuário'} perderá o acesso a este casamento. Deseja continuar?
+          {memberToRemove ? displayName(memberToRemove) : 'Este usuário'} perderá o acesso a este casamento. Deseja continuar?
         </p>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
@@ -363,6 +536,49 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
           >
             {removing !== null && <Spinner size={15} color="#fff" />}
             Sim, remover
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={editingMember !== null}
+        onClose={() => { if (!savingPermissions) setEditingMember(null) }}
+        title="Editar permissões"
+      >
+        <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: '0 0 18px' }}>
+          Escolha o que {editingMember ? displayName(editingMember) : 'este usuário'} pode acessar neste casamento.
+        </p>
+        <ModuleSelector
+          roleChoice={editRole}
+          onRoleChoice={setEditRole}
+          modules={editModules}
+          onModulesChange={setEditModules}
+        />
+        <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+          <button
+            onClick={() => setEditingMember(null)}
+            disabled={savingPermissions}
+            style={{
+              flex: 1, padding: '12px', borderRadius: '12px',
+              border: '1.5px solid #EBDDD0', background: 'transparent',
+              color: 'var(--fg)', fontWeight: 600, fontSize: '14px',
+              cursor: savingPermissions ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={savePermissions}
+            disabled={savingPermissions}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+              background: 'var(--wedding-color)', color: '#fff', fontWeight: 700, fontSize: '14px',
+              cursor: savingPermissions ? 'not-allowed' : 'pointer', opacity: savingPermissions ? 0.7 : 1,
+            }}
+          >
+            {savingPermissions && <Spinner size={15} color="#fff" />}
+            Salvar
           </button>
         </div>
       </Modal>

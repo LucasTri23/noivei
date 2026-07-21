@@ -1,4 +1,5 @@
 import PaywallGate from '@/components/billing/paywall-gate'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import GiftRegistryManager from '@/components/gifts/gift-registry-manager'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { GiftRegistryItem } from '@/types/database'
@@ -33,11 +34,13 @@ export default async function PresentesPage() {
     .order('created_at', { ascending: true })
 
   return (
-    <PaywallGate feature="presentes">
-      <GiftRegistryManager
-        weddingId={wedding.id as string}
-        initialItems={(items ?? []) as GiftRegistryItem[]}
-      />
-    </PaywallGate>
+    <ModuleAccessGate module="presentes">
+      <PaywallGate feature="presentes">
+        <GiftRegistryManager
+          weddingId={wedding.id as string}
+          initialItems={(items ?? []) as GiftRegistryItem[]}
+        />
+      </PaywallGate>
+    </ModuleAccessGate>
   )
 }

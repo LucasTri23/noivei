@@ -1,4 +1,5 @@
 import PaywallGate from '@/components/billing/paywall-gate'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import SiteBuilder from '@/components/site/site-builder'
 import { checkStorageLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
@@ -50,8 +51,10 @@ async function SiteContent() {
 
 export default function SitePage() {
   return (
-    <PaywallGate feature="site">
-      <SiteContent />
-    </PaywallGate>
+    <ModuleAccessGate module="site">
+      <PaywallGate feature="site">
+        <SiteContent />
+      </PaywallGate>
+    </ModuleAccessGate>
   )
 }

@@ -274,12 +274,32 @@ export interface Profile {
 
 export type WeddingMemberRole = 'owner' | 'member'
 
+// Módulos que o dono pode restringir por membro na hora do convite ("função").
+// Timeline não tem chave própria — lê os mesmos checklist_items, então usa 'checklist'.
+export type WeddingModuleKey =
+  | 'checklist'
+  | 'convidados'
+  | 'financeiro'
+  | 'mesas'
+  | 'site'
+  | 'arquivos'
+  | 'presentes'
+  | 'padrinhos'
+
+export interface WeddingMemberPermissions {
+  full_access: boolean
+  modules?:    Partial<Record<WeddingModuleKey, boolean>>
+}
+
+export const FULL_ACCESS_PERMISSIONS: WeddingMemberPermissions = { full_access: true }
+
 export interface WeddingMember {
-  id:         string
-  wedding_id: string
-  user_id:    string
-  role:       WeddingMemberRole
-  created_at: string
+  id:          string
+  wedding_id:  string
+  user_id:     string
+  role:        WeddingMemberRole
+  permissions: WeddingMemberPermissions
+  created_at:  string
 }
 
 export type WeddingInviteStatus = 'pending' | 'accepted' | 'revoked'
@@ -293,6 +313,7 @@ export interface WeddingInvite {
   expires_at:  string
   accepted_by: string | null
   accepted_at: string | null
+  permissions: WeddingMemberPermissions
   created_at:  string
 }
 

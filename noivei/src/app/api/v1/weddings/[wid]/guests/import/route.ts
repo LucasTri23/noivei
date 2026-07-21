@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { ImportGuestRowSchema, type ImportGuestRow } from '@/lib/api/validation/guest.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
@@ -30,6 +30,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'convidados')
 
     const csv = (await req.text()).trim()
     if (!csv) return err(400, 'EMPTY_CSV', 'Nenhum conteúdo CSV enviado.')

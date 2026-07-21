@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateTableSchema } from '@/lib/api/validation/table.schema'
@@ -23,6 +23,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'mesas')
 
     const { data, error } = await supabase
       .from('tables_config')
@@ -56,6 +57,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'mesas')
 
     const body = await parseJsonBody(req)
     const parsed = CreateTableSchema.safeParse(body)

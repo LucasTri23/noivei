@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { PhoneSchema } from '@/lib/api/validation/rsvp.schema'
 import { toastError } from '@/store/toast.store'
 import type { GuestStatus } from '@/types/database'
 
@@ -12,27 +13,61 @@ interface RsvpFormProps {
   initialStatus: GuestStatus
 }
 
+interface RespondErrorBody {
+  error?: { code?: string; message?: string }
+}
+
 type Answer = 'confirmado' | 'recusado'
+
+const inputStyle: React.CSSProperties = {
+  border: '1.5px solid var(--border)', borderRadius: '12px', padding: '12px 14px',
+  fontSize: '15px', color: 'var(--fg)', background: 'var(--surface)', outline: 'none', width: '100%',
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
+}
 
 export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
   const [status, setStatus]   = useState<GuestStatus>(initialStatus)
+  // Nunca pré-preenchido: o telefone existente não é devolvido pela API de propósito
+  // (ver get-rsvp-by-token.ts) — se aparecesse aqui já preenchido, qualquer um que
+  // abrisse o link veria o número certo e a conferência não serviria pra nada.
+  const [phone, setPhone]     = useState('')
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [saving, setSaving]   = useState<Answer | null>(null)
   const [saved, setSaved]     = useState(false)
   const showSpinner = useDelayedLoading(saving !== null)
 
   async function respond(answer: Answer) {
     if (saving) return
+
+    // Telefone é exigido pras duas respostas (confirmar e recusar) — o servidor
+    // confere se bate com o que o casal cadastrou (ou aceita e grava, se for a
+    // primeira resposta desse convidado).
+    const parsed = PhoneSchema.safeParse(phone)
+    if (!parsed.success) {
+      setPhoneError(phone.trim().length === 0 ? 'Informe seu telefone para responder.' : (parsed.error.issues[0]?.message ?? 'Telefone inválido.'))
+      return
+    }
+
+    setPhoneError(null)
     setSaving(answer)
     setSaved(false)
 
     const res = await fetch(`/api/v1/rsvp/${encodeURIComponent(token)}`, {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ status: answer }),
+      body:    JSON.stringify({ status: answer, phone: phone.trim() || null }),
     })
 
     setSaving(null)
     if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as RespondErrorBody | null
+      if (body?.error?.code === 'PHONE_MISMATCH') {
+        setPhoneError(body.error.message ?? 'Telefone não confere com o cadastrado.')
+        return
+      }
       toastError('Não foi possível registrar sua resposta. Tente novamente.')
       return
     }
@@ -63,6 +98,26 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
               : 'Você recusou o convite — mas pode mudar sua resposta abaixo.'}
         </p>
       )}
+
+      <div style={{ marginBottom: '18px' }}>
+        <label htmlFor="rsvp-phone" style={labelStyle}>Telefone</label>
+        <input
+          id="rsvp-phone"
+          type="tel"
+          minLength={8}
+          maxLength={20}
+          value={phone}
+          onChange={(e) => {
+            setPhone(e.target.value)
+            if (phoneError) setPhoneError(null)
+          }}
+          placeholder="(11) 99999-9999"
+          style={{ ...inputStyle, ...(phoneError ? { borderColor: '#C0553F' } : {}) }}
+        />
+        {phoneError && (
+          <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{phoneError}</p>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
         <button

@@ -3,10 +3,15 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { deriveWeddingColorScale } from '@/lib/theme/wedding-color'
-import { getUserWedding } from '@/lib/weddings/get-user-wedding'
+import { getUserWedding, hasModuleAccess } from '@/lib/weddings/get-user-wedding'
 import Sidebar from '@/components/layout/sidebar'
 import MobileTopBar from '@/components/layout/mobile-top-bar'
 import MobileBottomNav from '@/components/layout/mobile-bottom-nav'
+import type { WeddingModuleKey } from '@/types/database'
+
+const MODULE_KEYS: WeddingModuleKey[] = [
+  'checklist', 'convidados', 'financeiro', 'mesas', 'site', 'arquivos', 'presentes', 'padrinhos',
+]
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServer()
@@ -29,6 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         resolveWeddingPlanId(supabase, userWedding.id),
       ])
     : [{ data: null }, 'free' as PlanId]
+
+  const visibleModules = Object.fromEntries(
+    MODULE_KEYS.map((module) => [module, userWedding ? hasModuleAccess(userWedding, module) : false]),
+  ) as Record<WeddingModuleKey, boolean>
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
   const planLabel   = `Plano ${PLAN_NAMES[planId] ?? 'Gratuito'}`
@@ -59,7 +68,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         ...weddingColorVars,
       }}
     >
-      <Sidebar coupleNames={coupleNames} plan={planLabel} initial={initial} isFreePlan={!isPaidPlan(planId)} />
+      <Sidebar
+        coupleNames={coupleNames}
+        plan={planLabel}
+        initial={initial}
+        isFreePlan={!isPaidPlan(planId)}
+        visibleModules={visibleModules}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileTopBar />

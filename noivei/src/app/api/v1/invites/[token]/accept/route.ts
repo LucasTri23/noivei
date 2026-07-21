@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     const { data: invite, error: inviteError } = await supabase
       .from('wedding_invites')
-      .select('id, wedding_id, status, expires_at, accepted_by')
+      .select('id, wedding_id, status, expires_at, accepted_by, permissions')
       .eq('token', parsedToken.data.token)
       .maybeSingle()
 
@@ -142,9 +142,17 @@ export async function POST(req: Request, { params }: RouteContext) {
       )
     }
 
+    // Copia as permissões do convite pro membro no momento do aceite — depois disso
+    // são independentes (mudar/revogar o convite não afeta quem já entrou; o dono
+    // ajusta o acesso de um membro já aceito diretamente, não reenviando convite).
     const { error: insertError } = await supabase
       .from('wedding_members')
-      .insert({ wedding_id: weddingId, user_id: user.id, role: 'member' })
+      .insert({
+        wedding_id:  weddingId,
+        user_id:     user.id,
+        role:        'member',
+        permissions: invite.permissions,
+      })
 
     // Corrida rara: duas requisições concorrentes do mesmo usuário passaram pelo
     // check de existingMember antes de qualquer uma inserir — a UNIQUE(wedding_id,

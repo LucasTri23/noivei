@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { ApiError } from '@/lib/api/response'
+import type { WeddingModuleKey } from '@/types/database'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -42,6 +43,34 @@ export async function requireWeddingOwnership(
 
   if (!data) {
     throw new ApiError(404, 'WEDDING_NOT_FOUND', 'Casamento não encontrado.')
+  }
+}
+
+/**
+ * Garante que o usuário tem acesso ao MÓDULO específico do casamento (checklist,
+ * convidados, financeiro, mesas, site, arquivos, presentes, padrinhos) — não só
+ * que é dono/membro em geral. Chame DEPOIS de `requireWeddingOwnership` (ou no
+ * lugar dela) em toda rota de API cujo dado pertence a um módulo restringível.
+ * Dono sempre passa; membro só passa com `full_access` ou o módulo liberado
+ * explicitamente (ver wedding_members.permissions / fn_has_module_access).
+ * Retorna 403 (não 404): aqui o casamento existe e o usuário tem acesso a ele,
+ * só não a este módulo — diferente de "recurso não encontrado".
+ */
+export async function requireModuleAccess(
+  supabase:  SupabaseClient,
+  weddingId: string,
+  userId:    string,
+  module:    WeddingModuleKey,
+): Promise<void> {
+  const { data, error } = await supabase
+    .rpc('fn_has_module_access', { p_wedding_id: weddingId, p_user_id: userId, p_module: module })
+
+  if (error) {
+    throw new ApiError(500, 'DB_ERROR', 'Erro ao verificar permissão de acesso.')
+  }
+
+  if (!data) {
+    throw new ApiError(403, 'MODULE_ACCESS_DENIED', 'Você não tem permissão para acessar este módulo.')
   }
 }
 

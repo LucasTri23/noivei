@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import TimelineBoard from '@/components/timeline/timeline-board'
 import type { ChecklistItem } from '@/types/database'
 
@@ -7,7 +8,7 @@ function fmtCurrency(cents: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)
 }
 
-export default async function TimelinePage() {
+async function TimelineContent() {
   const supabase = await createSupabaseServer()
 
   const { data: wedding } = await supabase
@@ -106,5 +107,13 @@ export default async function TimelinePage() {
       {/* Timeline */}
       <TimelineBoard items={items} weddingId={wedding?.id ?? null} />
     </div>
+  )
+}
+
+export default function TimelinePage() {
+  return (
+    <ModuleAccessGate module="checklist">
+      <TimelineContent />
+    </ModuleAccessGate>
   )
 }

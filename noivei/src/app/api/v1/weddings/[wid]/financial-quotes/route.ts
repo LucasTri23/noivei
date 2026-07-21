@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateFinancialQuoteSchema } from '@/lib/api/validation/financial-quote.schema'
@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'financeiro')
 
     const { data, error } = await supabase
       .from('financial_quotes')
@@ -41,6 +42,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'financeiro')
 
     // Reforço server-side: a aba "Orçamentos" já é escondida no client pro Gratuito,
     // mas isso é só UX — sem essa checagem aqui, uma chamada direta à API contornaria

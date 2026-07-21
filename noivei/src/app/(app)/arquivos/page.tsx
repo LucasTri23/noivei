@@ -1,5 +1,6 @@
 import FileArchiveManager from '@/components/files/file-archive-manager'
 import PaywallGate from '@/components/billing/paywall-gate'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import { checkStorageLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { WeddingFile } from '@/types/database'
@@ -38,12 +39,14 @@ export default async function ArquivosPage() {
   ])
 
   return (
-    <PaywallGate feature="arquivos">
-      <FileArchiveManager
-        weddingId={weddingId}
-        initialFiles={(files ?? []) as WeddingFile[]}
-        storageLimitBytes={limitCheck.limit}
-      />
-    </PaywallGate>
+    <ModuleAccessGate module="arquivos">
+      <PaywallGate feature="arquivos">
+        <FileArchiveManager
+          weddingId={weddingId}
+          initialFiles={(files ?? []) as WeddingFile[]}
+          storageLimitBytes={limitCheck.limit}
+        />
+      </PaywallGate>
+    </ModuleAccessGate>
   )
 }

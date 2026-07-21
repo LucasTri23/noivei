@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
@@ -18,6 +18,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const { wid, id } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'convidados')
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'GUEST_NOT_FOUND', 'Convidado não encontrado.')
@@ -53,6 +54,7 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     const { wid, id } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'convidados')
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'GUEST_NOT_FOUND', 'Convidado não encontrado.')

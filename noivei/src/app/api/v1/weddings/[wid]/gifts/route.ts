@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateGiftRegistryItemSchema } from '@/lib/api/validation/gift.schema'
@@ -17,6 +17,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'presentes')
 
     const { data, error } = await supabase
       .from('gift_registry_items')
@@ -40,6 +41,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'presentes')
 
     const body = await parseJsonBody(req)
     const parsed = CreateGiftRegistryItemSchema.safeParse(body)

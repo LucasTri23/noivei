@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateWeddingPartyEntrySchema } from '@/lib/api/validation/wedding-party.schema'
@@ -27,6 +27,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'padrinhos')
 
     const { data, error } = await supabase
       .from('wedding_party_entries')
@@ -57,6 +58,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'padrinhos')
 
     const body = await parseJsonBody(req)
     const parsed = CreateWeddingPartyEntrySchema.safeParse(body)

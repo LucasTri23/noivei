@@ -1,4 +1,5 @@
 import PaywallGate from '@/components/billing/paywall-gate'
+import ModuleAccessGate from '@/components/billing/module-access-gate'
 import TablesBoard, { type TableGuest, type TableWithGuests } from '@/components/tables/tables-board'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { TableConfig } from '@/types/database'
@@ -66,8 +67,10 @@ async function MesasContent() {
 
 export default function MesasPage() {
   return (
-    <PaywallGate feature="mesas">
-      <MesasContent />
-    </PaywallGate>
+    <ModuleAccessGate module="mesas">
+      <PaywallGate feature="mesas">
+        <MesasContent />
+      </PaywallGate>
+    </ModuleAccessGate>
   )
 }

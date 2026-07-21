@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
@@ -15,6 +15,7 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     const { wid, id, guestId } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'mesas')
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'TABLE_NOT_FOUND', 'Mesa não encontrada.')

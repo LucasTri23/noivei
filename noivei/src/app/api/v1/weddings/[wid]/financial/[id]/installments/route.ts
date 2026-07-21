@@ -1,4 +1,4 @@
-import { requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const { wid, id } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'financeiro')
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'ENTRY_NOT_FOUND', 'Lançamento não encontrado.')
@@ -56,6 +57,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const { wid, id } = await params
 
     await requireWeddingOwnership(supabase, wid, user.id)
+    await requireModuleAccess(supabase, wid, user.id, 'financeiro')
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'ENTRY_NOT_FOUND', 'Lançamento não encontrado.')

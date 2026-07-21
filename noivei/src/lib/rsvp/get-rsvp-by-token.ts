@@ -2,8 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { GuestStatus } from '@/types/database'
 
-// Dados mínimos expostos publicamente no fluxo de RSVP — nunca vazar
-// e-mail/telefone do convidado nem dados internos do casamento.
+// Dados mínimos expostos publicamente no fluxo de RSVP — nunca vazar e-mail/telefone
+// do convidado nem dados internos do casamento. O telefone NUNCA aparece aqui de
+// propósito: ele é usado só no PATCH pra conferir se quem está respondendo digitou
+// o mesmo número que o casal cadastrou (ver src/lib/rsvp/normalize-phone.ts) — se
+// devolvêssemos o telefone aqui pra pré-preencher o campo, qualquer um que abrisse
+// o link (vazado ou reencaminhado) veria o número certo e a verificação não serviria
+// pra nada.
 export interface RsvpInfo {
   guest: {
     name:   string
