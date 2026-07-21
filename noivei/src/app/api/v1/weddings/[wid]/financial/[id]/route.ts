@@ -4,8 +4,9 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
 import { UpdateFinancialEntrySchema } from '@/lib/api/validation/financial.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { CHECKLIST_CATALOG_KEY_BY_TYPE } from '@/lib/financial/checklist-catalog'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { FinancialEntry } from '@/types/database'
+import type { FinancialEntry, FinancialQuote } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ wid: string; id: string }>
@@ -73,6 +74,37 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'ENTRY_NOT_FOUND', 'Lançamento não encontrado.')
+    }
+
+    // Se este lançamento veio de um orçamento selecionado, desfaz a seleção e reverte
+    // a tarefa do Checklist ANTES de apagar o lançamento — depois de apagado, o
+    // ON DELETE SET NULL já limpa financial_entry_id em financial_quotes sozinho, mas
+    // aí perderíamos a referência ao `type` do orçamento pra saber qual tarefa reverter.
+    const { data: linkedQuote, error: quoteError } = await supabase
+      .from('financial_quotes')
+      .select('id, type')
+      .eq('financial_entry_id', id)
+      .eq('wedding_id', wid)
+      .maybeSingle()
+
+    if (quoteError) return err(500, 'DB_ERROR', 'Erro ao buscar orçamento vinculado.')
+
+    if (linkedQuote) {
+      const quote = linkedQuote as Pick<FinancialQuote, 'id' | 'type'>
+
+      await supabase
+        .from('financial_quotes')
+        .update({ is_selected: false, financial_entry_id: null })
+        .eq('id', quote.id)
+
+      const catalogKey = CHECKLIST_CATALOG_KEY_BY_TYPE[quote.type]
+      if (catalogKey) {
+        await supabase
+          .from('checklist_items')
+          .update({ completed: false })
+          .eq('wedding_id', wid)
+          .eq('catalog_key', catalogKey)
+      }
     }
 
     const { data, error } = await supabase

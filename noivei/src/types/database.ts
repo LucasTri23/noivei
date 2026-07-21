@@ -320,3 +320,16 @@ export interface FinancialQuote {
   financial_entry_id: string | null
   created_at:         string
 }
+
+export interface FinancialInstallment {
+  id:                  string
+  wedding_id:          string
+  financial_entry_id:  string
+  installment_number:  number
+  total_installments:  number
+  amount_cents:        number
+  due_date:            string
+  paid:                boolean
+  paid_at:             string | null
+  created_at:          string
+}

@@ -5,19 +5,12 @@ import { QUOTE_TYPE_LABELS } from '@/lib/api/validation/financial-quote.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { isPaidPlan } from '@/constants/plans'
+import { CHECKLIST_CATALOG_KEY_BY_TYPE } from '@/lib/financial/checklist-catalog'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { FinancialEntry, FinancialQuote } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ wid: string; id: string }>
-}
-
-// Tarefas do Checklist marcadas automaticamente quando um orçamento daquele tipo
-// é selecionado. Só "local" e "buffet" têm tarefa mapeada por enquanto — os
-// demais tipos (fotografia, decoração, música) não fazem nada nesse passo.
-const CHECKLIST_CATALOG_KEY_BY_TYPE: Partial<Record<FinancialQuote['type'], string>> = {
-  local:  'planejamento.reservar-local',
-  buffet: 'festa.cardapio-buffet',
 }
 
 export async function POST(_req: Request, { params }: RouteContext) {

@@ -2,7 +2,7 @@ import FinancialManager from '@/components/financial/financial-manager'
 import { checkFinancialEntryLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
-import type { FinancialEntry, FinancialQuote } from '@/types/database'
+import type { FinancialEntry, FinancialInstallment, FinancialQuote } from '@/types/database'
 
 export default async function FinanceiroPage() {
   const supabase = await createSupabaseServer()
@@ -26,9 +26,11 @@ export default async function FinanceiroPage() {
     )
   }
 
-  // As três consultas abaixo só dependem de wedding.id, não uma da outra —
-  // rodar em paralelo poupa round-trips no carregamento da página.
-  const [{ data: entries }, planId, limitCheck] = await Promise.all([
+  // As quatro consultas abaixo só dependem de wedding.id, não uma da outra —
+  // rodar em paralelo poupa round-trips no carregamento da página. Parcelas são
+  // recurso de TODOS os planos (diferente de Orçamentos), por isso a busca não
+  // é condicionada ao plano como a de financial_quotes logo abaixo.
+  const [{ data: entries }, planId, limitCheck, { data: installments }] = await Promise.all([
     supabase
       .from('financial_entries')
       .select('*')
@@ -36,6 +38,11 @@ export default async function FinanceiroPage() {
       .order('created_at', { ascending: true }),
     resolveWeddingPlanId(supabase, wedding.id as string),
     checkFinancialEntryLimit(supabase, wedding.id as string),
+    supabase
+      .from('financial_installments')
+      .select('*')
+      .eq('wedding_id', wedding.id)
+      .order('installment_number', { ascending: true }),
   ])
 
   // Orçamentos é recurso Premium+ — só busca se o plano já resolvido permitir,
@@ -56,6 +63,7 @@ export default async function FinanceiroPage() {
       budgetCents={(wedding.budget as number | null) ?? null}
       initialEntries={(entries ?? []) as FinancialEntry[]}
       initialQuotes={(quotes ?? []) as FinancialQuote[]}
+      initialInstallments={(installments ?? []) as FinancialInstallment[]}
       planId={planId as PlanId}
       entryLimit={limitCheck.limit}
     />

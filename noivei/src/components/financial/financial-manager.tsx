@@ -10,16 +10,19 @@ import { isPaidPlan, isPlusPlan, type PlanId } from '@/constants/plans'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { QUOTE_TYPES, QUOTE_TYPE_LABELS } from '@/lib/api/validation/financial-quote.schema'
 import { toastError, toastSuccess } from '@/store/toast.store'
-import type { FinancialEntry, FinancialQuote, FinancialQuoteType } from '@/types/database'
+import type { FinancialEntry, FinancialInstallment, FinancialQuote, FinancialQuoteType } from '@/types/database'
 
 interface FinancialManagerProps {
-  weddingId:      string
-  budgetCents:    number | null
-  initialEntries: FinancialEntry[]
-  initialQuotes:  FinancialQuote[]
-  planId:         PlanId
-  entryLimit:     number
+  weddingId:            string
+  budgetCents:          number | null
+  initialEntries:       FinancialEntry[]
+  initialQuotes:        FinancialQuote[]
+  initialInstallments:  FinancialInstallment[]
+  planId:               PlanId
+  entryLimit:           number
 }
+
+type FinancialView = 'lancamentos' | 'orcamentos'
 
 interface ApiErrorBody {
   error?: { code?: string; message?: string }
@@ -73,6 +76,64 @@ function formatDue(dueDate: string | null): string | null {
   return parsed.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function toIsoDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function addMonths(dueDate: string, months: number): string {
+  const [y, m, d] = dueDate.split('-').map(Number)
+  if (!y || !m || !d) return dueDate
+  return toIsoDate(new Date(y, (m - 1) + months, d))
+}
+
+// Distribui o total em `count` parcelas iguais, jogando o resto de centavos (arredondamento)
+// nas primeiras parcelas — garante que a soma bate exatamente com o total, sempre.
+function splitEvenly(totalCents: number, count: number): number[] {
+  const base = Math.floor(totalCents / count)
+  const remainder = totalCents - base * count
+  return Array.from({ length: count }, (_, i) => base + (i < remainder ? 1 : 0))
+}
+
+interface InstallmentPlanItem {
+  amount_cents: number
+  due_date:     string
+}
+
+interface UpcomingDueItem {
+  key:              string
+  entry:            FinancialEntry
+  dueDate:          Date
+  amount:           number
+  installmentLabel: string | null
+}
+
+function buildPlanItems(totalCents: number, count: number, firstDueDate: string): InstallmentPlanItem[] {
+  return splitEvenly(totalCents, count).map((amount_cents, i) => ({
+    amount_cents,
+    due_date: i === 0 ? firstDueDate : addMonths(firstDueDate, i),
+  }))
+}
+
+function groupInstallmentsByEntry(
+  entries: FinancialEntry[],
+  rows:    FinancialInstallment[],
+): Record<string, FinancialInstallment[]> {
+  const grouped: Record<string, FinancialInstallment[]> = {}
+  for (const entry of entries) grouped[entry.id] = []
+  for (const row of rows) {
+    grouped[row.financial_entry_id] = [...(grouped[row.financial_entry_id] ?? []), row]
+  }
+  return grouped
+}
+
+function nextUnpaidInstallmentId(items: FinancialInstallment[]): string | null {
+  const sorted = items.filter((i) => !i.paid).sort((a, b) => a.due_date.localeCompare(b.due_date))
+  return sorted[0]?.id ?? null
+}
+
 function PlusIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -117,6 +178,23 @@ function AlertIcon() {
     </svg>
   )
 }
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  )
+}
+function CircleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  )
+}
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
   try {
@@ -136,7 +214,8 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
-export default function FinancialManager({ weddingId, budgetCents, initialEntries, initialQuotes, planId, entryLimit }: FinancialManagerProps) {
+export default function FinancialManager({ weddingId, budgetCents, initialEntries, initialQuotes, initialInstallments, planId, entryLimit }: FinancialManagerProps) {
+  const [view, setView]           = useState<FinancialView>('lancamentos')
   const [entries, setEntries]     = useState<FinancialEntry[]>(initialEntries)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing]     = useState<FinancialEntry | null>(null)
@@ -152,6 +231,19 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [savingQuote, setSavingQuote]       = useState(false)
   const [selectingId, setSelectingId]       = useState<string | null>(null)
   const showQuoteSpinner = useDelayedLoading(savingQuote)
+
+  const [installments, setInstallments]           = useState<Record<string, FinancialInstallment[]>>(
+    () => groupInstallmentsByEntry(initialEntries, initialInstallments),
+  )
+  const [expandedEntryId, setExpandedEntryId]     = useState<string | null>(null)
+  const [loadingInstallmentsId, setLoadingInstallmentsId] = useState<string | null>(null)
+  const [planEntry, setPlanEntry]                 = useState<FinancialEntry | null>(null)
+  const [planForm, setPlanForm]                   = useState<{ count: number; firstDueDate: string; items: InstallmentPlanItem[] }>(
+    { count: 2, firstDueDate: '', items: [] },
+  )
+  const [savingPlan, setSavingPlan]               = useState(false)
+  const [togglingInstallmentId, setTogglingInstallmentId] = useState<string | null>(null)
+  const showPlanSpinner = useDelayedLoading(savingPlan)
 
   const apiBase      = `/api/v1/weddings/${weddingId}/financial`
   const quotesApiBase = `/api/v1/weddings/${weddingId}/financial-quotes`
@@ -189,11 +281,31 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const horizon = new Date(today)
   horizon.setDate(horizon.getDate() + 30)
 
-  const upcomingDue = isPlus
+  // Lançamentos com plano de parcelas têm o vencimento por parcela (não mais em
+  // entry.due_date) — cada parcela pendente entra como um item próprio na lista.
+  const upcomingDue: UpcomingDueItem[] = isPlus
     ? entries
-        .filter((e) => e.due_date !== null && e.paid_amount < e.total_amount)
-        .map((e) => ({ entry: e, dueDate: parseDueDate(e.due_date as string) }))
-        .filter((x): x is { entry: FinancialEntry; dueDate: Date } => x.dueDate !== null && x.dueDate <= horizon)
+        .flatMap((entry): UpcomingDueItem[] => {
+          const entryInstallments = installments[entry.id]
+          if (entryInstallments && entryInstallments.length > 0) {
+            const items: UpcomingDueItem[] = []
+            for (const inst of entryInstallments) {
+              if (inst.paid) continue
+              const dueDate = parseDueDate(inst.due_date)
+              if (!dueDate) continue
+              items.push({
+                key: inst.id, entry, dueDate, amount: inst.amount_cents,
+                installmentLabel: `parcela ${inst.installment_number}/${inst.total_installments}`,
+              })
+            }
+            return items
+          }
+          if (entry.due_date === null || entry.paid_amount >= entry.total_amount) return []
+          const dueDate = parseDueDate(entry.due_date)
+          if (!dueDate) return []
+          return [{ key: entry.id, entry, dueDate, amount: entry.total_amount - entry.paid_amount, installmentLabel: null }]
+        })
+        .filter((item) => item.dueDate <= horizon)
         .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
     : []
 
@@ -263,6 +375,9 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     setEntries((prev) =>
       editing ? prev.map((entry) => (entry.id === data.id ? data : entry)) : [...prev, data],
     )
+    if (!editing) {
+      setInstallments((prev) => ({ ...prev, [data.id]: prev[data.id] ?? [] }))
+    }
     setModalOpen(false)
   }
 
@@ -276,7 +391,15 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     if (!res.ok) {
       setEntries(previous)
       toastError(await readApiError(res, 'Não foi possível excluir o lançamento.'))
+      return
     }
+
+    setInstallments((prev) => {
+      const next = { ...prev }
+      delete next[entry.id]
+      return next
+    })
+    if (expandedEntryId === entry.id) setExpandedEntryId(null)
   }
 
   function openCreateQuote() {
@@ -329,6 +452,17 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       setQuotes(previousQuotes)
       setEntries(previousEntries)
       toastError(await readApiError(res, 'Não foi possível excluir o orçamento.'))
+      return
+    }
+
+    if (quote.financial_entry_id) {
+      const removedId = quote.financial_entry_id
+      setInstallments((prev) => {
+        const next = { ...prev }
+        delete next[removedId]
+        return next
+      })
+      if (expandedEntryId === removedId) setExpandedEntryId(null)
     }
   }
 
@@ -364,6 +498,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         : prev
       return [...withoutOld, data.entry]
     })
+    setInstallments((prev) => {
+      const next = { ...prev, [data.entry.id]: prev[data.entry.id] ?? [] }
+      if (previousSelected?.financial_entry_id) delete next[previousSelected.financial_entry_id]
+      return next
+    })
+    if (previousSelected?.financial_entry_id && expandedEntryId === previousSelected.financial_entry_id) {
+      setExpandedEntryId(null)
+    }
 
     const hasChecklistTask = quote.type === 'local' || quote.type === 'buffet'
     toastSuccess(
@@ -372,6 +514,120 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         : 'Orçamento selecionado! O lançamento foi criado no Financeiro.',
     )
   }
+
+  // As parcelas já vêm carregadas do servidor (initialInstallments) — este fetch só
+  // cobre o caso defensivo de um lançamento sem chave conhecida ainda em `installments`.
+  async function toggleExpand(entry: FinancialEntry) {
+    if (expandedEntryId === entry.id) {
+      setExpandedEntryId(null)
+      return
+    }
+    setExpandedEntryId(entry.id)
+    if (installments[entry.id]) return
+
+    setLoadingInstallmentsId(entry.id)
+    const res = await fetch(`${apiBase}/${entry.id}/installments`)
+    setLoadingInstallmentsId(null)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível carregar as parcelas.'))
+      return
+    }
+    const { data } = (await res.json()) as { data: FinancialInstallment[] }
+    setInstallments((prev) => ({ ...prev, [entry.id]: data }))
+  }
+
+  function openPlanModal(entry: FinancialEntry) {
+    const existing = installments[entry.id] ?? []
+    const count = existing.length > 0 ? existing.length : 2
+    const firstDueDate = existing[0]?.due_date ?? entry.due_date ?? toIsoDate(new Date())
+    const items = existing.length > 0
+      ? existing.map((inst) => ({ amount_cents: inst.amount_cents, due_date: inst.due_date }))
+      : buildPlanItems(entry.total_amount, count, firstDueDate)
+
+    setPlanEntry(entry)
+    setPlanForm({ count, firstDueDate, items })
+  }
+
+  function handlePlanCountChange(count: number) {
+    if (!planEntry) return
+    const clamped = Math.min(60, Math.max(1, count))
+    setPlanForm((f) => ({ ...f, count: clamped, items: buildPlanItems(planEntry.total_amount, clamped, f.firstDueDate) }))
+  }
+
+  function handlePlanFirstDueDateChange(dueDate: string) {
+    if (!planEntry) return
+    setPlanForm((f) => ({ ...f, firstDueDate: dueDate, items: buildPlanItems(planEntry.total_amount, f.count, dueDate) }))
+  }
+
+  function handlePlanItemAmountChange(index: number, cents: number | null) {
+    setPlanForm((f) => ({ ...f, items: f.items.map((item, i) => (i === index ? { ...item, amount_cents: cents ?? 0 } : item)) }))
+  }
+
+  function handlePlanItemDueDateChange(index: number, dueDate: string) {
+    setPlanForm((f) => ({ ...f, items: f.items.map((item, i) => (i === index ? { ...item, due_date: dueDate } : item)) }))
+  }
+
+  async function handleSubmitPlan(e: React.FormEvent) {
+    e.preventDefault()
+    if (!planEntry || savingPlan) return
+
+    const sum = planForm.items.reduce((total, item) => total + item.amount_cents, 0)
+    if (sum !== planEntry.total_amount) {
+      toastError('A soma das parcelas precisa bater com o valor total do lançamento.')
+      return
+    }
+
+    setSavingPlan(true)
+    const res = await fetch(`${apiBase}/${planEntry.id}/installments`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ installments: planForm.items }),
+    })
+    setSavingPlan(false)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível salvar o plano de parcelas.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: FinancialInstallment[] }
+    const paidAmount = data.filter((inst) => inst.paid).reduce((total, inst) => total + inst.amount_cents, 0)
+
+    setInstallments((prev) => ({ ...prev, [planEntry.id]: data }))
+    setEntries((prev) => prev.map((e) => (e.id === planEntry.id ? { ...e, paid_amount: paidAmount } : e)))
+    setExpandedEntryId(planEntry.id)
+    setPlanEntry(null)
+    toastSuccess('Plano de parcelas salvo!')
+  }
+
+  async function handleToggleInstallmentPaid(entry: FinancialEntry, installment: FinancialInstallment) {
+    if (togglingInstallmentId) return
+
+    setTogglingInstallmentId(installment.id)
+    const res = await fetch(`${apiBase}/${entry.id}/installments/${installment.id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ paid: !installment.paid }),
+    })
+    setTogglingInstallmentId(null)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível atualizar a parcela.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: FinancialInstallment }
+    const updatedItems = (installments[entry.id] ?? []).map((item) => (item.id === data.id ? data : item))
+    const paidAmount = updatedItems.filter((item) => item.paid).reduce((total, item) => total + item.amount_cents, 0)
+
+    setInstallments((prev) => ({ ...prev, [entry.id]: updatedItems }))
+    setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, paid_amount: paidAmount } : e)))
+    toastSuccess(data.paid ? 'Parcela marcada como paga.' : 'Parcela marcada como pendente.')
+  }
+
+  const planSum = planForm.items.reduce((total, item) => total + item.amount_cents, 0)
+  const planSumMismatch = planEntry !== null && planSum !== planEntry.total_amount
 
   return (
     <div>
@@ -388,21 +644,52 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
             Controle o orçamento do seu casamento
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          disabled={atLimit}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'var(--wedding-color)', color: '#fff', border: 'none',
-            borderRadius: '12px', padding: '11px 18px',
-            fontWeight: 600, fontSize: '14px',
-            cursor: atLimit ? 'not-allowed' : 'pointer',
-            opacity: atLimit ? 0.5 : 1,
-            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
-          }}
-        >
-          <PlusIcon /> Lançar gasto
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {isPaid && (
+            <div
+              role="tablist"
+              aria-label="Alternar visualização do Financeiro"
+              style={{ display: 'flex', gap: '4px', background: 'var(--wedding-color-subtle)', borderRadius: '13px', padding: '4px' }}
+            >
+              {([
+                { key: 'lancamentos', label: 'Lançamentos' },
+                { key: 'orcamentos', label: 'Orçamentos' },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === tab.key}
+                  onClick={() => setView(tab.key)}
+                  style={{
+                    border: 'none', borderRadius: '9px', padding: '8px 15px',
+                    fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+                    background: view === tab.key ? 'var(--surface)' : 'transparent',
+                    color: view === tab.key ? 'var(--fg)' : 'var(--muted-fg)',
+                    boxShadow: view === tab.key ? '0 2px 8px rgba(60,40,24,0.08)' : 'none',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={openCreate}
+            disabled={atLimit}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color)', color: '#fff', border: 'none',
+              borderRadius: '12px', padding: '11px 18px',
+              fontWeight: 600, fontSize: '14px',
+              cursor: atLimit ? 'not-allowed' : 'pointer',
+              opacity: atLimit ? 0.5 : 1,
+              boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
+            }}
+          >
+            <PlusIcon /> Lançar gasto
+          </button>
+        </div>
       </div>
 
       {/* Aviso de limite do plano */}
@@ -427,6 +714,8 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         </div>
       )}
 
+      {view === 'lancamentos' && (
+      <>
       {/* Hero card */}
       <div
         className="relative mb-6 overflow-hidden rounded-3xl p-8"
@@ -576,74 +865,162 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
               const subtitle = [entry.category, entry.vendor, due ? `vence ${due}` : null]
                 .filter(Boolean)
                 .join(' · ')
+              const isExpanded = expandedEntryId === entry.id
+              const entryInstallments = installments[entry.id]
+              const nextUnpaidId = entryInstallments ? nextUnpaidInstallmentId(entryInstallments) : null
               return (
-                <div
-                  key={entry.id}
-                  className="flex items-center gap-4 rounded-xl p-4"
-                  style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #F0E8DE' }}
-                >
+                <div key={entry.id} className="flex flex-col gap-2">
                   <div
-                    style={{
-                      width: '36px', height: '36px', borderRadius: '10px',
-                      background: fullyPaid ? '#E9EFE6' : '#F1E6D4',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                    title={fullyPaid ? 'Pago' : 'Pagamento em aberto'}
+                    className="flex items-center gap-4 rounded-xl p-4"
+                    style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #F0E8DE' }}
                   >
-                    {fullyPaid ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E8B6A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A7020" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 6v6l4 2" />
-                      </svg>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>
-                      {entry.description || entry.category}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>
-                      {subtitle}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{fmt(entry.total_amount)}</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
-                      pago {fmt(entry.paid_amount)}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => openEdit(entry)}
-                      title="Editar lançamento"
-                      aria-label={`Editar ${entry.description || entry.category}`}
-                      style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
+                    <div
+                      style={{
+                        width: '36px', height: '36px', borderRadius: '10px',
+                        background: fullyPaid ? '#E9EFE6' : '#F1E6D4',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                      title={fullyPaid ? 'Pago' : 'Pagamento em aberto'}
                     >
-                      <PencilIcon />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(entry)}
-                      title="Excluir lançamento"
-                      aria-label={`Excluir ${entry.description || entry.category}`}
-                      style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
-                    >
-                      <TrashIcon />
-                    </button>
+                      {fullyPaid ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E8B6A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A7020" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M12 6v6l4 2" />
+                        </svg>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>
+                        {entry.description || entry.category}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+                        {subtitle}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{fmt(entry.total_amount)}</div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+                        pago {fmt(entry.paid_amount)}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => toggleExpand(entry)}
+                        title="Parcelas"
+                        aria-label={`Ver parcelas de ${entry.description || entry.category}`}
+                        aria-expanded={isExpanded}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
+                      >
+                        <ChevronIcon expanded={isExpanded} />
+                      </button>
+                      <button
+                        onClick={() => openEdit(entry)}
+                        title="Editar lançamento"
+                        aria-label={`Editar ${entry.description || entry.category}`}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
+                      >
+                        <PencilIcon />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(entry)}
+                        title="Excluir lançamento"
+                        aria-label={`Excluir ${entry.description || entry.category}`}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
                   </div>
+
+                  {isExpanded && (
+                    <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px dashed #EBDDD0', marginLeft: '8px' }}>
+                      {loadingInstallmentsId === entry.id ? (
+                        <Spinner />
+                      ) : !entryInstallments || entryInstallments.length === 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openPlanModal(entry)}
+                          style={{
+                            background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                            borderRadius: '10px', padding: '8px 14px', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+                          }}
+                        >
+                          Parcelar pagamento
+                        </button>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {entryInstallments.map((inst) => {
+                            const overdue = !inst.paid && inst.due_date < toIsoDate(today)
+                            const isNext = inst.id === nextUnpaidId
+                            return (
+                              <div
+                                key={inst.id}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '10px',
+                                  background: overdue ? '#F6E4DE' : 'var(--wedding-color-subtle)',
+                                  border: isNext ? '1.5px solid var(--wedding-color)' : '1px solid #F0E8DE',
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleInstallmentPaid(entry, inst)}
+                                  disabled={togglingInstallmentId === inst.id}
+                                  title={inst.paid ? 'Marcar como pendente' : 'Marcar como paga'}
+                                  aria-label={inst.paid ? `Marcar parcela ${inst.installment_number} como pendente` : `Marcar parcela ${inst.installment_number} como paga`}
+                                  style={{
+                                    border: 'none', background: 'transparent', flexShrink: 0, padding: 0,
+                                    cursor: togglingInstallmentId === inst.id ? 'wait' : 'pointer',
+                                    color: inst.paid ? '#5E8B6A' : (overdue ? '#C0553F' : 'var(--muted-fg)'),
+                                  }}
+                                >
+                                  {inst.paid ? <CheckCircleIcon /> : <CircleIcon />}
+                                </button>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)' }}>
+                                    Parcela {inst.installment_number}/{inst.total_installments}
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: overdue ? '#C0553F' : 'var(--muted-fg)', fontWeight: overdue ? 700 : 400, marginTop: '2px' }}>
+                                    {inst.paid ? 'Paga' : (overdue ? 'Venceu em ' : 'Vence em ')}
+                                    {!inst.paid && formatDue(inst.due_date)}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--fg)', flexShrink: 0 }}>
+                                  {fmt(inst.amount_cents)}
+                                </div>
+                              </div>
+                            )
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => openPlanModal(entry)}
+                            style={{
+                              alignSelf: 'flex-start', background: 'transparent', border: 'none',
+                              color: 'var(--wedding-color)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', padding: '4px 0',
+                            }}
+                          >
+                            Refazer plano de parcelas
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Orçamentos por categoria — recurso Completo (Premium+): cadastra várias cotações
           por tipo (ex.: 3 espaços) e escolhe uma, que vira lançamento real no Financeiro. */}
-      {isPaid && (
+      {view === 'orcamentos' && isPaid && (
         <div className="mt-5 rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -690,15 +1067,19 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{quote.vendor_name}</span>
                             {quote.is_selected && (
-                              <span
+                              <button
+                                type="button"
+                                onClick={() => setView('lancamentos')}
+                                title="Ver o lançamento gerado por este orçamento"
                                 style={{
                                   display: 'inline-flex', alignItems: 'center', gap: '4px',
                                   fontSize: '11px', fontWeight: 700, color: '#5E8B6A',
-                                  background: '#E9EFE6', borderRadius: '99px', padding: '2px 9px',
+                                  background: '#E9EFE6', border: 'none', borderRadius: '99px', padding: '2px 9px',
+                                  cursor: 'pointer',
                                 }}
                               >
-                                <CheckCircleIcon /> Selecionado
-                              </span>
+                                <CheckCircleIcon /> Ver lançamento
+                              </button>
                             )}
                           </div>
                           {quote.notes && (
@@ -743,24 +1124,23 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       )}
 
       {/* Próximos vencimentos — relatório avançado exclusivo do Premium Plus */}
-      {isPlus && (
+      {view === 'lancamentos' && isPlus && (
         <div className="mt-5 rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
           <h3 className="font-display mb-1" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
             Próximos vencimentos
           </h3>
           <p style={{ fontSize: '13px', color: 'var(--muted-fg)', marginBottom: '18px' }}>
-            Lançamentos em aberto que vencem nos próximos 30 dias, incluindo os já vencidos
+            Lançamentos e parcelas em aberto que vencem nos próximos 30 dias, incluindo os já vencidos
           </p>
           {upcomingDue.length === 0 ? (
             <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)' }}>Nenhum vencimento em aberto nos próximos 30 dias.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {upcomingDue.map(({ entry, dueDate }) => {
+              {upcomingDue.map(({ key, entry, dueDate, amount, installmentLabel }) => {
                 const overdue = dueDate < today
-                const remaining = entry.total_amount - entry.paid_amount
                 return (
                   <div
-                    key={entry.id}
+                    key={key}
                     className="flex items-center gap-4 rounded-xl p-4"
                     style={{
                       background: overdue ? '#F6E4DE' : 'var(--wedding-color-subtle)',
@@ -773,14 +1153,17 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>
                         {entry.description || entry.category}
+                        {installmentLabel && (
+                          <span style={{ fontWeight: 400, color: 'var(--muted-fg)' }}> · {installmentLabel}</span>
+                        )}
                       </div>
                       <div style={{ fontSize: '12px', color: overdue ? '#C0553F' : 'var(--muted-fg)', marginTop: '2px', fontWeight: overdue ? 700 : 400 }}>
                         {overdue ? 'Vencido em ' : 'Vence em '}
-                        {formatDue(entry.due_date)}
+                        {dueDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{fmt(remaining)}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{fmt(amount)}</div>
                       <div style={{ fontSize: '11.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
                         em aberto
                       </div>
@@ -988,6 +1371,109 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal de plano de parcelas — controle de parcelas é recurso de TODOS os planos */}
+      <Modal
+        open={planEntry !== null}
+        onClose={() => setPlanEntry(null)}
+        title="Parcelar pagamento"
+        maxWidth="560px"
+      >
+        {planEntry && (
+          <form onSubmit={handleSubmitPlan} className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="plan-count" style={labelStyle}>Número de parcelas</label>
+                <input
+                  id="plan-count"
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={planForm.count}
+                  onChange={(e) => handlePlanCountChange(Number(e.target.value) || 1)}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label htmlFor="plan-first-due" style={labelStyle}>Data da 1ª parcela</label>
+                <input
+                  id="plan-first-due"
+                  type="date"
+                  value={planForm.firstDueDate}
+                  onChange={(e) => handlePlanFirstDueDateChange(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+              {planForm.items.map((item, index) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  style={{ padding: '10px', borderRadius: '10px', background: 'var(--wedding-color-subtle)' }}
+                >
+                  <div>
+                    <label htmlFor={`plan-item-amount-${index}`} style={labelStyle}>
+                      {index === 0 ? 'Entrada / parcela 1' : `Parcela ${index + 1}`}
+                    </label>
+                    <CurrencyInput
+                      id={`plan-item-amount-${index}`}
+                      value={item.amount_cents}
+                      onChange={(cents) => handlePlanItemAmountChange(index, cents)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`plan-item-due-${index}`} style={labelStyle}>Vencimento</label>
+                    <input
+                      id={`plan-item-due-${index}`}
+                      type="date"
+                      value={item.due_date}
+                      onChange={(e) => handlePlanItemDueDateChange(index, e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p
+              role={planSumMismatch ? 'alert' : undefined}
+              style={{ fontSize: '13px', color: planSumMismatch ? '#C0553F' : 'var(--muted-fg)', fontWeight: planSumMismatch ? 700 : 400, margin: 0 }}
+            >
+              Soma das parcelas: {fmt(planSum)} de {fmt(planEntry.total_amount)}
+              {planSumMismatch && ' — ajuste os valores até a soma bater com o total do lançamento.'}
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setPlanEntry(null)}
+                style={{
+                  background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                  fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={savingPlan || planSumMismatch}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                  borderRadius: '12px', padding: '10px 18px',
+                  fontWeight: 600, fontSize: '14px',
+                  cursor: (savingPlan || planSumMismatch) ? 'not-allowed' : 'pointer',
+                  opacity: (savingPlan || planSumMismatch) ? 0.6 : 1,
+                }}
+              >
+                {showPlanSpinner && <Spinner color="#fff" />} Salvar plano
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   )
