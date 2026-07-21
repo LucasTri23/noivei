@@ -70,6 +70,14 @@ function TrashIcon() {
     </svg>
   )
 }
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  )
+}
 function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -92,6 +100,7 @@ function formatDue(dueDate: string | null): string | null {
 export default function ChecklistPage() {
   const router = useRouter()
   const [filter, setFilter]         = useState<Filter>('todas')
+  const [search, setSearch]         = useState('')
   const [loading, setLoading]       = useState(true)
   const [items, setItems]           = useState<ChecklistItem[]>([])
   const [weddingId, setWeddingId]   = useState<string | null>(null)
@@ -204,6 +213,8 @@ export default function ChecklistPage() {
     }))
   }, [items])
 
+  const hasSearchResults = groups.some((group) => group.items.some(filterItem))
+
   async function toggle(item: ChecklistItem) {
     const completed = !item.completed
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, completed } : i)))
@@ -315,9 +326,15 @@ export default function ChecklistPage() {
   }
 
   function filterItem(item: ChecklistItem) {
-    if (filter === 'pendentes') return !item.completed
-    if (filter === 'concluidas') return item.completed
-    return true
+    if (filter === 'pendentes' && item.completed) return false
+    if (filter === 'concluidas' && !item.completed) return false
+
+    const query = search.trim().toLowerCase()
+    if (query === '') return true
+    return (
+      item.label.toLowerCase().includes(query) ||
+      (item.category ?? '').toLowerCase().includes(query)
+    )
   }
 
   return (
@@ -368,23 +385,43 @@ export default function ChecklistPage() {
         </div>
       </div>
 
-      {/* Filter pills */}
-      <div className="mb-6 flex gap-2">
-        {(['todas', 'pendentes', 'concluidas'] as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
+      {/* Filter pills + busca */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="flex gap-2">
+          {(['todas', 'pendentes', 'concluidas'] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                padding: '7px 16px', borderRadius: '99px', fontSize: '13.5px',
+                fontWeight: 600, cursor: 'pointer', border: 'none',
+                background: filter === f ? 'var(--wedding-color)' : 'var(--wedding-color-subtle)',
+                color: filter === f ? '#fff' : '#9A7A60',
+                transition: 'all 0.18s',
+              }}
+            >
+              {FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+        <div style={{ position: 'relative', flex: '1 1 220px', minWidth: '200px' }}>
+          <span
             style={{
-              padding: '7px 16px', borderRadius: '99px', fontSize: '13.5px',
-              fontWeight: 600, cursor: 'pointer', border: 'none',
-              background: filter === f ? 'var(--wedding-color)' : 'var(--wedding-color-subtle)',
-              color: filter === f ? '#fff' : '#9A7A60',
-              transition: 'all 0.18s',
+              position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--muted-fg)', display: 'flex', pointerEvents: 'none',
             }}
           >
-            {FILTER_LABELS[f]}
-          </button>
-        ))}
+            <SearchIcon />
+          </span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar tarefa…"
+            aria-label="Buscar tarefa"
+            style={{ ...fieldInputStyle, paddingLeft: '40px' }}
+          />
+        </div>
       </div>
 
       {/* Groups */}
@@ -433,6 +470,14 @@ export default function ChecklistPage() {
             {generateError && (
               <p style={{ fontSize: '13px', color: '#C0553F', marginTop: '14px' }}>{generateError}</p>
             )}
+          </div>
+        )}
+        {!loading && groups.length > 0 && search.trim() !== '' && !hasSearchResults && (
+          <div
+            className="rounded-2xl bg-[var(--surface)] p-10 text-center"
+            style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', color: 'var(--muted-fg)', fontSize: '14px' }}
+          >
+            Nenhuma tarefa encontrada para &quot;{search}&quot;
           </div>
         )}
         {groups.map((group) => {

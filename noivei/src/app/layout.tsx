@@ -21,20 +21,22 @@ const hanken = Hanken_Grotesk({
 })
 
 export const metadata: Metadata = {
+  // TODO: confirmar o domínio definitivo em produção (Vercel/DNS ainda apontam
+  // pra config antiga) antes de trocar o fallback abaixo de noivei.com.br.
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://noivei.com.br'),
   title: {
-    default:  'Noivei — Organize seu casamento do jeito certo',
-    template: '%s | Noivei',
+    default:  'Wednest — Organize seu casamento do jeito certo',
+    template: '%s | Wednest',
   },
   description:
     'O único lugar onde você organiza todo o seu casamento. ' +
     'Checklist, convidados, financeiro, fornecedores, site e RSVP — tudo em um só lugar.',
   keywords: ['organizar casamento', 'app casamento', 'checklist casamento', 'lista convidados'],
-  authors:  [{ name: 'Noivei' }],
+  authors:  [{ name: 'Wednest' }],
   openGraph: {
     type:     'website',
     locale:   'pt_BR',
-    siteName: 'Noivei',
+    siteName: 'Wednest',
   },
   twitter: { card: 'summary_large_image' },
   robots:  { index: true, follow: true },

@@ -224,7 +224,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
         </section>
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '40px', textAlign: 'center' }}>
-          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Noivei
+          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest
         </p>
       </div>
     </div>

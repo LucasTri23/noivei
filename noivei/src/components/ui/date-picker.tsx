@@ -58,6 +58,7 @@ export default function DatePicker({ id, value, onChange, placeholder }: DatePic
   const selected = parseIso(value)
   const [open, setOpen]         = useState(false)
   const [viewDate, setViewDate] = useState(() => selected ?? new Date())
+  const [alignRight, setAlignRight] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -76,8 +77,14 @@ export default function DatePicker({ id, value, onChange, placeholder }: DatePic
     }
   }, [open])
 
+  const POPOVER_WIDTH = 272
+
   function toggleOpen() {
-    if (!open) setViewDate(selected ?? new Date())
+    if (!open) {
+      setViewDate(selected ?? new Date())
+      const rect = wrapRef.current?.getBoundingClientRect()
+      if (rect) setAlignRight(rect.left + POPOVER_WIDTH > window.innerWidth - 16)
+    }
     setOpen((o) => !o)
   }
 
@@ -106,8 +113,10 @@ export default function DatePicker({ id, value, onChange, placeholder }: DatePic
       {open && (
         <div
           style={{
-            position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 20,
-            background: 'var(--surface)', borderRadius: '16px', width: '272px',
+            position: 'absolute', top: 'calc(100% + 8px)', zIndex: 20,
+            left: alignRight ? 'auto' : 0, right: alignRight ? 0 : 'auto',
+            background: 'var(--surface)', borderRadius: '16px',
+            width: `${POPOVER_WIDTH}px`, maxWidth: 'calc(100vw - 24px)',
             border: '1px solid #EBDDD0', boxShadow: '0 16px 40px rgba(60,40,24,0.18)', padding: '16px',
           }}
         >

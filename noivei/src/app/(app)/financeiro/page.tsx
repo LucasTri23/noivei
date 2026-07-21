@@ -1,6 +1,8 @@
 import FinancialManager from '@/components/financial/financial-manager'
+import { checkFinancialEntryLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { FinancialEntry } from '@/types/database'
+import { isPaidPlan, type PlanId } from '@/constants/plans'
+import type { FinancialEntry, FinancialQuote } from '@/types/database'
 
 export default async function FinanceiroPage() {
   const supabase = await createSupabaseServer()
@@ -24,17 +26,38 @@ export default async function FinanceiroPage() {
     )
   }
 
-  const { data: entries } = await supabase
-    .from('financial_entries')
-    .select('*')
-    .eq('wedding_id', wedding.id)
-    .order('created_at', { ascending: true })
+  // As três consultas abaixo só dependem de wedding.id, não uma da outra —
+  // rodar em paralelo poupa round-trips no carregamento da página.
+  const [{ data: entries }, planId, limitCheck] = await Promise.all([
+    supabase
+      .from('financial_entries')
+      .select('*')
+      .eq('wedding_id', wedding.id)
+      .order('created_at', { ascending: true }),
+    resolveWeddingPlanId(supabase, wedding.id as string),
+    checkFinancialEntryLimit(supabase, wedding.id as string),
+  ])
+
+  // Orçamentos é recurso Premium+ — só busca se o plano já resolvido permitir,
+  // pra não gastar uma consulta à toa em toda carga de página no Gratuito.
+  const quotes = isPaidPlan(planId as PlanId)
+    ? (
+        await supabase
+          .from('financial_quotes')
+          .select('*')
+          .eq('wedding_id', wedding.id)
+          .order('created_at', { ascending: true })
+      ).data
+    : null
 
   return (
     <FinancialManager
       weddingId={wedding.id as string}
       budgetCents={(wedding.budget as number | null) ?? null}
       initialEntries={(entries ?? []) as FinancialEntry[]}
+      initialQuotes={(quotes ?? []) as FinancialQuote[]}
+      planId={planId as PlanId}
+      entryLimit={limitCheck.limit}
     />
   )
 }

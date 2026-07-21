@@ -781,7 +781,7 @@ export default function SiteBuilder({
       </div>
 
       {/* Two columns */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: '260px 1fr' }}>
+      <div className="grid gap-5 grid-cols-1 md:grid-cols-[260px_1fr]">
         {/* Sections list */}
         <div className="flex flex-col gap-2">
           {SECTIONS.map((s) => {

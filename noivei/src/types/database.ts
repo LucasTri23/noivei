@@ -295,3 +295,28 @@ export interface WeddingInvite {
   accepted_at: string | null
   created_at:  string
 }
+
+export interface WeddingPartyEntry {
+  id:                   string
+  wedding_id:           string
+  guest_id:             string
+  role:                 string
+  carries_rings:        boolean
+  paired_with_entry_id: string | null
+  sort_order:           number
+  created_at:           string
+}
+
+export type FinancialQuoteType = 'local' | 'buffet' | 'fotografia' | 'decoracao' | 'musica' | 'outro'
+
+export interface FinancialQuote {
+  id:                 string
+  wedding_id:         string
+  type:               FinancialQuoteType
+  vendor_name:        string
+  amount_cents:       number
+  notes:              string | null
+  is_selected:        boolean
+  financial_entry_id: string | null
+  created_at:         string
+}

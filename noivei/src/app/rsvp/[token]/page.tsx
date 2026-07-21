@@ -132,7 +132,7 @@ export default async function RsvpPage({ params }: RsvpPageProps) {
         <RsvpForm token={parsedToken.data} initialStatus={rsvp.guest.status} />
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '26px', textAlign: 'center' }}>
-          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Noivei
+          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest
         </p>
       </div>
     </RsvpShell>

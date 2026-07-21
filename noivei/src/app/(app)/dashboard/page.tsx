@@ -78,20 +78,19 @@ export default async function DashboardPage() {
   let notifyRsvp     = true
   let planId: PlanId = 'free'
 
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('notify_timeline, notify_rsvp')
-      .eq('id', user.id)
-      .maybeSingle()
+  // Perfil de notificações (depende de user) e plano do casamento (depende de wedding)
+  // não dependem um do outro — rodam em paralelo em vez de sequenciais.
+  const [profileResult, resolvedPlanId] = await Promise.all([
+    user
+      ? supabase.from('profiles').select('notify_timeline, notify_rsvp').eq('id', user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    wedding?.id ? resolveWeddingPlanId(supabase, wedding.id) : Promise.resolve('free' as PlanId),
+  ])
 
-    notifyTimeline = (profile?.notify_timeline as boolean | undefined) ?? true
-    notifyRsvp     = (profile?.notify_rsvp as boolean | undefined) ?? true
-  }
-
-  if (wedding?.id) {
-    planId = await resolveWeddingPlanId(supabase, wedding.id)
-  }
+  const profile = profileResult.data
+  notifyTimeline = (profile?.notify_timeline as boolean | undefined) ?? true
+  notifyRsvp     = (profile?.notify_rsvp as boolean | undefined) ?? true
+  planId         = resolvedPlanId
 
   // Wedding Score é recurso pago: recalcula a cada carregamento (barato, poucas queries agregadas)
   const weddingScore = wedding?.id && isPaidPlan(planId)

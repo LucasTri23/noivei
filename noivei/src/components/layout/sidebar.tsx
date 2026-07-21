@@ -10,6 +10,7 @@ const NAV = [
   { href: '/timeline',    label: 'Timeline',      icon: CalendarIcon },
   { href: '/convidados',  label: 'Convidados',    icon: UsersIcon },
   { href: '/financeiro',  label: 'Financeiro',    icon: WalletIcon },
+  { href: '/padrinhos',   label: 'Padrinhos & Entradas', icon: PartyIcon },
   { href: '/mesas',       label: 'Mesas',         icon: ArmchairIcon, pro: true },
   { href: '/site',        label: 'Site do casal', icon: GlobeIcon,    pro: true },
   { href: '/presentes',   label: 'Lista de presentes', icon: GiftIcon, pro: true },
@@ -142,6 +143,9 @@ function UsersIcon({ size }: { size: number }) {
 }
 function WalletIcon({ size }: { size: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+}
+function PartyIcon({ size }: { size: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 21v-1a5 5 0 0 1 5-5h0a5 5 0 0 1 3.5 1.42"/><path d="M13.5 16.42A5 5 0 0 1 17 15h0a5 5 0 0 1 5 5v1"/><path d="M9.5 15.5 12 18l2.5-2.5"/></svg>
 }
 function ArmchairIcon({ size }: { size: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v1.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V11a2 2 0 0 0-4 0z"/><path d="M5 18v2M19 18v2"/></svg>

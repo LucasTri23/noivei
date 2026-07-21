@@ -45,15 +45,13 @@ export default async function PerfilPage() {
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('couple_names')
-    .is('deleted_at', null)
-    .order('created_at')
-    .limit(1)
-    .maybeSingle()
-
-  const userWedding = user ? await getUserWedding(supabase, user.id) : null
+  // wedding (nome do casal, via RLS) e userWedding (id de membership) não dependem
+  // um do outro — rodam em paralelo; resolveWeddingPlanId aí sim depende do id
+  // resolvido por userWedding, então continua sequencial depois.
+  const [{ data: wedding }, userWedding] = await Promise.all([
+    supabase.from('weddings').select('couple_names').is('deleted_at', null).order('created_at').limit(1).maybeSingle(),
+    user ? getUserWedding(supabase, user.id) : Promise.resolve(null),
+  ])
   const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
@@ -182,7 +180,7 @@ export default async function PerfilPage() {
               </div>
               <div style={{ fontSize: '13.5px', color: 'rgba(250,240,230,0.65)', marginBottom: '20px', lineHeight: 1.5 }}>
                 {isPremium
-                  ? 'Acesso completo a todas as funcionalidades do Noivei.'
+                  ? 'Acesso completo a todas as funcionalidades do Wednest.'
                   : 'Faça upgrade para desbloquear convidados ilimitados, mesas e muito mais.'}
               </div>
               <Link

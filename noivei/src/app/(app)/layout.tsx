@@ -16,15 +16,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const userWedding = await getUserWedding(supabase, user.id)
 
-  const { data: wedding } = userWedding
-    ? await supabase
-        .from('weddings')
-        .select('couple_names, wedding_color')
-        .eq('id', userWedding.id)
-        .maybeSingle()
-    : { data: null }
-
-  const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
+  // As duas consultas abaixo só dependem de userWedding.id, não uma da outra —
+  // rodar em paralelo poupa um round-trip no caminho crítico que toda página
+  // autenticada passa (este layout envolve todo o grupo (app)).
+  const [{ data: wedding }, planId] = userWedding
+    ? await Promise.all([
+        supabase
+          .from('weddings')
+          .select('couple_names, wedding_color')
+          .eq('id', userWedding.id)
+          .maybeSingle(),
+        resolveWeddingPlanId(supabase, userWedding.id),
+      ])
+    : [{ data: null }, 'free' as PlanId]
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
   const planLabel   = `Plano ${PLAN_NAMES[planId] ?? 'Gratuito'}`

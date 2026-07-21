@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import Spinner from '@/components/ui/spinner'
@@ -19,15 +19,21 @@ export default function AcceptInviteButton({ token }: AcceptInviteButtonProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const showSpinner = useDelayedLoading(loading)
+  // Guarda por ref (não só por state): dois cliques na mesma tick veem `loading`
+  // ainda `false` (o setState do primeiro clique não commitou a re-render a
+  // tempo), então só o state não bastava pra impedir duas requisições em corrida.
+  const submittingRef = useRef(false)
 
   async function accept() {
-    if (loading) return
+    if (submittingRef.current) return
+    submittingRef.current = true
     setLoading(true)
 
     const res = await fetch(`/api/v1/invites/${encodeURIComponent(token)}/accept`, { method: 'POST' })
 
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as AcceptInviteErrorBody | null
+      submittingRef.current = false
       setLoading(false)
       toastError(body?.error?.message ?? 'Não foi possível aceitar o convite. Tente novamente.')
       return

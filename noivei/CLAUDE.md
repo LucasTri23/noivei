@@ -1,4 +1,4 @@
-# noivei — Convenções de Desenvolvimento
+# wednest — Convenções de Desenvolvimento
 
 ## Stack
 - **Next.js 16** (App Router, Server/Client Components)

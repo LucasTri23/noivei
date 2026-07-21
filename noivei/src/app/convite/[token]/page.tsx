@@ -117,7 +117,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
         ) : (
           <>
             <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
-              Entre ou crie uma conta Noivei para aceitar o convite.
+              Entre ou crie uma conta Wednest para aceitar o convite.
             </p>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <Link
@@ -147,7 +147,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
         )}
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '26px', textAlign: 'center' }}>
-          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Noivei
+          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest
         </p>
       </div>
     </InviteShell>

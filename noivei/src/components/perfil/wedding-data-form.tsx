@@ -62,7 +62,7 @@ const inputStyle: React.CSSProperties = {
 }
 
 function previewRsvpMessage(template: string): string {
-  return fillRsvpMessageTemplate(template, 'Maria', 'https://noivei.app/rsvp/exemplo-token')
+  return fillRsvpMessageTemplate(template, 'Maria', 'https://wednest.app/rsvp/exemplo-token')
 }
 
 export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormProps) {

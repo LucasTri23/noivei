@@ -68,11 +68,30 @@ function TrashIcon() {
   )
 }
 
-function GuestChip({ name, title, draggable = true, onDragStart }: {
+function MoveIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+    </svg>
+  )
+}
+
+interface MoveDestination {
+  id:       string
+  label:    string
+  count:    number
+  capacity: number
+}
+
+function GuestChip({ name, title, draggable = true, onDragStart, guestId, currentLocation, destinations, onMove }: {
   name: string
   title?: string
   draggable?: boolean
   onDragStart?: () => void
+  guestId: string
+  currentLocation: string
+  destinations: MoveDestination[]
+  onMove: (guestId: string, source: string, target: string) => void
 }) {
   const initial = name.charAt(0).toUpperCase()
   return (
@@ -98,6 +117,35 @@ function GuestChip({ name, title, draggable = true, onDragStart }: {
         {initial}
       </div>
       {name}
+      <span
+        style={{
+          position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+          color: 'var(--muted-fg)', background: 'var(--surface)',
+        }}
+      >
+        <MoveIcon />
+        <select
+          aria-label={`Mover ${name} de mesa`}
+          value={currentLocation}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const target = e.target.value
+            if (target !== currentLocation) onMove(guestId, currentLocation, target)
+          }}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            opacity: 0, cursor: 'pointer', border: 'none', appearance: 'none',
+          }}
+        >
+          <option value={UNASSIGNED}>Sem mesa</option>
+          {destinations.map((d) => (
+            <option key={d.id} value={d.id} disabled={d.id !== currentLocation && d.count >= d.capacity}>
+              {d.label} ({d.count}/{d.capacity})
+            </option>
+          ))}
+        </select>
+      </span>
     </div>
   )
 }
@@ -128,6 +176,9 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
 
   const assignedIds = new Set(tables.flatMap((t) => t.guests.map((g) => g.id)))
   const unassigned  = allGuests.filter((g) => !assignedIds.has(g.id))
+  const destinations: MoveDestination[] = tables.map((t) => ({
+    id: t.id, label: t.label, count: t.guests.length, capacity: t.capacity,
+  }))
 
   const totalGuests = tables.reduce((sum, t) => sum + t.guests.length, 0)
   const totalCap    = tables.reduce((sum, t) => sum + t.capacity, 0)
@@ -150,11 +201,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
     }
   }
 
-  async function handleDrop(target: string) {
-    const info = dragging.current
-    dragging.current = null
-    if (!info) return
-    const { guestId, source } = info
+  async function moveGuest(guestId: string, source: string, target: string) {
     if (source === target) return
 
     const guest = allGuests.find((g) => g.id === guestId)
@@ -209,6 +256,13 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
       toastError('Erro de conexão com o servidor. Tente novamente.')
       await resyncTables(previous)
     }
+  }
+
+  async function handleDrop(target: string) {
+    const info = dragging.current
+    dragging.current = null
+    if (!info) return
+    await moveGuest(info.guestId, info.source, target)
   }
 
   async function handleCreateTable(e: React.FormEvent) {
@@ -316,7 +370,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
         </button>
       </div>
 
-      <div className="grid gap-5" style={{ gridTemplateColumns: '260px 1fr' }}>
+      <div className="grid gap-5 grid-cols-1 md:grid-cols-[260px_1fr]">
         {/* Unassigned */}
         <div>
           <div
@@ -342,6 +396,10 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
                 name={guest.name}
                 title={guest.group_name ?? undefined}
                 onDragStart={() => handleDragStart(guest.id, UNASSIGNED)}
+                guestId={guest.id}
+                currentLocation={UNASSIGNED}
+                destinations={destinations}
+                onMove={moveGuest}
               />
             ))}
             {unassigned.length === 0 && (
@@ -443,6 +501,10 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
                       name={guest.name}
                       title={guest.group_name ?? undefined}
                       onDragStart={() => handleDragStart(guest.id, table.id)}
+                      guestId={guest.id}
+                      currentLocation={table.id}
+                      destinations={destinations}
+                      onMove={moveGuest}
                     />
                   ))}
                   {table.guests.length === 0 && (

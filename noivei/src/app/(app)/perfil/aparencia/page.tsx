@@ -15,15 +15,18 @@ export default async function AparenciaPage() {
 
   const userWedding = await getUserWedding(supabase, user.id)
 
-  const { data: wedding } = userWedding
-    ? await supabase
-        .from('weddings')
-        .select('id, wedding_color')
-        .eq('id', userWedding.id)
-        .maybeSingle()
-    : { data: null }
-
-  const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
+  // As duas consultas abaixo só dependem de userWedding.id, não uma da outra —
+  // rodar em paralelo poupa um round-trip no carregamento da página.
+  const [{ data: wedding }, planId] = userWedding
+    ? await Promise.all([
+        supabase
+          .from('weddings')
+          .select('id, wedding_color')
+          .eq('id', userWedding.id)
+          .maybeSingle(),
+        resolveWeddingPlanId(supabase, userWedding.id),
+      ])
+    : [{ data: null }, 'free' as PlanId]
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -37,7 +40,7 @@ export default async function AparenciaPage() {
         Aparência
       </h1>
       <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 24px' }}>
-        Deixe o Noivei com a cara do casamento de vocês.
+        Deixe o Wednest com a cara do casamento de vocês.
       </p>
 
       <AppearanceSettings

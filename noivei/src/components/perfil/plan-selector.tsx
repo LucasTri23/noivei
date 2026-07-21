@@ -73,7 +73,7 @@ const CATEGORIES: ComparisonCategory[] = [
       { feature: 'Suporte',                      free: 'FAQ',     premium: 'Email',             plus: 'Prioritário' },
       { feature: 'Exportação PDF/Excel',         free: '❌',      premium: '✅',                plus: '✅' },
       { feature: 'Personalização',               free: 'Básica',  premium: 'Média',             plus: 'Completa' },
-      { feature: 'Remover "Feito com Noivei"',   free: '❌',      premium: '✅',                plus: '✅' },
+      { feature: 'Remover "Feito com Wednest"',  free: '❌',      premium: '✅',                plus: '✅' },
       { feature: 'Backup',                       free: '❌',      premium: 'Automático',        plus: 'Avançado' },
     ],
   },

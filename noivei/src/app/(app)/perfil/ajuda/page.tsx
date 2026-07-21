@@ -38,7 +38,7 @@ export default function AjudaPage() {
         Ajuda
       </h1>
       <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 24px' }}>
-        Perguntas frequentes sobre o Noivei.
+        Perguntas frequentes sobre o Wednest.
       </p>
 
       <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
@@ -73,7 +73,7 @@ export default function AjudaPage() {
           </div>
         </div>
         <a
-          href="mailto:contato@noivei.com.br?subject=Preciso%20de%20ajuda%20no%20Noivei"
+          href="mailto:contato@noivei.com.br?subject=Preciso%20de%20ajuda%20no%20Wednest"
           style={{
             display: 'inline-flex', alignItems: 'center', gap: '8px',
             background: 'var(--wedding-color)', color: '#fff',

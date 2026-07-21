@@ -16,30 +16,18 @@ export interface LimitCheck {
  * conta (e a própria assinatura Gratuita padrão), mas o plano que vale pra
  * gating de features é sempre o do dono que paga a assinatura do casamento.
  * Sem casamento ou sem assinatura ativa, assume o plano Gratuito.
+ *
+ * Chama a function `fn_resolve_wedding_plan` (1 round-trip no banco) em vez de
+ * fazer 2 queries sequenciais aqui — essa resolução roda em praticamente toda
+ * página autenticada (layout, dashboard, paywall-gate...), então cada round-trip
+ * a menos é sentido em toda navegação do app.
  */
 export async function resolveWeddingPlanId(
   supabase:  SupabaseClient,
   weddingId: string,
 ): Promise<PlanId> {
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('user_id')
-    .eq('id', weddingId)
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  if (!wedding?.user_id) return PLAN_IDS.FREE
-
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('plan_id')
-    .eq('user_id', wedding.user_id as string)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return (subscription?.plan_id as PlanId | undefined) ?? PLAN_IDS.FREE
+  const { data } = await supabase.rpc('fn_resolve_wedding_plan', { p_wedding_id: weddingId })
+  return (data as PlanId | null) ?? PLAN_IDS.FREE
 }
 
 // Fallback conservador (= plano Gratuito) caso o seed de plan_limits esteja ausente
@@ -150,6 +138,72 @@ export async function checkMemberLimit(
   ])
 
   const limit   = (limitRow?.value as number | undefined) ?? DEFAULT_USER_LIMIT
+  const allowed = (current ?? 0) < limit
+
+  return { allowed, current: current ?? 0, limit, planId }
+}
+
+// Fallback conservador (= plano Gratuito) caso o seed de plan_limits esteja ausente
+const DEFAULT_FINANCIAL_ENTRY_LIMIT = 15
+
+/**
+ * Verifica o limite de lançamentos financeiros do plano ativo do dono do
+ * casamento. `current` conta as linhas em financial_entries pelo wedding_id.
+ */
+export async function checkFinancialEntryLimit(
+  supabase:  SupabaseClient,
+  weddingId: string,
+): Promise<LimitCheck> {
+  const planId = await resolveWeddingPlanId(supabase, weddingId)
+
+  const [{ count: current }, { data: limitRow }] = await Promise.all([
+    supabase
+      .from('financial_entries')
+      .select('*', { count: 'exact', head: true })
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('plan_limits')
+      .select('value')
+      .eq('plan_id', planId)
+      .eq('feature', 'max_financial_entries')
+      .maybeSingle(),
+  ])
+
+  const limit   = (limitRow?.value as number | undefined) ?? DEFAULT_FINANCIAL_ENTRY_LIMIT
+  const allowed = (current ?? 0) < limit
+
+  return { allowed, current: current ?? 0, limit, planId }
+}
+
+// Fallback conservador (= plano Gratuito) caso o seed de plan_limits esteja ausente
+const DEFAULT_WEDDING_PARTY_LIMIT = 2
+
+/**
+ * Verifica o limite de entradas do cortejo (Padrinhos & Entradas) do plano ativo
+ * do dono do casamento. A entrada dos noivos é sempre implícita na UI (não é uma
+ * linha em wedding_party_entries), então o limite do Gratuito conta só as
+ * entradas ADICIONAIS.
+ */
+export async function checkWeddingPartyLimit(
+  supabase:  SupabaseClient,
+  weddingId: string,
+): Promise<LimitCheck> {
+  const planId = await resolveWeddingPlanId(supabase, weddingId)
+
+  const [{ count: current }, { data: limitRow }] = await Promise.all([
+    supabase
+      .from('wedding_party_entries')
+      .select('*', { count: 'exact', head: true })
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('plan_limits')
+      .select('value')
+      .eq('plan_id', planId)
+      .eq('feature', 'max_wedding_party_entries')
+      .maybeSingle(),
+  ])
+
+  const limit   = (limitRow?.value as number | undefined) ?? DEFAULT_WEDDING_PARTY_LIMIT
   const allowed = (current ?? 0) < limit
 
   return { allowed, current: current ?? 0, limit, planId }
