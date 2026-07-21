@@ -188,6 +188,20 @@ export interface WeddingTable {
   created_at:  string
 }
 
+export interface GiftRegistryItem {
+  id:           string
+  wedding_id:   string
+  name:         string
+  description:  string | null
+  price_cents:  number | null
+  store_url:    string | null
+  image_url:    string | null
+  is_purchased: boolean
+  purchased_by: string | null
+  sort_order:   number
+  created_at:   string
+}
+
 export interface WeddingSite {
   id:             string
   wedding_id:     string

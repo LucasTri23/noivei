@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, isPlusPlan, type PlanId } from '@/constants/plans'
 
-export type PaywallFeature = 'mesas' | 'site'
+export type PaywallFeature = 'mesas' | 'site' | 'presentes'
 
 interface FeatureInfo {
   name:         string
@@ -19,6 +19,11 @@ const FEATURES: Record<PaywallFeature, FeatureInfo> = {
   site: {
     name:         'Site do casal',
     description:  'Crie um site lindo para o seu casamento com história, cerimônia, lista de presentes, galeria e confirmação de presença online.',
+    requiredPlan: 'premium',
+  },
+  presentes: {
+    name:         'Lista de presentes',
+    description:  'Monte a lista de presentes do casamento, organize preço e loja de cada item e marque manualmente o que já foi dado por convidados.',
     requiredPlan: 'premium',
   },
 }
