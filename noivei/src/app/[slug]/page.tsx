@@ -25,6 +25,14 @@ function formatWeddingDate(date: string | null): string | null {
   })
 }
 
+// Link de busca do Google Maps — não precisa de API key nem mapa embutido, só abre
+// os resultados de busca para o endereço que o casal preencheu (venue e/ou city).
+function buildMapsUrl(venue: string | null, city: string | null): string | null {
+  const address = [venue, city].filter((part): part is string => Boolean(part?.trim())).join(', ')
+  if (!address) return null
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2
@@ -53,6 +61,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const weddingDate = formatWeddingDate(site.wedding.wedding_date)
   const place       = [site.wedding.venue, site.wedding.city].filter(Boolean).join(' · ')
   const coverTitle  = site.content.cover_title || site.wedding.couple_names
+  const mapsUrl     = buildMapsUrl(site.wedding.venue, site.wedding.city)
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -85,6 +94,23 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
             <p style={{ fontSize: '15px', color: 'rgba(250,240,230,0.75)', margin: '16px 0 0' }}>
               {[weddingDate, place].filter(Boolean).join(' — ')}
             </p>
+          )}
+          {mapsUrl && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px', marginTop: '18px',
+                fontSize: '13px', fontWeight: 700, color: '#FAF0E6', textDecoration: 'none',
+                border: '1.5px solid rgba(250,240,230,0.4)', borderRadius: '99px', padding: '9px 18px',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z" /><circle cx="12" cy="10" r="3" />
+              </svg>
+              Como chegar
+            </a>
           )}
         </div>
       </div>

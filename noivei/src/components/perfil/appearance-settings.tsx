@@ -16,14 +16,48 @@ interface AppearanceSettingsProps {
 
 const DEFAULT_COLOR = '#C6943A'
 
+// 6 dígitos hex, com # obrigatório — mesmo formato aceito por <input type="color">
+const HEX_COLOR_REGEX = /^#([0-9A-Fa-f]{6})$/
+
 export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: AppearanceSettingsProps) {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
-  const [color, setColor]   = useState(weddingColor || DEFAULT_COLOR)
+  const initialColor        = weddingColor || DEFAULT_COLOR
+  const [color, setColor]   = useState(initialColor)
+  // Campo de texto digitável, sincronizado com `color` (a cor de fato aplicada/salva).
+  // Fica em estado próprio para permitir digitação parcial/inválida sem já sobrescrever
+  // `color` — só sincroniza de volta quando o valor digitado é um hex válido.
+  const [hexInput, setHexInput] = useState(initialColor)
+  const [hexError, setHexError] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // next-themes só conhece o tema no cliente — evita mismatch de hidratação
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false)
+
+  function handlePickerChange(value: string) {
+    setColor(value)
+    setHexInput(value)
+    setHexError(false)
+  }
+
+  function handleHexInputChange(value: string) {
+    setHexInput(value)
+    if (HEX_COLOR_REGEX.test(value)) {
+      setColor(value)
+      setHexError(false)
+    } else {
+      setHexError(true)
+    }
+  }
+
+  // Ao sair do campo com um valor inválido, volta a mostrar a última cor válida —
+  // evita deixar o campo travado num texto que nunca vai virar uma cor aplicada.
+  function handleHexInputBlur() {
+    if (!HEX_COLOR_REGEX.test(hexInput)) {
+      setHexInput(color)
+      setHexError(false)
+    }
+  }
 
   async function saveColor() {
     if (!weddingId) return
@@ -96,16 +130,29 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
               <input
                 type="color"
                 value={color}
-                onChange={(e) => setColor(e.target.value)}
+                onChange={(e) => handlePickerChange(e.target.value)}
                 aria-label="Cor do casamento"
                 style={{
                   width: '56px', height: '40px', border: '1.5px solid #EBDDD0',
                   borderRadius: '10px', padding: '3px', background: '#fff', cursor: 'pointer',
                 }}
               />
-              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)', fontFamily: 'monospace' }}>
-                {color.toUpperCase()}
-              </span>
+              <input
+                type="text"
+                value={hexInput}
+                onChange={(e) => handleHexInputChange(e.target.value)}
+                onBlur={handleHexInputBlur}
+                placeholder="#C6943A"
+                maxLength={7}
+                aria-label="Código hexadecimal da cor"
+                aria-invalid={hexError}
+                style={{
+                  width: '110px', padding: '9px 12px',
+                  border: `1.5px solid ${hexError ? '#C0553F' : '#EBDDD0'}`,
+                  borderRadius: '10px', fontSize: '14px', fontWeight: 600, color: 'var(--fg)',
+                  fontFamily: 'monospace', textTransform: 'uppercase', outline: 'none',
+                }}
+              />
               <button
                 type="button"
                 onClick={saveColor}
@@ -119,6 +166,11 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
                 {saving ? 'Salvando…' : 'Salvar cor'}
               </button>
             </div>
+            {hexError && (
+              <p style={{ fontSize: '12.5px', color: '#C0553F', margin: '8px 0 0' }}>
+                Use o formato #RRGGBB (6 dígitos hexadecimais), ex: #C6943A.
+              </p>
+            )}
           </>
         ) : (
           <div
