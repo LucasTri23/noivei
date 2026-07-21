@@ -1,4 +1,4 @@
-import { requireWeddingOwner, requireWeddingOwnership } from '@/lib/api/guards/ownership'
+import { requireWeddingOwnerOrFullAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateInviteSchema } from '@/lib/api/validation/invite.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
@@ -11,9 +11,9 @@ interface RouteContext {
 }
 
 // Guard permite qualquer membro (é informação do casamento, não sensível), mas a RLS
-// de wedding_invites ("wedding owner can read own invites") só libera linhas pro dono
-// — um membro convidado recebe lista vazia aqui, não erro, mesmo padrão de RLS
-// silenciosa usado no resto do projeto.
+// de wedding_invites ("wedding owner or full access member can read invites") só
+// libera linhas pro dono ou membro com full_access — um membro sem full_access recebe
+// lista vazia aqui, não erro, mesmo padrão de RLS silenciosa usado no resto do projeto.
 export async function GET(_req: Request, { params }: RouteContext) {
   try {
     const { user } = await requireAuth()
@@ -42,7 +42,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const supabase = await createSupabaseServer()
     const { wid } = await params
 
-    await requireWeddingOwner(supabase, wid, user.id)
+    await requireWeddingOwnerOrFullAccess(supabase, wid, user.id)
 
     // Body é opcional: sem ele, o convite nasce com o default da coluna
     // (full_access — papel "Noivo/Noiva"). Só é enviado quando o dono escolhe um

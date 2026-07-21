@@ -18,9 +18,13 @@ import type {
 } from '@/types/database'
 
 interface WeddingMembersManagerProps {
-  weddingId:   string
-  isOwner:     boolean
-  memberLimit: number
+  weddingId:        string
+  isOwner:          boolean
+  // Dono OU membro com o papel "Noivo(a)" (full_access) — quem pode ver/gerar/revogar
+  // convites. Remover pessoa e editar permissões de outra pessoa continuam exclusivos
+  // do dono literal (ver `isOwner` nos botões abaixo).
+  canManageInvites: boolean
+  memberLimit:      number
 }
 
 interface MemberRow {
@@ -139,7 +143,7 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
   return body?.error?.message ?? fallback
 }
 
-export default function WeddingMembersManager({ weddingId, isOwner, memberLimit }: WeddingMembersManagerProps) {
+export default function WeddingMembersManager({ weddingId, isOwner, canManageInvites, memberLimit }: WeddingMembersManagerProps) {
   const [loading, setLoading]         = useState(true)
   const [members, setMembers]         = useState<MemberRow[]>([])
   const [invites, setInvites]         = useState<WeddingInvite[]>([])
@@ -168,7 +172,7 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
 
       const [membersRes, invitesRes] = await Promise.all([
         fetch(`/api/v1/weddings/${weddingId}/members`),
-        isOwner ? fetch(`/api/v1/weddings/${weddingId}/invites`) : Promise.resolve(null),
+        canManageInvites ? fetch(`/api/v1/weddings/${weddingId}/invites`) : Promise.resolve(null),
       ])
 
       if (cancelled) return
@@ -195,7 +199,7 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
 
     load()
     return () => { cancelled = true }
-  }, [weddingId, isOwner])
+  }, [weddingId, canManageInvites])
 
   async function createInvite() {
     if (creatingInvite) return
@@ -330,9 +334,14 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
           <h2 className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: 'var(--fg)', margin: 0 }}>
             Membros ({currentCount} de {memberLimit})
           </h2>
-          {!isOwner && (
+          {!canManageInvites && (
             <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: '4px 0 0' }}>
-              Só o dono do casamento pode convidar ou remover pessoas.
+              Só o dono do casamento ou um membro com acesso completo pode convidar pessoas.
+            </p>
+          )}
+          {canManageInvites && !isOwner && (
+            <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: '4px 0 0' }}>
+              Remover ou editar permissões de outros membros é exclusivo do dono do casamento.
             </p>
           )}
         </div>
@@ -409,8 +418,8 @@ export default function WeddingMembersManager({ weddingId, isOwner, memberLimit 
         </div>
       </div>
 
-      {/* Convidar pessoa — só dono */}
-      {isOwner && (
+      {/* Convidar pessoa — dono ou membro com acesso completo */}
+      {canManageInvites && (
         <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
           <h2 className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: 'var(--fg)', margin: '0 0 4px' }}>
             Convidar pessoa

@@ -22,6 +22,11 @@
 --
 -- *wedding_preferences fica de fora de propósito: são as respostas do onboarding que
 -- geram o checklist, não uma tela separada que o dono precise restringir.
+--
+-- COALESCE fail-closed no full_access (default `false`): a coluna é NOT NULL com
+-- default `{"full_access": true}`, então isso nunca deveria faltar na prática — mas o
+-- fallback de uma checagem de permissão deve sempre negar, nunca conceder, se o dado
+-- vier incompleto por qualquer motivo.
 
 ALTER TABLE wedding_members ADD COLUMN permissions JSONB NOT NULL DEFAULT '{"full_access": true}'::jsonb;
 ALTER TABLE wedding_invites ADD COLUMN permissions JSONB NOT NULL DEFAULT '{"full_access": true}'::jsonb;
@@ -39,7 +44,7 @@ AS $$
       AND user_id = p_user_id
       AND (
         role = 'owner'
-        OR COALESCE((permissions->>'full_access')::boolean, true)
+        OR COALESCE((permissions->>'full_access')::boolean, false)
         OR COALESCE((permissions->'modules'->>p_module)::boolean, false)
       )
   );

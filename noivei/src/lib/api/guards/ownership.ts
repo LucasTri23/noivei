@@ -104,3 +104,37 @@ export async function requireWeddingOwner(
     throw new ApiError(404, 'WEDDING_NOT_FOUND', 'Casamento não encontrado.')
   }
 }
+
+/**
+ * Garante que o usuário é o DONO do casamento OU um membro com acesso completo
+ * (`permissions.full_access = true`) — usado nas rotas de convites (ler/criar/revogar),
+ * que hoje ficam restritas ao dono mas devem valer também pra quem tem o papel
+ * "Noivo(a)" (mesmo nível de acesso ao resto do casamento). Diferente de
+ * `requireWeddingOwner`, que continua exclusivo ao dono literal nas rotas de gestão de
+ * MEMBROS (remover pessoa/editar permissões de outra pessoa não faz parte disto).
+ *
+ * Reaproveita fn_has_full_access() via rpc — mesma function usada nas policies de
+ * wedding_invites, evita duplicar a condição com sintaxe diferente da RLS. Retorna 404
+ * (não 403) tanto pra casamento inexistente quanto pra usuário sem full_access, mesmo
+ * padrão de privacidade de `requireWeddingOwner`.
+ */
+export async function requireWeddingOwnerOrFullAccess(
+  supabase: SupabaseClient,
+  weddingId: string,
+  userId: string,
+): Promise<void> {
+  if (!UUID_REGEX.test(weddingId)) {
+    throw new ApiError(404, 'WEDDING_NOT_FOUND', 'Casamento não encontrado.')
+  }
+
+  const { data, error } = await supabase
+    .rpc('fn_has_full_access', { p_wedding_id: weddingId, p_user_id: userId })
+
+  if (error) {
+    throw new ApiError(500, 'DB_ERROR', 'Erro ao verificar o casamento.')
+  }
+
+  if (!data) {
+    throw new ApiError(404, 'WEDDING_NOT_FOUND', 'Casamento não encontrado.')
+  }
+}

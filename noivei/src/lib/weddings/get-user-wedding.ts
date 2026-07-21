@@ -57,3 +57,13 @@ export function hasModuleAccess(wedding: UserWedding, module: WeddingModuleKey):
   if (wedding.permissions.full_access) return true
   return wedding.permissions.modules?.[module] === true
 }
+
+/**
+ * Confere se o usuário é o dono OU um membro com acesso completo — espelha
+ * fn_has_full_access() no banco (usada nas policies/guard de wedding_invites).
+ * Diferente de `isOwner` puro: um membro com o papel "Noivo(a)" também pode
+ * gerenciar convites, mesmo não sendo o dono literal do casamento.
+ */
+export function hasFullAccess(wedding: UserWedding): boolean {
+  return wedding.isOwner || wedding.permissions.full_access
+}

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import WeddingMembersManager from '@/components/perfil/wedding-members-manager'
 import { checkMemberLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { getUserWedding } from '@/lib/weddings/get-user-wedding'
+import { getUserWedding, hasFullAccess } from '@/lib/weddings/get-user-wedding'
 
 export const metadata = { title: 'Membros do casamento' }
 
@@ -33,7 +33,12 @@ export default async function MembrosPage() {
         Junte contas para planejar o casamento junto com quem vocês quiserem.
       </p>
 
-      <WeddingMembersManager weddingId={wedding.id} isOwner={wedding.isOwner} memberLimit={limitCheck.limit} />
+      <WeddingMembersManager
+        weddingId={wedding.id}
+        isOwner={wedding.isOwner}
+        canManageInvites={hasFullAccess(wedding)}
+        memberLimit={limitCheck.limit}
+      />
     </div>
   )
 }

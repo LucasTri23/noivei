@@ -1,4 +1,4 @@
-import { requireWeddingOwner } from '@/lib/api/guards/ownership'
+import { requireWeddingOwnerOrFullAccess } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
@@ -14,7 +14,7 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     const supabase = await createSupabaseServer()
     const { wid, id } = await params
 
-    await requireWeddingOwner(supabase, wid, user.id)
+    await requireWeddingOwnerOrFullAccess(supabase, wid, user.id)
 
     if (!UuidSchema.safeParse(id).success) {
       return err(404, 'INVITE_NOT_FOUND', 'Convite não encontrado.')
