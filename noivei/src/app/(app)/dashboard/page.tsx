@@ -1,4 +1,7 @@
+import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { isPaidPlan, type PlanId } from '@/constants/plans'
+import { recalculateWeddingScore } from '@/lib/wedding-score/recalculate'
 
 function CheckIcon({ size }: { size: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -17,6 +20,27 @@ function TableIcon({ size }: { size: number }) {
 }
 function GlobeIcon({ size }: { size: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+}
+function LockIcon({ size }: { size: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+}
+
+interface WeddingScoreMeta {
+  label:       string
+  description: string
+  color:       string
+  bg:          string
+}
+
+// Faixas do Wedding Score: <40 início de jornada, 40-70 andamento, 70+ reta final
+function weddingScoreMeta(score: number): WeddingScoreMeta {
+  if (score >= 70) {
+    return { label: 'Quase lá', description: 'Seu planejamento está bem encaminhado.', color: '#5E8B6A', bg: '#E9EFE6' }
+  }
+  if (score >= 40) {
+    return { label: 'No caminho', description: 'Vocês estão avançando bem, continue assim.', color: '#9A7020', bg: '#FBF0E0' }
+  }
+  return { label: 'Início de jornada', description: 'Ainda no começo — cada passo conta.', color: '#C0553F', bg: '#F6E4DE' }
 }
 
 export default async function DashboardPage() {
@@ -51,17 +75,34 @@ export default async function DashboardPage() {
   let pendingGuests  = 0
   let notifyTimeline = true
   let notifyRsvp     = true
+  let planId: PlanId = 'free'
 
   if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('notify_timeline, notify_rsvp')
-      .eq('id', user.id)
-      .maybeSingle()
+    const [{ data: profile }, { data: subscription }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('notify_timeline, notify_rsvp')
+        .eq('id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('subscriptions')
+        .select('plan_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
 
     notifyTimeline = (profile?.notify_timeline as boolean | undefined) ?? true
     notifyRsvp     = (profile?.notify_rsvp as boolean | undefined) ?? true
+    planId         = (subscription?.plan_id ?? 'free') as PlanId
   }
+
+  // Wedding Score é recurso pago: recalcula a cada carregamento (barato, poucas queries agregadas)
+  const weddingScore = wedding?.id && isPaidPlan(planId)
+    ? await recalculateWeddingScore(supabase, wedding.id)
+    : null
 
   if (wedding?.id) {
     const today = new Date(now).toLocaleDateString('sv-SE') // yyyy-mm-dd local
@@ -219,6 +260,53 @@ export default async function DashboardPage() {
             {checklistDone} de {checklistTotal} tarefas concluídas
           </div>
         </div>
+
+        {/* Wedding Score — recurso pago (grátis vê só o teaser) */}
+        {weddingScore !== null ? (
+          (() => {
+            const meta = weddingScoreMeta(weddingScore)
+            return (
+              <div className="flex flex-col items-center justify-center rounded-3xl bg-[var(--surface)] p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
+                <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--muted-fg)' }}>
+                  Wedding Score
+                </div>
+                <span className="font-display" style={{ fontWeight: 600, fontSize: '52px', color: meta.color, marginTop: '4px', lineHeight: 1 }}>
+                  {weddingScore}
+                </span>
+                <div
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', marginTop: '10px',
+                    padding: '4px 12px', borderRadius: '99px',
+                    background: meta.bg, color: meta.color,
+                    fontSize: '12px', fontWeight: 700,
+                  }}
+                >
+                  {meta.label}
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '8px' }}>
+                  {meta.description}
+                </div>
+              </div>
+            )
+          })()
+        ) : (
+          <Link
+            href="/perfil/planos"
+            className="flex flex-col items-center justify-center gap-2 rounded-3xl p-7 text-center transition-colors"
+            style={{ background: 'var(--wedding-color-subtle)', border: '1.5px dashed #D8C6A6', textDecoration: 'none' }}
+          >
+            <span style={{ color: 'var(--wedding-color)' }}><LockIcon size={24} /></span>
+            <div className="font-display" style={{ fontWeight: 500, fontSize: '20px', color: 'var(--fg)' }}>
+              Wedding Score
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0, maxWidth: '220px' }}>
+              Descubra o quanto o planejamento do casamento já está avançado.
+            </p>
+            <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--wedding-color)', textDecoration: 'underline' }}>
+              Disponível no Premium
+            </span>
+          </Link>
+        )}
       </div>
 
       {/* Quick links */}
