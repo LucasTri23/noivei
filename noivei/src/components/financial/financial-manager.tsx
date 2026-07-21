@@ -6,6 +6,7 @@ import CurrencyInput from '@/components/ui/currency-input'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import type { FinancialEntry } from '@/types/database'
 
 interface FinancialManagerProps {
@@ -95,7 +96,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [editing, setEditing]     = useState<FinancialEntry | null>(null)
   const [form, setForm]           = useState<EntryForm>(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
-  const [error, setError]         = useState('')
+  // Validação local de negócio (pago > total) — mantida no formulário, não é resultado de ação de rede
   const [formError, setFormError] = useState('')
   const showSpinner = useDelayedLoading(saving)
 
@@ -175,7 +176,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
 
     setSaving(false)
     if (!res.ok) {
-      setFormError(await readApiError(res, 'Não foi possível salvar o lançamento.'))
+      toastError(await readApiError(res, 'Não foi possível salvar o lançamento.'))
       return
     }
 
@@ -191,12 +192,11 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
 
     const previous = entries
     setEntries((prev) => prev.filter((e) => e.id !== entry.id))
-    setError('')
 
     const res = await fetch(`${apiBase}/${entry.id}`, { method: 'DELETE' })
     if (!res.ok) {
       setEntries(previous)
-      setError(await readApiError(res, 'Não foi possível excluir o lançamento.'))
+      toastError(await readApiError(res, 'Não foi possível excluir o lançamento.'))
     }
   }
 
@@ -228,16 +228,6 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
           <PlusIcon /> Lançar gasto
         </button>
       </div>
-
-      {error && (
-        <div
-          className="mb-5 rounded-2xl p-4"
-          style={{ background: '#F6E4DE', border: '1px solid #C0553F', fontSize: '14px', color: '#C0553F' }}
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
 
       {/* Hero card */}
       <div

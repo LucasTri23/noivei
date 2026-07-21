@@ -6,6 +6,7 @@ import CurrencyInput from '@/components/ui/currency-input'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import type { GiftRegistryItem } from '@/types/database'
 
 interface GiftRegistryManagerProps {
@@ -100,15 +101,12 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
   const [editing, setEditing]     = useState<GiftRegistryItem | null>(null)
   const [form, setForm]           = useState<ItemForm>(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
-  const [error, setError]         = useState('')
-  const [formError, setFormError] = useState('')
   const showSaveSpinner           = useDelayedLoading(saving)
 
   const [giveModalOpen, setGiveModalOpen] = useState(false)
   const [givingItem, setGivingItem]       = useState<GiftRegistryItem | null>(null)
   const [givenBy, setGivenBy]             = useState('')
   const [givingSaving, setGivingSaving]   = useState(false)
-  const [givingError, setGivingError]     = useState('')
   const showGiveSpinner = useDelayedLoading(givingSaving)
 
   const apiBase = `/api/v1/weddings/${weddingId}/gifts`
@@ -122,7 +120,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
   function openCreate() {
     setEditing(null)
     setForm(EMPTY_FORM)
-    setFormError('')
     setModalOpen(true)
   }
 
@@ -135,7 +132,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
       store_url:   item.store_url ?? '',
       image_url:   item.image_url ?? '',
     })
-    setFormError('')
     setModalOpen(true)
   }
 
@@ -143,7 +139,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
     e.preventDefault()
     if (saving) return
     setSaving(true)
-    setFormError('')
 
     const payload = {
       name:        form.name.trim(),
@@ -167,7 +162,7 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
 
     setSaving(false)
     if (!res.ok) {
-      setFormError(await readApiError(res, 'Não foi possível salvar o item.'))
+      toastError(await readApiError(res, 'Não foi possível salvar o item.'))
       return
     }
 
@@ -181,19 +176,17 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
 
     const previous = items
     setItems((prev) => prev.filter((i) => i.id !== item.id))
-    setError('')
 
     const res = await fetch(`${apiBase}/${item.id}`, { method: 'DELETE' })
     if (!res.ok) {
       setItems(previous)
-      setError(await readApiError(res, 'Não foi possível excluir o item.'))
+      toastError(await readApiError(res, 'Não foi possível excluir o item.'))
     }
   }
 
   function openGive(item: GiftRegistryItem) {
     setGivingItem(item)
     setGivenBy(item.purchased_by ?? '')
-    setGivingError('')
     setGiveModalOpen(true)
   }
 
@@ -201,7 +194,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
     e.preventDefault()
     if (givingSaving || !givingItem) return
     setGivingSaving(true)
-    setGivingError('')
 
     const res = await fetch(`${apiBase}/${givingItem.id}`, {
       method:  'PATCH',
@@ -211,7 +203,7 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
 
     setGivingSaving(false)
     if (!res.ok) {
-      setGivingError(await readApiError(res, 'Não foi possível marcar o item como dado.'))
+      toastError(await readApiError(res, 'Não foi possível marcar o item como dado.'))
       return
     }
 
@@ -225,7 +217,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, is_purchased: false, purchased_by: null } : i)),
     )
-    setError('')
 
     const res = await fetch(`${apiBase}/${item.id}`, {
       method:  'PATCH',
@@ -235,7 +226,7 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
 
     if (!res.ok) {
       setItems(previous)
-      setError(await readApiError(res, 'Não foi possível desfazer a marcação.'))
+      toastError(await readApiError(res, 'Não foi possível desfazer a marcação.'))
     }
   }
 
@@ -267,16 +258,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
           <PlusIcon /> Item
         </button>
       </div>
-
-      {error && (
-        <div
-          className="mb-5 rounded-2xl p-4"
-          style={{ background: '#F6E4DE', border: '1px solid #C0553F', fontSize: '14px', color: '#C0553F' }}
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
 
       {/* Stats */}
       <div className="mb-6 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))' }}>
@@ -451,10 +432,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
             />
           </div>
 
-          {formError && (
-            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{formError}</p>
-          )}
-
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
@@ -501,10 +478,6 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
               style={inputStyle}
             />
           </div>
-
-          {givingError && (
-            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{givingError}</p>
-          )}
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button

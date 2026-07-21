@@ -6,6 +6,7 @@ import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { toastError } from '@/store/toast.store'
 import type { WeddingFile } from '@/types/database'
 
 interface FileArchiveManagerProps {
@@ -100,7 +101,6 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
 export default function FileArchiveManager({ weddingId, initialFiles, storageLimitBytes }: FileArchiveManagerProps) {
   const [files, setFiles]           = useState<WeddingFile[]>(initialFiles)
   const [uploading, setUploading]   = useState(false)
-  const [error, setError]           = useState('')
   const [deleting, setDeleting]     = useState<WeddingFile | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
@@ -117,7 +117,6 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
     if (!file || uploading) return
 
     setUploading(true)
-    setError('')
 
     const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
     const supabase = createSupabaseBrowser()
@@ -128,7 +127,7 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
     const { error: uploadError } = await supabase.storage.from('wedding-files').upload(path, file)
     if (uploadError) {
       setUploading(false)
-      setError('Não foi possível enviar o arquivo. Verifique o tamanho (máx. 10 MB) e tente novamente.')
+      toastError('Não foi possível enviar o arquivo. Verifique o tamanho (máx. 10 MB) e tente novamente.')
       return
     }
 
@@ -147,7 +146,7 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
       // O upload já subiu pro storage; sem o registro de metadados ele fica órfão — remove.
       await supabase.storage.from('wedding-files').remove([path])
       setUploading(false)
-      setError(await readApiError(res, 'Não foi possível salvar o arquivo.'))
+      toastError(await readApiError(res, 'Não foi possível salvar o arquivo.'))
       return
     }
 
@@ -159,13 +158,12 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   async function handleDownload(file: WeddingFile) {
     if (downloadingId) return
     setDownloadingId(file.id)
-    setError('')
 
     const res = await fetch(`${apiBase}/${file.id}`)
     setDownloadingId(null)
 
     if (!res.ok) {
-      setError(await readApiError(res, 'Não foi possível gerar o link de download.'))
+      toastError(await readApiError(res, 'Não foi possível gerar o link de download.'))
       return
     }
 
@@ -176,13 +174,12 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   async function handleDelete() {
     if (!deleting || deletingId) return
     setDeletingId(deleting.id)
-    setError('')
 
     const res = await fetch(`${apiBase}/${deleting.id}`, { method: 'DELETE' })
 
     setDeletingId(null)
     if (!res.ok) {
-      setError(await readApiError(res, 'Não foi possível excluir o arquivo.'))
+      toastError(await readApiError(res, 'Não foi possível excluir o arquivo.'))
       setDeleting(null)
       return
     }
@@ -223,16 +220,6 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
         </button>
         <input ref={inputRef} type="file" onChange={handleFileChange} style={{ display: 'none' }} />
       </div>
-
-      {error && (
-        <div
-          className="mb-5 rounded-2xl p-4"
-          style={{ background: '#F6E4DE', border: '1px solid #C0553F', fontSize: '14px', color: '#C0553F' }}
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
 
       {/* Barra de uso */}
       <div

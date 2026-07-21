@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 
 interface NotificationSettingsProps {
@@ -61,13 +62,11 @@ function ToggleRow({ title, description, checked, disabled, saving, onChange }: 
 export default function NotificationSettings({ userId, initial }: NotificationSettingsProps) {
   const [prefs, setPrefs]         = useState(initial)
   const [savingKey, setSavingKey] = useState<'notify_timeline' | 'notify_rsvp' | null>(null)
-  const [error, setError]         = useState('')
 
   async function save(key: 'notify_timeline' | 'notify_rsvp', value: boolean) {
     const previous = prefs
     setPrefs((p) => ({ ...p, [key]: value }))
     setSavingKey(key)
-    setError('')
 
     const supabase = createSupabaseBrowser()
     const { error: dbError } = await supabase
@@ -78,7 +77,7 @@ export default function NotificationSettings({ userId, initial }: NotificationSe
     setSavingKey(null)
     if (dbError) {
       setPrefs(previous)
-      setError('Não foi possível salvar sua preferência. Tente novamente.')
+      toastError('Não foi possível salvar sua preferência. Tente novamente.')
     }
   }
 
@@ -101,11 +100,6 @@ export default function NotificationSettings({ userId, initial }: NotificationSe
         saving={savingKey === 'notify_rsvp'}
         onChange={(v) => save('notify_rsvp', v)}
       />
-      {error && (
-        <p style={{ fontSize: '13px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', marginTop: '10px' }}>
-          {error}
-        </p>
-      )}
       <p style={{ fontSize: '12.5px', color: '#C8B4A0', marginTop: '14px', lineHeight: 1.5 }}>
         Os envios de e-mail e push chegam em breve — suas preferências já ficam salvas.
       </p>

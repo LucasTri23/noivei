@@ -1,14 +1,22 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import Link from 'next/link'
 
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import type { ImportGuestRow } from '@/lib/api/validation/guest.schema'
+import { parseImportCsv, IMPORT_MAX_ROWS, type ParseImportCsvResult } from '@/lib/guests/parse-import-csv'
 import { buildRsvpWhatsAppUrl } from '@/lib/rsvp/build-whatsapp-link'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import type { Guest, GuestStatus } from '@/types/database'
 
 type Filter = 'todos' | GuestStatus
+
+type PreviewRow =
+  | { line: number; error: null; guest: ImportGuestRow }
+  | { line: number; error: string; guest: null }
 
 interface GuestsManagerProps {
   weddingId:           string
@@ -57,6 +65,24 @@ function TrashIcon() {
     </svg>
   )
 }
+function InfoIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  )
+}
+function DownloadIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
 function WhatsAppIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
@@ -84,18 +110,39 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
+function previewBannerStyle(bg: string, color: string): React.CSSProperties {
+  return {
+    background: bg, border: `1px solid ${color}`, borderRadius: '12px',
+    padding: '12px 14px', fontSize: '13.5px', color, fontWeight: 600,
+  }
+}
+
+const IMPORT_TEMPLATE_CSV =
+  'nome,email,grupo\nMaria Silva,maria@email.com,Família da noiva\nJoão Souza,,Amigos do trabalho\n'
+
+function downloadImportTemplate() {
+  const blob = new Blob([IMPORT_TEMPLATE_CSV], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'modelo-importacao-convidados.csv'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function GuestsManager({ weddingId, initialGuests, guestLimit, rsvpMessageTemplate }: GuestsManagerProps) {
-  const [guests, setGuests]       = useState<Guest[]>(initialGuests)
-  const [filter, setFilter]       = useState<Filter>('todos')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [saving, setSaving]       = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [error, setError]         = useState('')
-  const [formError, setFormError] = useState('')
-  const [form, setForm]           = useState({ name: '', email: '', phone: '', group_name: '' })
-  const fileInputRef              = useRef<HTMLInputElement>(null)
-  const showSaveSpinner           = useDelayedLoading(saving)
-  const showImportSpinner         = useDelayedLoading(importing)
+  const [guests, setGuests]             = useState<Guest[]>(initialGuests)
+  const [filter, setFilter]             = useState<Filter>('todos')
+  const [modalOpen, setModalOpen]       = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [importing, setImporting]       = useState(false)
+  const [form, setForm]                 = useState({ name: '', email: '', phone: '', group_name: '' })
+  const [helpOpen, setHelpOpen]         = useState(false)
+  const [previewCsv, setPreviewCsv]     = useState<string | null>(null)
+  const [previewResult, setPreviewResult] = useState<ParseImportCsvResult | null>(null)
+  const fileInputRef                    = useRef<HTMLInputElement>(null)
+  const showSaveSpinner                 = useDelayedLoading(saving)
+  const showImportSpinner               = useDelayedLoading(importing)
 
   const apiBase = `/api/v1/weddings/${weddingId}/guests`
   const atLimit = guests.length >= guestLimit
@@ -109,11 +156,23 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
 
   const visible = guests.filter((g) => filter === 'todos' || g.status === filter)
 
+  const previewRows: PreviewRow[] = previewResult
+    ? [
+        ...previewResult.validRows.map((r): PreviewRow => ({ line: r.line, error: null, guest: r.guest })),
+        ...previewResult.invalidRows.map((r): PreviewRow => ({ line: r.line, error: r.message, guest: null })),
+      ].sort((a, b) => a.line - b.line)
+    : []
+
+  const canConfirmImport =
+    previewResult !== null &&
+    !previewResult.tooManyRows &&
+    previewResult.invalidRows.length === 0 &&
+    previewResult.validRows.length > 0
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     if (saving) return
     setSaving(true)
-    setFormError('')
 
     const res = await fetch(apiBase, {
       method:  'POST',
@@ -128,7 +187,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
 
     setSaving(false)
     if (!res.ok) {
-      setFormError(await readApiError(res, 'Não foi possível adicionar o convidado.'))
+      toastError(await readApiError(res, 'Não foi possível adicionar o convidado.'))
       return
     }
 
@@ -138,35 +197,48 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
     setModalOpen(false)
   }
 
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (!file || importing) return
-
-    setImporting(true)
-    setError('')
+    if (!file) return
 
     const csv = await file.text()
+    setPreviewCsv(csv)
+    setPreviewResult(parseImportCsv(csv))
+  }
+
+  function closePreview() {
+    setPreviewCsv(null)
+    setPreviewResult(null)
+  }
+
+  async function handleConfirmImport() {
+    if (!previewCsv || !previewResult || importing) return
+    if (previewResult.tooManyRows || previewResult.invalidRows.length > 0 || previewResult.validRows.length === 0) return
+
+    setImporting(true)
+
     const res = await fetch(`${apiBase}/import`, {
       method:  'POST',
       headers: { 'Content-Type': 'text/csv' },
-      body:    csv,
+      body:    previewCsv,
     })
 
     setImporting(false)
     if (!res.ok) {
-      setError(await readApiError(res, 'Não foi possível importar o CSV.'))
+      toastError(await readApiError(res, 'Não foi possível importar o CSV.'))
       return
     }
 
     const { data } = (await res.json()) as { data: Guest[] }
     setGuests((prev) => [...prev, ...data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')))
+    toastSuccess(`${data.length} convidado(s) importado(s) com sucesso.`)
+    closePreview()
   }
 
   async function handleStatusChange(guest: Guest, status: GuestStatus) {
     const previous = guests
     setGuests((prev) => prev.map((g) => (g.id === guest.id ? { ...g, status } : g)))
-    setError('')
 
     const res = await fetch(`${apiBase}/${guest.id}`, {
       method:  'PATCH',
@@ -176,7 +248,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
 
     if (!res.ok) {
       setGuests(previous)
-      setError(await readApiError(res, 'Não foi possível atualizar o status.'))
+      toastError(await readApiError(res, 'Não foi possível atualizar o status.'))
     }
   }
 
@@ -196,12 +268,11 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
 
     const previous = guests
     setGuests((prev) => prev.filter((g) => g.id !== guest.id))
-    setError('')
 
     const res = await fetch(`${apiBase}/${guest.id}`, { method: 'DELETE' })
     if (!res.ok) {
       setGuests(previous)
-      setError(await readApiError(res, 'Não foi possível remover o convidado.'))
+      toastError(await readApiError(res, 'Não foi possível remover o convidado.'))
     }
   }
 
@@ -225,7 +296,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             ref={fileInputRef}
             type="file"
             accept=".csv,text/csv,text/plain"
-            onChange={handleImport}
+            onChange={handleFileSelected}
             style={{ display: 'none' }}
           />
           <button
@@ -243,7 +314,19 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             {showImportSpinner ? <Spinner /> : <UploadIcon />} Importar CSV
           </button>
           <button
-            onClick={() => { setFormError(''); setModalOpen(true) }}
+            onClick={() => setHelpOpen(true)}
+            title="Como formatar o arquivo de importação"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              background: 'transparent', color: 'var(--muted-fg)',
+              border: '1.5px solid #EBDDD0', borderRadius: '12px',
+              padding: '10px 14px', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+            }}
+          >
+            <InfoIcon /> Como formatar o arquivo?
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
             disabled={atLimit}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
@@ -273,22 +356,12 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
           <span style={{ fontWeight: 600 }}>
             Você atingiu o limite de {guestLimit} convidados do seu plano.
           </span>
-          <a
+          <Link
             href="/perfil/planos"
             style={{ fontWeight: 700, color: '#9A7020', textDecoration: 'underline' }}
           >
             Fazer upgrade para convidar mais pessoas
-          </a>
-        </div>
-      )}
-
-      {error && (
-        <div
-          className="mb-5 rounded-2xl p-4"
-          style={{ background: '#F6E4DE', border: '1px solid #C0553F', fontSize: '14px', color: '#C0553F' }}
-          role="alert"
-        >
-          {error}
+          </Link>
         </div>
       )}
 
@@ -465,10 +538,6 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             />
           </div>
 
-          {formError && (
-            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{formError}</p>
-          )}
-
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
@@ -495,6 +564,134 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal de instruções de formato */}
+      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Como formatar o arquivo de importação" maxWidth="520px">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px', color: 'var(--fg)', lineHeight: 1.6 }}>
+          <p style={{ margin: 0 }}>
+            Envie um arquivo <strong>.csv</strong> ou <strong>.txt</strong>, com um convidado por linha e os campos
+            separados por vírgula, no formato:
+          </p>
+          <code
+            style={{
+              display: 'block', background: 'var(--wedding-color-subtle)', borderRadius: '8px',
+              padding: '10px 12px', fontSize: '13px', color: 'var(--wedding-color-dark)',
+            }}
+          >
+            nome,email,grupo
+          </code>
+          <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <li><strong>nome</strong> é obrigatório.</li>
+            <li><strong>email</strong> e <strong>grupo</strong> são opcionais — deixe o campo vazio entre as vírgulas.</li>
+            <li>Não use vírgulas dentro dos campos (não há suporte a campos entre aspas).</li>
+            <li>A primeira linha pode ser um cabeçalho — se começar com &quot;nome&quot;, ela é ignorada automaticamente.</li>
+            <li>Limite de {IMPORT_MAX_ROWS} convidados por arquivo.</li>
+          </ul>
+          <p style={{ margin: 0 }}>Exemplo:</p>
+          <pre
+            style={{
+              background: 'var(--wedding-color-subtle)', borderRadius: '8px', padding: '10px 12px',
+              fontSize: '12.5px', margin: 0, whiteSpace: 'pre-wrap', color: 'var(--fg)',
+            }}
+          >
+{`nome,email,grupo
+Maria Silva,maria@email.com,Família da noiva
+João Souza,,Amigos do trabalho`}
+          </pre>
+          <button
+            type="button"
+            onClick={downloadImportTemplate}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', alignSelf: 'flex-start',
+              background: 'transparent', color: 'var(--wedding-color)',
+              border: '1.5px solid var(--wedding-color)', borderRadius: '12px',
+              padding: '9px 14px', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+            }}
+          >
+            <DownloadIcon /> Baixar modelo
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal de pré-visualização da importação */}
+      <Modal open={previewCsv !== null} onClose={closePreview} title="Pré-visualização da importação" maxWidth="640px">
+        {previewResult && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {previewResult.tooManyRows ? (
+              <div style={previewBannerStyle('#F6E4DE', '#C0553F')}>
+                O arquivo tem {previewResult.totalRows} linhas — o limite é de {IMPORT_MAX_ROWS} convidados por
+                importação. Reduza o arquivo e tente novamente.
+              </div>
+            ) : previewResult.invalidRows.length > 0 ? (
+              <div style={previewBannerStyle('#F6E4DE', '#C0553F')}>
+                {previewResult.invalidRows.length} linha(s) com erro — corrija o arquivo antes de importar.
+              </div>
+            ) : previewResult.validRows.length === 0 ? (
+              <div style={previewBannerStyle('#F6E4DE', '#C0553F')}>
+                Nenhum convidado encontrado no arquivo.
+              </div>
+            ) : (
+              <div style={previewBannerStyle('#E9EFE6', '#5E8B6A')}>
+                {previewResult.validRows.length} convidado(s) serão importados.
+              </div>
+            )}
+
+            {!previewResult.tooManyRows && (
+              <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid #EBDDD0', borderRadius: '12px' }}>
+                {previewRows.map((row) => (
+                  <div
+                    key={row.line}
+                    style={{
+                      display: 'flex', flexWrap: 'wrap', gap: '4px 12px', padding: '10px 14px', fontSize: '13px',
+                      borderBottom: '1px solid #F8F3EE',
+                      background: row.error ? '#F6E4DE' : 'transparent',
+                    }}
+                  >
+                    <span style={{ color: 'var(--muted-fg)', minWidth: '34px' }}>#{row.line}</span>
+                    {row.error !== null ? (
+                      <span style={{ color: '#C0553F', fontWeight: 600 }}>{row.error}</span>
+                    ) : (
+                      <>
+                        <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{row.guest.name}</span>
+                        <span style={{ color: 'var(--muted-fg)' }}>{row.guest.email ?? '—'}</span>
+                        <span style={{ color: 'var(--muted-fg)' }}>{row.guest.group_name ?? '—'}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={closePreview}
+                style={{
+                  background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                  fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                disabled={!canConfirmImport || importing}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                  borderRadius: '12px', padding: '10px 18px',
+                  fontWeight: 600, fontSize: '14px',
+                  cursor: !canConfirmImport || importing ? 'not-allowed' : 'pointer',
+                  opacity: !canConfirmImport || importing ? 0.5 : 1,
+                }}
+              >
+                {showImportSpinner && <Spinner color="#fff" />} Confirmar importação
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

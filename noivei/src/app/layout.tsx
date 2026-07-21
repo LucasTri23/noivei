@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Cormorant_Garamond, Hanken_Grotesk } from 'next/font/google'
 import ThemeProvider from '@/components/theme-provider'
+import ToastContainer from '@/components/ui/toast'
 import './globals.css'
 
 const cormorant = Cormorant_Garamond({
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Ir para o conteúdo principal
           </a>
           <main id="main-content">{children}</main>
+          <ToastContainer />
         </ThemeProvider>
       </body>
     </html>

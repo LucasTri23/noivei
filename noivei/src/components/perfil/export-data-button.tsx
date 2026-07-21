@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 import type { Guest } from '@/types/database'
 
@@ -49,17 +50,15 @@ function buildGuestsCsv(guests: Guest[]): string {
 
 export default function ExportDataButton() {
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
   const showSpinner = useDelayedLoading(loading)
 
   async function handleExport() {
     setLoading(true)
-    setError('')
 
     const supabase = createSupabaseBrowser()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      setError('Sessão expirada. Entre novamente.')
+      toastError('Sessão expirada. Entre novamente.')
       setLoading(false)
       return
     }
@@ -74,7 +73,7 @@ export default function ExportDataButton() {
       .maybeSingle()
 
     if (!wedding) {
-      setError('Nenhum casamento encontrado para exportar.')
+      toastError('Nenhum casamento encontrado para exportar.')
       setLoading(false)
       return
     }
@@ -86,11 +85,11 @@ export default function ExportDataButton() {
 
     setLoading(false)
     if (guestsError) {
-      setError('Não foi possível exportar seus dados. Tente novamente.')
+      toastError('Não foi possível exportar seus dados. Tente novamente.')
       return
     }
     if (!guests || guests.length === 0) {
-      setError('Você ainda não cadastrou convidados para exportar.')
+      toastError('Você ainda não cadastrou convidados para exportar.')
       return
     }
 
@@ -124,9 +123,6 @@ export default function ExportDataButton() {
           {loading ? 'Gerando arquivo…' : 'Exportar meus dados'}
         </span>
       </button>
-      {error && (
-        <p style={{ fontSize: '12.5px', color: '#C0553F', margin: '8px 2px 0' }}>{error}</p>
-      )}
     </div>
   )
 }

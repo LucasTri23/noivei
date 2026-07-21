@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 
@@ -22,19 +23,17 @@ export default function DeleteAccountButton() {
   const router = useRouter()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
   const showSpinner = useDelayedLoading(loading)
 
   async function handleDelete() {
     setLoading(true)
-    setError('')
 
     const response = await fetch('/api/v1/account/delete', { method: 'DELETE' })
 
     if (!response.ok) {
       const data = await response.json()
       setLoading(false)
-      setError(data.error?.message ?? 'Não foi possível processar a exclusão. Tente novamente.')
+      toastError(data.error?.message ?? 'Não foi possível processar a exclusão. Tente novamente.')
       return
     }
 
@@ -66,11 +65,6 @@ export default function DeleteAccountButton() {
           definitivamente em 30 dias, conforme a LGPD. Nesse período, você pode
           reativar a conta entrando em contato com o suporte. Deseja continuar?
         </p>
-        {error && (
-          <p style={{ fontSize: '13px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', margin: '0 0 14px' }}>
-            {error}
-          </p>
-        )}
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             onClick={() => setOpen(false)}

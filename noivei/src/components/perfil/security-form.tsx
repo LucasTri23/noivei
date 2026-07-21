@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 
 const PasswordSchema = z.object({
@@ -26,8 +27,6 @@ const labelStyle: React.CSSProperties = {
 }
 
 export default function SecurityForm() {
-  const [serverError, setServerError] = useState('')
-  const [saved, setSaved]             = useState(false)
   const [loading, setLoading]         = useState(false)
   const showSpinner = useDelayedLoading(loading)
 
@@ -37,22 +36,20 @@ export default function SecurityForm() {
 
   async function onSubmit(data: PasswordFields) {
     setLoading(true)
-    setServerError('')
-    setSaved(false)
 
     const supabase = createSupabaseBrowser()
     const { error } = await supabase.auth.updateUser({ password: data.password })
 
     setLoading(false)
     if (error) {
-      setServerError(
+      toastError(
         error.message.includes('different from the old password')
           ? 'A nova senha precisa ser diferente da atual.'
           : 'Não foi possível alterar a senha. Tente novamente.',
       )
       return
     }
-    setSaved(true)
+    toastSuccess('Senha alterada com sucesso.')
     reset()
   }
 
@@ -83,17 +80,6 @@ export default function SecurityForm() {
         />
         {errors.confirmPassword && <p style={{ fontSize: '12px', color: '#C0553F', margin: 0 }}>{errors.confirmPassword.message}</p>}
       </div>
-
-      {serverError && (
-        <p style={{ fontSize: '13.5px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', margin: 0 }}>
-          {serverError}
-        </p>
-      )}
-      {saved && (
-        <p style={{ fontSize: '13.5px', color: '#5E8B6A', background: '#E9EFE6', padding: '10px 14px', borderRadius: '10px', margin: 0 }}>
-          Senha alterada com sucesso.
-        </p>
-      )}
 
       <button
         type="submit"

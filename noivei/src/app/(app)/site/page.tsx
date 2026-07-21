@@ -1,5 +1,6 @@
 import PaywallGate from '@/components/billing/paywall-gate'
 import SiteBuilder from '@/components/site/site-builder'
+import { checkStorageLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { SiteConfig } from '@/types/database'
 
@@ -27,17 +28,22 @@ async function SiteContent() {
 
   const weddingId = wedding.id as string
 
-  const { data: site } = await supabase
-    .from('site_config')
-    .select('*')
-    .eq('wedding_id', weddingId)
-    .maybeSingle()
+  const [{ data: site }, limitCheck] = await Promise.all([
+    supabase
+      .from('site_config')
+      .select('*')
+      .eq('wedding_id', weddingId)
+      .maybeSingle(),
+    checkStorageLimit(supabase, weddingId, 0),
+  ])
 
   return (
     <SiteBuilder
       weddingId={weddingId}
       coupleNames={wedding.couple_names as string}
       initialSite={site as SiteConfig | null}
+      storageLimitBytes={limitCheck.limit}
+      storageUsedBytes={limitCheck.current}
     />
   )
 }

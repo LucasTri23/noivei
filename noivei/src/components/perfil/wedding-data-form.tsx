@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 import DatePicker from '@/components/ui/date-picker'
 import CurrencyInput from '@/components/ui/currency-input'
@@ -66,8 +67,6 @@ function previewRsvpMessage(template: string): string {
 
 export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormProps) {
   const router = useRouter()
-  const [serverError, setServerError] = useState('')
-  const [saved, setSaved]             = useState(false)
   const [loading, setLoading]         = useState(false)
   const showSpinner = useDelayedLoading(loading)
 
@@ -89,8 +88,6 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
 
   async function onSubmit(data: WeddingDataFields) {
     setLoading(true)
-    setServerError('')
-    setSaved(false)
 
     const brideName = data.bride_name?.trim() || null
     const groomName = data.groom_name?.trim() || null
@@ -114,10 +111,10 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
 
     setLoading(false)
     if (error) {
-      setServerError('Não foi possível salvar. Tente novamente.')
+      toastError('Não foi possível salvar. Tente novamente.')
       return
     }
-    setSaved(true)
+    toastSuccess('Dados do casamento salvos com sucesso. O orçamento já aparece na aba Financeiro.')
     router.refresh()
   }
 
@@ -212,17 +209,6 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
           {previewRsvpMessage(messageTemplate || DEFAULT_RSVP_MESSAGE_TEMPLATE)}
         </div>
       </div>
-
-      {serverError && (
-        <p style={{ fontSize: '13.5px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', margin: 0 }}>
-          {serverError}
-        </p>
-      )}
-      {saved && (
-        <p style={{ fontSize: '13.5px', color: '#5E8B6A', background: '#E9EFE6', padding: '10px 14px', borderRadius: '10px', margin: 0 }}>
-          Dados do casamento salvos com sucesso. O orçamento já aparece na aba Financeiro.
-        </p>
-      )}
 
       <button
         type="submit"

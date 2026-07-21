@@ -1,14 +1,49 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { useOrigin } from '@/hooks/use-origin'
+import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
 import type { SiteConfig } from '@/types/database'
+
+// Marcador do endpoint público do bucket "wedding-photos" — presente numa URL indica que
+// ela veio de um upload (não de uma URL externa colada manualmente), e o que vem depois
+// dele é o storage_path do objeto, usado pra localizar o registro na hora de excluir.
+const GALLERY_BUCKET_URL_MARKER = '/storage/v1/object/public/wedding-photos/'
+
+interface GalleryPhotoRecord {
+  storage_path: string
+  size_bytes:   number
+  public_url:   string
+}
+
+// Mesma sanitização/formatação usadas em FileArchiveManager (Central de arquivos) —
+// duplicadas aqui por serem poucas linhas e a Galeria não depender desse módulo.
+function sanitizeFileName(name: string): string {
+  return name.normalize('NFKD').replace(/[^a-zA-Z0-9.\-_]/g, '-')
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  )
+}
 
 type SectionId = 'capa' | 'historia' | 'cerimonia' | 'rsvp' | 'presentes' | 'galeria'
 
@@ -19,9 +54,11 @@ interface Section {
 }
 
 interface SiteBuilderProps {
-  weddingId:   string
-  coupleNames: string
-  initialSite: SiteConfig | null
+  weddingId:         string
+  coupleNames:       string
+  initialSite:       SiteConfig | null
+  storageLimitBytes: number
+  storageUsedBytes:  number
 }
 
 interface ApiErrorBody {
@@ -100,12 +137,6 @@ const saveButtonStyle = (saving: boolean): React.CSSProperties => ({
   alignSelf: 'flex-start',
 })
 
-function FeedbackText({ error, success }: { error: string; success: string }) {
-  if (error) return <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{error}</p>
-  if (success) return <p style={{ fontSize: '13.5px', color: '#5E8B6A', margin: 0 }}>{success}</p>
-  return null
-}
-
 function GuardNotice({ onGoToCapa }: { onGoToCapa: () => void }) {
   return (
     <div
@@ -141,14 +172,13 @@ function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, savi
   const [slugDraft, setSlugDraft]   = useState(slug)
   const [titleDraft, setTitleDraft] = useState(coverTitle)
   const [publishedDraft, setPublishedDraft] = useState(published)
+  // Erro de validação do slug fica local ao campo — não é resultado de uma ação de rede
   const [error, setError]     = useState('')
-  const [success, setSuccess] = useState('')
   const showSpinner = useDelayedLoading(saving)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    setSuccess('')
 
     const parsedSlug = SiteSlugSchema.safeParse(slugDraft)
     if (!parsedSlug.success) {
@@ -158,10 +188,10 @@ function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, savi
 
     const result = await onSave({ slug: parsedSlug.data, published: publishedDraft, coverTitle: titleDraft.trim() })
     if (!result.ok) {
-      setError(result.message)
+      toastError(result.message)
       return
     }
-    setSuccess('Capa salva com sucesso!')
+    toastSuccess('Capa salva com sucesso!')
   }
 
   return (
@@ -228,7 +258,7 @@ function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, savi
         </button>
       </div>
 
-      <FeedbackText error={error} success={success} />
+      {error && <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{error}</p>}
 
       <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
         {showSpinner && <Spinner color="#fff" />} Salvar capa
@@ -249,22 +279,18 @@ interface HistoriaSectionProps {
 function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, onGoToCapa }: HistoriaSectionProps) {
   const [storyDraft, setStoryDraft]     = useState(ourStory)
   const [messageDraft, setMessageDraft] = useState(customMessage)
-  const [error, setError]     = useState('')
-  const [success, setSuccess] = useState('')
   const showSpinner = useDelayedLoading(saving)
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    setSuccess('')
     const result = await onSave({ our_story: storyDraft.trim(), custom_message: messageDraft.trim() })
     if (!result.ok) {
-      setError(result.message)
+      toastError(result.message)
       return
     }
-    setSuccess('História salva com sucesso!')
+    toastSuccess('História salva com sucesso!')
   }
 
   return (
@@ -294,8 +320,6 @@ function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, 
         />
       </div>
 
-      <FeedbackText error={error} success={success} />
-
       <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
         {showSpinner && <Spinner color="#fff" />} Salvar história
       </button>
@@ -315,22 +339,18 @@ interface CerimoniaSectionProps {
 function CerimoniaSection({ ceremonyInfo, receptionInfo, saving, siteExists, onSave, onGoToCapa }: CerimoniaSectionProps) {
   const [ceremonyDraft, setCeremonyDraft]   = useState(ceremonyInfo)
   const [receptionDraft, setReceptionDraft] = useState(receptionInfo)
-  const [error, setError]     = useState('')
-  const [success, setSuccess] = useState('')
   const showSpinner = useDelayedLoading(saving)
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    setSuccess('')
     const result = await onSave({ ceremony_info: ceremonyDraft.trim(), reception_info: receptionDraft.trim() })
     if (!result.ok) {
-      setError(result.message)
+      toastError(result.message)
       return
     }
-    setSuccess('Informações salvas com sucesso!')
+    toastSuccess('Informações salvas com sucesso!')
   }
 
   return (
@@ -359,8 +379,6 @@ function CerimoniaSection({ ceremonyInfo, receptionInfo, saving, siteExists, onS
           style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
-
-      <FeedbackText error={error} success={success} />
 
       <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
         {showSpinner && <Spinner color="#fff" />} Salvar cerimônia & festa
@@ -404,21 +422,55 @@ function PresentesSection() {
 }
 
 interface GaleriaSectionProps {
-  galleryUrls: string[]
-  saving:      boolean
-  siteExists:  boolean
-  onSave:      (values: { gallery_urls: string[] }) => Promise<PatchResult>
-  onGoToCapa:  () => void
+  weddingId:         string
+  galleryUrls:       string[]
+  saving:            boolean
+  siteExists:        boolean
+  storageLimitBytes: number
+  storageUsedBytes:  number
+  onSave:            (values: { gallery_urls: string[] }) => Promise<PatchResult>
+  onGoToCapa:        () => void
 }
 
-function GaleriaSection({ galleryUrls, saving, siteExists, onSave, onGoToCapa }: GaleriaSectionProps) {
-  const [urls, setUrls]       = useState<string[]>(galleryUrls)
-  const [newUrl, setNewUrl]   = useState('')
-  const [error, setError]     = useState('')
-  const [success, setSuccess] = useState('')
-  const showSpinner = useDelayedLoading(saving)
+function GaleriaSection({
+  weddingId, galleryUrls, saving, siteExists, storageLimitBytes, storageUsedBytes, onSave, onGoToCapa,
+}: GaleriaSectionProps) {
+  const [urls, setUrls]           = useState<string[]>(galleryUrls)
+  const [newUrl, setNewUrl]       = useState('')
+  const [usedBytes, setUsedBytes] = useState(storageUsedBytes)
+  // Tamanho de cada foto vinda de upload, por URL pública — populado pelo GET inicial
+  // (fotos de sessões anteriores) e por cada novo upload. Sem isso não dá pra descontar
+  // o valor certo da barra de uso ao excluir uma foto enviada em outra sessão.
+  const [photoSizes, setPhotoSizes] = useState<Record<string, number>>({})
+  const [uploading, setUploading] = useState(false)
+  const inputRef     = useRef<HTMLInputElement>(null)
+  const showSpinner  = useDelayedLoading(saving)
+  const showUploadSpinner = useDelayedLoading(uploading)
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(`/api/v1/weddings/${weddingId}/gallery-photos`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ data: GalleryPhotoRecord[] }>) : null))
+      .then((body) => {
+        if (cancelled || !body) return
+        setPhotoSizes((prev) => {
+          const next = { ...prev }
+          for (const photo of body.data) next[photo.public_url] = photo.size_bytes
+          return next
+        })
+      })
+      .catch(() => {
+        // Melhor esforço: sem esses dados, a barra de uso fica só ligeiramente
+        // desatualizada até o próximo carregamento da página — não é crítico.
+      })
+
+    return () => { cancelled = true }
+  }, [weddingId])
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
+
+  const usedPct = storageLimitBytes > 0 ? Math.min(100, (usedBytes / storageLimitBytes) * 100) : 0
 
   function addUrl() {
     const trimmed = newUrl.trim()
@@ -427,24 +479,117 @@ function GaleriaSection({ galleryUrls, saving, siteExists, onSave, onGoToCapa }:
     setNewUrl('')
   }
 
-  function removeUrl(index: number) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploading) return
+
+    setUploading(true)
+
+    const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
+    const supabase = createSupabaseBrowser()
+
+    // Upload direto do browser pro Storage (não passa pela Route Handler) — mesmo
+    // padrão de FileArchiveManager: evita limite de body da Route Handler e usa a RLS
+    // de storage.objects (posse pelo prefixo do path) em vez de reimplementar isso na API.
+    const { error: uploadError } = await supabase.storage.from('wedding-photos').upload(path, file)
+    if (uploadError) {
+      setUploading(false)
+      toastError('Não foi possível enviar a foto. Verifique o tamanho (máx. 8 MB) e o formato (PNG, JPG, WEBP, HEIC ou GIF).')
+      return
+    }
+
+    const res = await fetch(`/api/v1/weddings/${weddingId}/gallery-photos`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storage_path: path,
+        size_bytes:   file.size,
+        mime_type:    file.type || null,
+      }),
+    })
+
+    if (!res.ok) {
+      // O upload já subiu pro storage; sem o registro de metadados ele fica órfão — remove.
+      await supabase.storage.from('wedding-photos').remove([path])
+      setUploading(false)
+      toastError(await readApiError(res, 'Não foi possível salvar a foto.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: GalleryPhotoRecord }
+    setUrls((prev) => [...prev, data.public_url])
+    setPhotoSizes((prev) => ({ ...prev, [data.public_url]: data.size_bytes }))
+    setUsedBytes((prev) => prev + data.size_bytes)
+    setUploading(false)
+    toastSuccess('Foto enviada com sucesso!')
+  }
+
+  async function removeUrl(index: number) {
+    const url = urls[index]
     setUrls((prev) => prev.filter((_, i) => i !== index))
+    if (url === undefined) return
+
+    const markerIndex = url.indexOf(GALLERY_BUCKET_URL_MARKER)
+    // URL externa colada manualmente: só remove da lista, sem chamar a API.
+    if (markerIndex === -1) return
+
+    const storagePath = url.slice(markerIndex + GALLERY_BUCKET_URL_MARKER.length)
+    const removedSize = photoSizes[url] ?? 0
+
+    // Best-effort: a foto já saiu da lista visível independente do resultado da chamada —
+    // uma falha aqui deixa o objeto órfão no storage/tabela, mas não deve travar o usuário.
+    const res = await fetch(
+      `/api/v1/weddings/${weddingId}/gallery-photos?storage_path=${encodeURIComponent(storagePath)}`,
+      { method: 'DELETE' },
+    )
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível remover a foto do armazenamento.'))
+      return
+    }
+
+    setPhotoSizes((prev) => {
+      const next = { ...prev }
+      delete next[url]
+      return next
+    })
+    setUsedBytes((prev) => Math.max(0, prev - removedSize))
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    setSuccess('')
     const result = await onSave({ gallery_urls: urls })
     if (!result.ok) {
-      setError(result.message)
+      toastError(result.message)
       return
     }
-    setSuccess('Galeria salva com sucesso!')
+    toastSuccess('Galeria salva com sucesso!')
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div
+        className="rounded-2xl bg-[var(--surface)] p-4"
+        style={{ boxShadow: '0 6px 18px rgba(60,40,24,0.07)' }}
+      >
+        <div className="flex items-center justify-between" style={{ marginBottom: '10px' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)' }}>Armazenamento usado</span>
+          <span style={{ fontSize: '13px', color: 'var(--muted-fg)' }}>
+            {formatBytes(usedBytes)} de {formatBytes(storageLimitBytes)} usados
+          </span>
+        </div>
+        <div style={{ height: '8px', borderRadius: '99px', background: 'var(--wedding-color-subtle)', overflow: 'hidden' }}>
+          <div
+            style={{
+              height: '100%', width: `${usedPct}%`, borderRadius: '99px',
+              background: usedPct >= 90 ? '#C0553F' : 'var(--wedding-color)',
+              transition: 'width 0.3s',
+            }}
+          />
+        </div>
+      </div>
+
       <div>
         <label htmlFor="site-gallery-url" style={labelStyle}>Adicionar imagem (URL)</label>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -471,6 +616,25 @@ function GaleriaSection({ galleryUrls, saving, siteExists, onSave, onGoToCapa }:
             <PlusIcon />
           </button>
         </div>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
+            borderRadius: '12px', padding: '10px 16px',
+            fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+            opacity: uploading ? 0.7 : 1,
+          }}
+        >
+          {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
+          {uploading ? 'Enviando…' : 'Enviar do computador'}
+        </button>
+        <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
       </div>
 
       {urls.length === 0 ? (
@@ -501,8 +665,6 @@ function GaleriaSection({ galleryUrls, saving, siteExists, onSave, onGoToCapa }:
         </ul>
       )}
 
-      <FeedbackText error={error} success={success} />
-
       <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
         {showSpinner && <Spinner color="#fff" />} Salvar galeria
       </button>
@@ -510,7 +672,9 @@ function GaleriaSection({ galleryUrls, saving, siteExists, onSave, onGoToCapa }:
   )
 }
 
-export default function SiteBuilder({ weddingId, coupleNames, initialSite }: SiteBuilderProps) {
+export default function SiteBuilder({
+  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes,
+}: SiteBuilderProps) {
   const [active, setActive]       = useState<SectionId>('capa')
   const [siteId, setSiteId]       = useState<string | null>(initialSite?.id ?? null)
   const [slug, setSlug]           = useState(initialSite?.slug ?? '')
@@ -711,9 +875,12 @@ export default function SiteBuilder({ weddingId, coupleNames, initialSite }: Sit
             {active === 'presentes' && <PresentesSection />}
             {active === 'galeria' && (
               <GaleriaSection
+                weddingId={weddingId}
                 galleryUrls={content.gallery_urls ?? []}
                 saving={saving}
                 siteExists={siteExists}
+                storageLimitBytes={storageLimitBytes}
+                storageUsedBytes={storageUsedBytes}
                 onSave={saveContentPatch}
                 onGoToCapa={() => setActive('capa')}
               />

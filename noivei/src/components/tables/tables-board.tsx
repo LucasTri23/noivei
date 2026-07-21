@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import type { Guest, TableConfig } from '@/types/database'
 
 export type TableGuest = Pick<Guest, 'id' | 'name' | 'group_name'>
@@ -112,15 +113,12 @@ const labelStyle: React.CSSProperties = {
 
 export default function TablesBoard({ weddingId, initialTables, allGuests }: TablesBoardProps) {
   const [tables, setTables]             = useState<TableWithGuests[]>(initialTables)
-  const [error, setError]               = useState('')
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
-  const [formError, setFormError]       = useState('')
   const [form, setForm]                 = useState({ label: '', capacity: '8' })
   const [editingTable, setEditingTable] = useState<TableWithGuests | null>(null)
   const [editForm, setEditForm]         = useState({ label: '', capacity: '8' })
   const [editSaving, setEditSaving]     = useState(false)
-  const [editError, setEditError]       = useState('')
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const dragging                        = useRef<DragInfo | null>(null)
   const showSaveSpinner                 = useDelayedLoading(saving)
@@ -166,13 +164,12 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
     if (target !== UNASSIGNED) {
       const destination = tables.find((t) => t.id === target)
       if (destination && destination.guests.length >= destination.capacity) {
-        setError('Esta mesa já atingiu a capacidade máxima.')
+        toastError('Esta mesa já atingiu a capacidade máxima.')
         return
       }
     }
 
     const previous = tables
-    setError('')
     setTables((prev) => {
       const next = prev.map((t) => ({ ...t, guests: [...t.guests] }))
       if (source !== UNASSIGNED) {
@@ -191,7 +188,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
         const res = await fetch(`${apiBase}/${source}/assign/${guestId}`, { method: 'DELETE' })
         if (!res.ok) {
           setTables(previous)
-          setError(await readApiError(res, 'Não foi possível mover o convidado.'))
+          toastError(await readApiError(res, 'Não foi possível mover o convidado.'))
           return
         }
       }
@@ -203,13 +200,13 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
           body:    JSON.stringify({ guest_id: guestId }),
         })
         if (!res.ok) {
-          setError(await readApiError(res, 'Não foi possível alocar o convidado nesta mesa.'))
+          toastError(await readApiError(res, 'Não foi possível alocar o convidado nesta mesa.'))
           await resyncTables(previous)
           return
         }
       }
     } catch {
-      setError('Erro de conexão com o servidor. Tente novamente.')
+      toastError('Erro de conexão com o servidor. Tente novamente.')
       await resyncTables(previous)
     }
   }
@@ -218,7 +215,6 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
     e.preventDefault()
     if (saving) return
     setSaving(true)
-    setFormError('')
 
     const res = await fetch(apiBase, {
       method:  'POST',
@@ -231,7 +227,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
 
     setSaving(false)
     if (!res.ok) {
-      setFormError(await readApiError(res, 'Não foi possível criar a mesa.'))
+      toastError(await readApiError(res, 'Não foi possível criar a mesa.'))
       return
     }
 
@@ -242,7 +238,6 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
   }
 
   function openEditModal(table: TableWithGuests) {
-    setEditError('')
     setEditForm({ label: table.label, capacity: String(table.capacity) })
     setEditingTable(table)
   }
@@ -251,7 +246,6 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
     e.preventDefault()
     if (!editingTable || editSaving) return
     setEditSaving(true)
-    setEditError('')
 
     const res = await fetch(`${apiBase}/${editingTable.id}`, {
       method:  'PATCH',
@@ -264,7 +258,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
 
     setEditSaving(false)
     if (!res.ok) {
-      setEditError(await readApiError(res, 'Não foi possível atualizar a mesa.'))
+      toastError(await readApiError(res, 'Não foi possível atualizar a mesa.'))
       return
     }
 
@@ -281,13 +275,12 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
     if (!confirmed) return
 
     setDeletingId(table.id)
-    setError('')
 
     const res = await fetch(`${apiBase}/${table.id}`, { method: 'DELETE' })
 
     setDeletingId(null)
     if (!res.ok) {
-      setError(await readApiError(res, 'Não foi possível excluir a mesa.'))
+      toastError(await readApiError(res, 'Não foi possível excluir a mesa.'))
       return
     }
 
@@ -310,7 +303,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
           </p>
         </div>
         <button
-          onClick={() => { setFormError(''); setModalOpen(true) }}
+          onClick={() => setModalOpen(true)}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             background: 'var(--wedding-color)', color: '#fff', border: 'none',
@@ -322,16 +315,6 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
           <PlusIcon /> Nova mesa
         </button>
       </div>
-
-      {error && (
-        <div
-          className="mb-5 rounded-2xl p-4"
-          style={{ background: '#F6E4DE', border: '1px solid #C0553F', fontSize: '14px', color: '#C0553F' }}
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
 
       <div className="grid gap-5" style={{ gridTemplateColumns: '260px 1fr' }}>
         {/* Unassigned */}
@@ -504,10 +487,6 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
             />
           </div>
 
-          {formError && (
-            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{formError}</p>
-          )}
-
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
@@ -564,10 +543,6 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
               style={inputStyle}
             />
           </div>
-
-          {editError && (
-            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{editError}</p>
-          )}
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button

@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { toastError, toastSuccess } from '@/store/toast.store'
 
 const emptySubscribe = () => () => {}
 
@@ -20,8 +21,6 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
   const { theme, setTheme } = useTheme()
   const [color, setColor]   = useState(weddingColor || DEFAULT_COLOR)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved]   = useState(false)
-  const [error, setError]   = useState('')
 
   // next-themes só conhece o tema no cliente — evita mismatch de hidratação
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false)
@@ -29,8 +28,6 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
   async function saveColor() {
     if (!weddingId) return
     setSaving(true)
-    setError('')
-    setSaved(false)
 
     const supabase = createSupabaseBrowser()
     const { error: dbError } = await supabase
@@ -40,10 +37,10 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
 
     setSaving(false)
     if (dbError) {
-      setError('Não foi possível salvar a cor. Tente novamente.')
+      toastError('Não foi possível salvar a cor. Tente novamente.')
       return
     }
-    setSaved(true)
+    toastSuccess('Cor do casamento atualizada.')
     router.refresh()
   }
 
@@ -99,7 +96,7 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
               <input
                 type="color"
                 value={color}
-                onChange={(e) => { setColor(e.target.value); setSaved(false) }}
+                onChange={(e) => setColor(e.target.value)}
                 aria-label="Cor do casamento"
                 style={{
                   width: '56px', height: '40px', border: '1.5px solid #EBDDD0',
@@ -122,16 +119,6 @@ export default function AppearanceSettings({ weddingId, weddingColor, isPaid }: 
                 {saving ? 'Salvando…' : 'Salvar cor'}
               </button>
             </div>
-            {error && (
-              <p style={{ fontSize: '13px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', marginTop: '12px' }}>
-                {error}
-              </p>
-            )}
-            {saved && (
-              <p style={{ fontSize: '13px', color: '#5E8B6A', background: '#E9EFE6', padding: '10px 14px', borderRadius: '10px', marginTop: '12px' }}>
-                Cor do casamento atualizada.
-              </p>
-            )}
           </>
         ) : (
           <div

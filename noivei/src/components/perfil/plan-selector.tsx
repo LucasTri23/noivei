@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 import { PLAN_IDS, type PlanId } from '@/constants/plans'
 
@@ -90,16 +91,12 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
     currentPlanId === PLAN_IDS.PREMIUM_ONCE ? 'once' : 'monthly',
   )
   const [switching, setSwitching] = useState<PlanId | null>(null)
-  const [error, setError]         = useState('')
-  const [success, setSuccess]     = useState('')
   const showSpinner = useDelayedLoading(switching !== null)
 
   const premiumTarget: PlanId = premiumBilling === 'monthly' ? PLAN_IDS.PREMIUM_MONTHLY : PLAN_IDS.PREMIUM_ONCE
 
   async function selectPlan(planId: PlanId) {
     setSwitching(planId)
-    setError('')
-    setSuccess('')
 
     // TODO Fase 2: integrar gateway de pagamento real (Stripe/Pagar.me) antes de processar cobrança de verdade
     const supabase = createSupabaseBrowser()
@@ -114,10 +111,10 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
 
     setSwitching(null)
     if (dbError) {
-      setError('Não foi possível trocar de plano. Tente novamente.')
+      toastError('Não foi possível trocar de plano. Tente novamente.')
       return
     }
-    setSuccess('Plano atualizado com sucesso!')
+    toastSuccess('Plano atualizado com sucesso!')
     router.refresh()
   }
 
@@ -303,17 +300,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
           )
         })}
       </div>
-
-      {error && (
-        <p style={{ fontSize: '13.5px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', marginBottom: '16px' }}>
-          {error}
-        </p>
-      )}
-      {success && (
-        <p style={{ fontSize: '13.5px', color: '#5E8B6A', background: '#E9EFE6', padding: '10px 14px', borderRadius: '10px', marginBottom: '16px' }}>
-          {success}
-        </p>
-      )}
     </div>
   )
 }

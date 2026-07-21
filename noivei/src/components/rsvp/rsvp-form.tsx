@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { toastError } from '@/store/toast.store'
 import type { GuestStatus } from '@/types/database'
 
 interface RsvpFormProps {
@@ -17,13 +18,11 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
   const [status, setStatus]   = useState<GuestStatus>(initialStatus)
   const [saving, setSaving]   = useState<Answer | null>(null)
   const [saved, setSaved]     = useState(false)
-  const [error, setError]     = useState('')
   const showSpinner = useDelayedLoading(saving !== null)
 
   async function respond(answer: Answer) {
     if (saving) return
     setSaving(answer)
-    setError('')
     setSaved(false)
 
     const res = await fetch(`/api/v1/rsvp/${encodeURIComponent(token)}`, {
@@ -34,7 +33,7 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
 
     setSaving(null)
     if (!res.ok) {
-      setError('Não foi possível registrar sua resposta. Tente novamente.')
+      toastError('Não foi possível registrar sua resposta. Tente novamente.')
       return
     }
 
@@ -98,12 +97,6 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
           Não poderei ir
         </button>
       </div>
-
-      {error && (
-        <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', marginTop: '14px' }}>
-          {error}
-        </p>
-      )}
     </div>
   )
 }

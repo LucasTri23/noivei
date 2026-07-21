@@ -251,6 +251,16 @@ export interface WeddingFile {
   created_at:   string
 }
 
+export interface WeddingGalleryPhoto {
+  id:           string
+  wedding_id:   string
+  storage_path: string
+  size_bytes:   number
+  mime_type:    string | null
+  uploaded_by:  string
+  created_at:   string
+}
+
 export interface Profile {
   id:              string
   full_name:       string | null

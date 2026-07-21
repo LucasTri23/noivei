@@ -3,13 +3,14 @@
 import { useEffect } from 'react'
 
 interface ModalProps {
-  open:     boolean
-  onClose:  () => void
-  title?:   string
-  children: React.ReactNode
+  open:      boolean
+  onClose:   () => void
+  title?:    string
+  maxWidth?: string
+  children:  React.ReactNode
 }
 
-export default function Modal({ open, onClose, title, children }: ModalProps) {
+export default function Modal({ open, onClose, title, maxWidth = '440px', children }: ModalProps) {
   useEffect(() => {
     if (!open) return
     function onKeyDown(e: KeyboardEvent) {
@@ -38,7 +39,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
         onClick={(e) => e.stopPropagation()}
         className="rounded-2xl bg-white"
         style={{
-          width: '100%', maxWidth: '440px', padding: '26px',
+          width: '100%', maxWidth, padding: '26px',
           boxShadow: '0 24px 60px rgba(42,30,16,0.28)',
           maxHeight: '90vh', overflowY: 'auto',
         }}

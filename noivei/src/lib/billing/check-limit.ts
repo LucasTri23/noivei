@@ -67,10 +67,12 @@ const BYTES_PER_MB = 1024 * 1024
 const DEFAULT_STORAGE_LIMIT_MB = 100
 
 /**
- * Verifica o limite de armazenamento (Central de arquivos) do plano ativo do dono do casamento.
+ * Verifica o limite de armazenamento do plano ativo do dono do casamento.
  * `current` e `limit` são retornados em bytes — `plan_limits.max_storage_mb` guarda o valor em MB.
  * `additionalBytes` é o tamanho do arquivo que se pretende adicionar; `allowed` considera o uso
  * já existente somado a ele, já que aqui (diferente de convidados) cada upload tem um peso diferente.
+ * A cota é única para a conta: soma a Central de arquivos (wedding_files) e as fotos da
+ * Galeria do site (wedding_gallery_photos) — não são pools separados.
  */
 export async function checkStorageLimit(
   supabase:        SupabaseClient,
@@ -99,9 +101,13 @@ export async function checkStorageLimit(
     if (subscription?.plan_id) planId = subscription.plan_id as PlanId
   }
 
-  const [{ data: files }, { data: limitRow }] = await Promise.all([
+  const [{ data: files }, { data: galleryPhotos }, { data: limitRow }] = await Promise.all([
     supabase
       .from('wedding_files')
+      .select('size_bytes')
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('wedding_gallery_photos')
       .select('size_bytes')
       .eq('wedding_id', weddingId),
     supabase
@@ -112,10 +118,11 @@ export async function checkStorageLimit(
       .maybeSingle(),
   ])
 
-  const current = ((files ?? []) as { size_bytes: number }[]).reduce(
-    (sum, file) => sum + file.size_bytes,
-    0,
-  )
+  const sumSizeBytes = (rows: { size_bytes: number }[] | null) =>
+    (rows ?? []).reduce((sum, row) => sum + row.size_bytes, 0)
+
+  const current = sumSizeBytes(files as { size_bytes: number }[] | null)
+    + sumSizeBytes(galleryPhotos as { size_bytes: number }[] | null)
   const limitMb = (limitRow?.value as number | undefined) ?? DEFAULT_STORAGE_LIMIT_MB
   const limit   = limitMb * BYTES_PER_MB
   const allowed = current + additionalBytes <= limit
