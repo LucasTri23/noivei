@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { isPaidPlan, isPlusPlan, type PlanId } from '@/constants/plans'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 
 export type PaywallFeature = 'mesas' | 'site' | 'presentes' | 'arquivos'
 
@@ -68,16 +70,8 @@ export default async function PaywallGate({ feature, children }: PaywallGateProp
 
   let planId: PlanId = 'free'
   if (user) {
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('plan_id')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    planId = (subscription?.plan_id ?? 'free') as PlanId
+    const wedding = await getUserWedding(supabase, user.id)
+    planId = wedding ? await resolveWeddingPlanId(supabase, wedding.id) : 'free'
   }
 
   const allowed = requiredPlan === 'premium_plus' ? isPlusPlan(planId) : isPaidPlan(planId)

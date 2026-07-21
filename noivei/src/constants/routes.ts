@@ -42,8 +42,10 @@ export const PUBLIC_ROUTES = [
   ROUTES.ESQUECI_SENHA,
   ROUTES.PLANOS,
   '/rsvp',
+  '/convite',
   '/api/v1/health',
   '/api/v1/rsvp',
+  '/api/v1/invites',
   '/api/v1/webhooks',
   '/api/v1/billing/plans',
 ] as const

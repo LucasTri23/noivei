@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { deriveWeddingColorScale } from '@/lib/theme/wedding-color'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import Sidebar from '@/components/layout/sidebar'
 import MobileTopBar from '@/components/layout/mobile-top-bar'
 import MobileBottomNav from '@/components/layout/mobile-bottom-nav'
@@ -12,26 +14,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect('/login')
 
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('couple_names, wedding_color')
-    .eq('user_id', user.id)
-    .is('deleted_at', null)
-    .order('created_at')
-    .limit(1)
-    .maybeSingle()
+  const userWedding = await getUserWedding(supabase, user.id)
 
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('plan_id')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const { data: wedding } = userWedding
+    ? await supabase
+        .from('weddings')
+        .select('couple_names, wedding_color')
+        .eq('id', userWedding.id)
+        .maybeSingle()
+    : { data: null }
+
+  const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
-  const planId      = (subscription?.plan_id ?? 'free') as PlanId
   const planLabel   = `Plano ${PLAN_NAMES[planId] ?? 'Gratuito'}`
   const initial     = coupleNames.charAt(0).toUpperCase()
 

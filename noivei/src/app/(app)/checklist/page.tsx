@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { CHECKLIST_CATEGORIES } from '@/lib/checklist/catalog'
 import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
 import DatePicker from '@/components/ui/date-picker'
 import Modal from '@/components/ui/modal'
@@ -137,17 +138,7 @@ export default function ChecklistPage() {
 
       // Plano ativo decide a ação do estado vazio (mesmo padrão do (app)/layout.tsx):
       // Gratuito gera a checklist fixa aqui; pago vai para /checklist/personalizar.
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data: subscription } = user
-        ? await supabase
-            .from('subscriptions')
-            .select('plan_id')
-            .eq('user_id', user.id)
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        : { data: null }
+      const planId = await resolveWeddingPlanId(supabase, wedding.id as string)
 
       const { data } = await supabase
         .from('checklist_items')
@@ -159,7 +150,7 @@ export default function ChecklistPage() {
 
       if (!cancelled) {
         setWeddingId(wedding.id as string)
-        setPlanId(((subscription?.plan_id as string | undefined) ?? 'free') as PlanId)
+        setPlanId(planId)
         setItems((data ?? []) as ChecklistItem[])
         setLoading(false)
       }

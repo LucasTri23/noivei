@@ -271,3 +271,27 @@ export interface Profile {
   created_at:      string
   updated_at:      string
 }
+
+export type WeddingMemberRole = 'owner' | 'member'
+
+export interface WeddingMember {
+  id:         string
+  wedding_id: string
+  user_id:    string
+  role:       WeddingMemberRole
+  created_at: string
+}
+
+export type WeddingInviteStatus = 'pending' | 'accepted' | 'revoked'
+
+export interface WeddingInvite {
+  id:          string
+  wedding_id:  string
+  token:       string
+  created_by:  string
+  status:      WeddingInviteStatus
+  expires_at:  string
+  accepted_by: string | null
+  accepted_at: string | null
+  created_at:  string
+}

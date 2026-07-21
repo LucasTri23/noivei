@@ -9,6 +9,39 @@ export interface LimitCheck {
   planId:  PlanId
 }
 
+/**
+ * Resolve o plano ativo de um casamento a partir da assinatura do DONO
+ * (weddings.user_id) — nunca do usuário logado no momento da chamada. Isso
+ * importa desde que "juntar contas" existe: um membro convidado tem a própria
+ * conta (e a própria assinatura Gratuita padrão), mas o plano que vale pra
+ * gating de features é sempre o do dono que paga a assinatura do casamento.
+ * Sem casamento ou sem assinatura ativa, assume o plano Gratuito.
+ */
+export async function resolveWeddingPlanId(
+  supabase:  SupabaseClient,
+  weddingId: string,
+): Promise<PlanId> {
+  const { data: wedding } = await supabase
+    .from('weddings')
+    .select('user_id')
+    .eq('id', weddingId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (!wedding?.user_id) return PLAN_IDS.FREE
+
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('plan_id')
+    .eq('user_id', wedding.user_id as string)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return (subscription?.plan_id as PlanId | undefined) ?? PLAN_IDS.FREE
+}
+
 // Fallback conservador (= plano Gratuito) caso o seed de plan_limits esteja ausente
 const DEFAULT_GUEST_LIMIT = 50
 
@@ -20,27 +53,7 @@ export async function checkGuestLimit(
   supabase:  SupabaseClient,
   weddingId: string,
 ): Promise<LimitCheck> {
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('user_id')
-    .eq('id', weddingId)
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  let planId: PlanId = PLAN_IDS.FREE
-
-  if (wedding?.user_id) {
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('plan_id')
-      .eq('user_id', wedding.user_id as string)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (subscription?.plan_id) planId = subscription.plan_id as PlanId
-  }
+  const planId = await resolveWeddingPlanId(supabase, weddingId)
 
   const [{ count: current }, { data: limitRow }] = await Promise.all([
     supabase
@@ -79,27 +92,7 @@ export async function checkStorageLimit(
   weddingId:       string,
   additionalBytes: number,
 ): Promise<LimitCheck> {
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('user_id')
-    .eq('id', weddingId)
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  let planId: PlanId = PLAN_IDS.FREE
-
-  if (wedding?.user_id) {
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('plan_id')
-      .eq('user_id', wedding.user_id as string)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (subscription?.plan_id) planId = subscription.plan_id as PlanId
-  }
+  const planId = await resolveWeddingPlanId(supabase, weddingId)
 
   const [{ data: files }, { data: galleryPhotos }, { data: limitRow }] = await Promise.all([
     supabase
@@ -128,4 +121,36 @@ export async function checkStorageLimit(
   const allowed = current + additionalBytes <= limit
 
   return { allowed, current, limit, planId }
+}
+
+// Fallback conservador (= plano Gratuito) caso o seed de plan_limits esteja ausente
+const DEFAULT_USER_LIMIT = 1
+
+/**
+ * Verifica o limite de usuários ("juntar contas") do plano ativo do dono do
+ * casamento. `current` conta as linhas em wedding_members (dono incluso).
+ */
+export async function checkMemberLimit(
+  supabase:  SupabaseClient,
+  weddingId: string,
+): Promise<LimitCheck> {
+  const planId = await resolveWeddingPlanId(supabase, weddingId)
+
+  const [{ count: current }, { data: limitRow }] = await Promise.all([
+    supabase
+      .from('wedding_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('plan_limits')
+      .select('value')
+      .eq('plan_id', planId)
+      .eq('feature', 'max_users')
+      .maybeSingle(),
+  ])
+
+  const limit   = (limitRow?.value as number | undefined) ?? DEFAULT_USER_LIMIT
+  const allowed = (current ?? 0) < limit
+
+  return { allowed, current: current ?? 0, limit, planId }
 }

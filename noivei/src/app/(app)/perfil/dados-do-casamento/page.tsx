@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import WeddingDataForm from '@/components/perfil/wedding-data-form'
 
 export const metadata = { title: 'Dados do casamento' }
@@ -10,13 +11,13 @@ export default async function DadosDoCasamentoPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const userWedding = await getUserWedding(supabase, user.id)
+  if (!userWedding) redirect('/onboarding')
+
   const { data: wedding } = await supabase
     .from('weddings')
     .select('id, bride_name, groom_name, wedding_date, venue, city, budget, style, rsvp_message_template')
-    .eq('user_id', user.id)
-    .is('deleted_at', null)
-    .order('created_at')
-    .limit(1)
+    .eq('id', userWedding.id)
     .maybeSingle()
 
   if (!wedding) redirect('/onboarding')

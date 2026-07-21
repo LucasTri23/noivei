@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import LogoutButton from '@/components/auth/logout-button'
 import ExportDataButton from '@/components/perfil/export-data-button'
 import DeleteAccountButton from '@/components/perfil/delete-account-button'
@@ -23,16 +25,20 @@ function HelpIcon() {
 function CalendarIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
 }
+function UsersIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+}
 function StarIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
 }
 
 const MENU_ITEMS = [
-  { label: 'Dados do casamento', href: '/perfil/dados-do-casamento', icon: <CalendarIcon /> },
-  { label: 'Notificações',       href: '/perfil/notificacoes',       icon: <BellIcon /> },
-  { label: 'Aparência',          href: '/perfil/aparencia',          icon: <SunIcon /> },
-  { label: 'Segurança',          href: '/perfil/seguranca',          icon: <LockIcon /> },
-  { label: 'Ajuda',              href: '/perfil/ajuda',              icon: <HelpIcon /> },
+  { label: 'Dados do casamento',   href: '/perfil/dados-do-casamento', icon: <CalendarIcon /> },
+  { label: 'Membros do casamento', href: '/perfil/membros',            icon: <UsersIcon /> },
+  { label: 'Notificações',         href: '/perfil/notificacoes',       icon: <BellIcon /> },
+  { label: 'Aparência',            href: '/perfil/aparencia',          icon: <SunIcon /> },
+  { label: 'Segurança',            href: '/perfil/seguranca',          icon: <LockIcon /> },
+  { label: 'Ajuda',                href: '/perfil/ajuda',              icon: <HelpIcon /> },
 ]
 
 export default async function PerfilPage() {
@@ -47,17 +53,11 @@ export default async function PerfilPage() {
     .limit(1)
     .maybeSingle()
 
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('plan_id')
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const userWedding = user ? await getUserWedding(supabase, user.id) : null
+  const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
   const email = user?.email ?? ''
-  const planId = (subscription?.plan_id ?? 'free') as PlanId
   const isPremium = isPaidPlan(planId)
   const planName = PLAN_NAMES[planId] ?? 'Gratuito'
   const initial = coupleNames.charAt(0).toUpperCase()

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError } from '@/store/toast.store'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import Spinner from '@/components/ui/spinner'
 import type { Guest } from '@/types/database'
 
@@ -63,14 +64,7 @@ export default function ExportDataButton() {
       return
     }
 
-    const { data: wedding } = await supabase
-      .from('weddings')
-      .select('id')
-      .eq('user_id', user.id)
-      .is('deleted_at', null)
-      .order('created_at')
-      .limit(1)
-      .maybeSingle()
+    const wedding = await getUserWedding(supabase, user.id)
 
     if (!wedding) {
       toastError('Nenhum casamento encontrado para exportar.')

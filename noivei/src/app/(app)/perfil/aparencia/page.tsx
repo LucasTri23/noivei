@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import AppearanceSettings from '@/components/perfil/appearance-settings'
 
 export const metadata = { title: 'Aparência' }
@@ -11,25 +13,17 @@ export default async function AparenciaPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('id, wedding_color')
-    .eq('user_id', user.id)
-    .is('deleted_at', null)
-    .order('created_at')
-    .limit(1)
-    .maybeSingle()
+  const userWedding = await getUserWedding(supabase, user.id)
 
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('plan_id')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const { data: wedding } = userWedding
+    ? await supabase
+        .from('weddings')
+        .select('id, wedding_color')
+        .eq('id', userWedding.id)
+        .maybeSingle()
+    : { data: null }
 
-  const planId = (subscription?.plan_id ?? 'free') as PlanId
+  const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
 
   return (
     <div style={{ maxWidth: '720px' }}>

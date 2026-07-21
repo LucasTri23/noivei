@@ -11,7 +11,8 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import QuestionnaireWizard, { QUESTIONNAIRE_STEPS } from '@/components/checklist/questionnaire-wizard'
 import { deriveFacts, parseAnswers, type WeddingAnswers } from '@/lib/checklist/facts'
 import { generateChecklistItems } from '@/lib/checklist/generate'
-import { isPaidPlan, type PlanId } from '@/constants/plans'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
+import { isPaidPlan } from '@/constants/plans'
 import type { WeddingPreferences } from '@/types/database'
 
 function BackIcon() {
@@ -40,19 +41,6 @@ export default function PersonalizarChecklistPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.replace('/login'); return }
 
-      // Personalização é recurso pago — mesmo padrão de verificação do (app)/layout.tsx
-      const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('plan_id')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      const planId = ((subscription?.plan_id as string | undefined) ?? 'free') as PlanId
-      if (!isPaidPlan(planId)) { router.replace('/checklist'); return }
-
       const { data: wedding } = await supabase
         .from('weddings')
         .select('id, wedding_date, guest_limit')
@@ -62,6 +50,10 @@ export default function PersonalizarChecklistPage() {
         .maybeSingle()
 
       if (!wedding) { router.replace('/onboarding'); return }
+
+      // Personalização é recurso pago — mesmo padrão de verificação do (app)/layout.tsx
+      const planId = await resolveWeddingPlanId(supabase, wedding.id as string)
+      if (!isPaidPlan(planId)) { router.replace('/checklist'); return }
 
       // Pode existir registro de tentativa anterior — pré-preenche as respostas
       const { data: preferences } = await supabase

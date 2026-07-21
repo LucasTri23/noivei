@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 
 export async function GET(request: Request) {
   const url    = new URL(request.url)
@@ -17,16 +18,12 @@ export async function GET(request: Request) {
         return NextResponse.redirect(`${origin}/reset-password`)
       }
 
-      // Check if user already completed onboarding (has a wedding record)
+      // Check if user already has access to a wedding — dono OU membro convidado
+      // (getUserWedding, ao contrário da query antiga em weddings.user_id, também
+      // encontra o casamento de quem acabou de aceitar um convite)
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const { data: wedding } = await supabase
-          .from('weddings')
-          .select('id')
-          .eq('user_id', user.id)
-          .is('deleted_at', null)
-          .limit(1)
-          .maybeSingle()
+        const wedding = await getUserWedding(supabase, user.id)
 
         // New user — no wedding yet → onboarding
         if (!wedding) {

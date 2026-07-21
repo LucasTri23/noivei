@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { recalculateWeddingScore } from '@/lib/wedding-score/recalculate'
 
 function CheckIcon({ size }: { size: number }) {
@@ -78,25 +79,18 @@ export default async function DashboardPage() {
   let planId: PlanId = 'free'
 
   if (user) {
-    const [{ data: profile }, { data: subscription }] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('notify_timeline, notify_rsvp')
-        .eq('id', user.id)
-        .maybeSingle(),
-      supabase
-        .from('subscriptions')
-        .select('plan_id')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ])
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('notify_timeline, notify_rsvp')
+      .eq('id', user.id)
+      .maybeSingle()
 
     notifyTimeline = (profile?.notify_timeline as boolean | undefined) ?? true
     notifyRsvp     = (profile?.notify_rsvp as boolean | undefined) ?? true
-    planId         = (subscription?.plan_id ?? 'free') as PlanId
+  }
+
+  if (wedding?.id) {
+    planId = await resolveWeddingPlanId(supabase, wedding.id)
   }
 
   // Wedding Score é recurso pago: recalcula a cada carregamento (barato, poucas queries agregadas)

@@ -13,6 +13,7 @@ import { DEFAULT_ANSWERS, deriveFacts, type WeddingAnswers } from '@/lib/checkli
 import { generateChecklistItems } from '@/lib/checklist/generate'
 import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
 import { isPaidPlan } from '@/constants/plans'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 
 interface IbgeMunicipio {
   nome: string
@@ -149,6 +150,24 @@ export default function OnboardingPage() {
       })
       .catch(() => setCities([]))
   }, [])
+
+  // Quem já é dono ou membro de um casamento (ex: acabou de aceitar um convite) não
+  // deve ver o wizard — evita criar um segundo casamento sem querer via URL direta.
+  useEffect(() => {
+    let cancelled = false
+    const supabase = createSupabaseBrowser()
+
+    async function checkExistingWedding() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const wedding = await getUserWedding(supabase, user.id)
+      if (!cancelled && wedding) router.replace('/dashboard')
+    }
+
+    checkExistingWedding()
+    return () => { cancelled = true }
+  }, [router])
 
   const paidPlan = isPaidPlan(data.plan)
   // A numeração "Passo X de Y" varia com o plano: Gratuito termina na escolha do
