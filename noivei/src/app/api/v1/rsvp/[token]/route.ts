@@ -1,8 +1,11 @@
+import { after } from 'next/server'
+
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { RsvpTokenSchema, UpdateRsvpSchema } from '@/lib/api/validation/rsvp.schema'
 import { getRsvpByToken } from '@/lib/rsvp/get-rsvp-by-token'
 import { phonesMatch } from '@/lib/rsvp/normalize-phone'
+import { notifyRsvpResponse } from '@/lib/rsvp/notify-rsvp-response'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 // Rota pública (sem auth): o token único do convidado é a credencial.
@@ -83,11 +86,24 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       .from('guests')
       .update(update)
       .eq('rsvp_token', parsedToken.data)
-      .select('name, status')
+      .select('name, status, wedding_id')
       .maybeSingle()
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao registrar sua resposta.')
     if (!data) return err(404, 'RSVP_NOT_FOUND', 'Convite não encontrado.')
+
+    // E-mail de notificação pro dono do casamento é best-effort e não pode atrasar
+    // nem quebrar a resposta ao convidado: agendado via after() para rodar só depois
+    // da resposta HTTP já ter sido enviada (ver notifyRsvpResponse — erros só logam).
+    if (data.status === 'confirmado' || data.status === 'recusado') {
+      const weddingId = data.wedding_id as string
+      const guestName = data.name as string
+      const guestStatus = data.status as 'confirmado' | 'recusado'
+
+      after(() =>
+        notifyRsvpResponse({ supabase, weddingId, guestName, status: guestStatus }),
+      )
+    }
 
     return ok({ name: data.name, status: data.status })
   } catch (error) {
