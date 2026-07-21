@@ -87,6 +87,12 @@
   --wedding-color-dark:   #9A7020;
   --wedding-color-subtle: #FBF0E0;
   --wedding-color-fg:     #FFFFFF;
+
+  /* Cor secundária do casal (rose-cobre por padrão) */
+  --wedding-color-secondary:        #C89070;
+  --wedding-color-secondary-light:  #DDB09A;
+  --wedding-color-secondary-dark:   #A87050;
+  --wedding-color-secondary-subtle: #FBEEE6;
 }
 
 /* ── MODO ESCURO ──────────────────────────────────────────────── */

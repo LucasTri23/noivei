@@ -159,22 +159,51 @@ function GuardNotice({ onGoToCapa }: { onGoToCapa: () => void }) {
 }
 
 interface CapaSectionProps {
-  coupleNames: string
-  slug:        string
-  published:   boolean
-  coverTitle:  string
-  publicUrl:   string | null
-  saving:      boolean
-  onSave:      (values: { slug: string; published: boolean; coverTitle: string }) => Promise<PatchResult>
+  coupleNames:   string
+  slug:          string
+  published:     boolean
+  coverTitle:    string
+  coverPhotoUrl: string | null
+  publicUrl:     string | null
+  saving:        boolean
+  onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
+  onDeletePhoto: (url: string) => Promise<boolean>
+  onSave: (values: { slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null }) => Promise<PatchResult>
 }
 
-function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, saving, onSave }: CapaSectionProps) {
+function CapaSection({
+  coupleNames, slug, published, coverTitle, coverPhotoUrl, publicUrl, saving, onUploadPhoto, onDeletePhoto, onSave,
+}: CapaSectionProps) {
   const [slugDraft, setSlugDraft]   = useState(slug)
   const [titleDraft, setTitleDraft] = useState(coverTitle)
   const [publishedDraft, setPublishedDraft] = useState(published)
+  const [coverDraft, setCoverDraft] = useState<string | null>(coverPhotoUrl)
+  const [uploading, setUploading]   = useState(false)
   // Erro de validação do slug fica local ao campo — não é resultado de uma ação de rede
   const [error, setError]     = useState('')
-  const showSpinner = useDelayedLoading(saving)
+  const inputRef      = useRef<HTMLInputElement>(null)
+  const showSpinner       = useDelayedLoading(saving)
+  const showUploadSpinner = useDelayedLoading(uploading)
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploading) return
+
+    setUploading(true)
+    const uploaded = await onUploadPhoto(file)
+    setUploading(false)
+    if (!uploaded) return
+
+    setCoverDraft(uploaded.public_url)
+  }
+
+  async function handleRemoveCover() {
+    if (!coverDraft) return
+    const url = coverDraft
+    setCoverDraft(null)
+    await onDeletePhoto(url)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -186,7 +215,9 @@ function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, savi
       return
     }
 
-    const result = await onSave({ slug: parsedSlug.data, published: publishedDraft, coverTitle: titleDraft.trim() })
+    const result = await onSave({
+      slug: parsedSlug.data, published: publishedDraft, coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft,
+    })
     if (!result.ok) {
       toastError(result.message)
       return
@@ -209,6 +240,49 @@ function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, savi
         />
         <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '6px' }}>
           Se deixar em branco, usamos &ldquo;{coupleNames}&rdquo;.
+        </p>
+      </div>
+
+      <div>
+        <label style={labelStyle}>Foto de capa</label>
+        {coverDraft ? (
+          <div className="relative overflow-hidden rounded-2xl" style={{ border: '1.5px solid #EBDDD0' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
+            <img src={coverDraft} alt="Foto de capa" style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} />
+            <button
+              type="button"
+              onClick={handleRemoveCover}
+              aria-label="Remover foto de capa"
+              style={{
+                position: 'absolute', top: '10px', right: '10px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '30px', height: '30px', border: 'none', borderRadius: '10px',
+                background: 'rgba(20,12,4,0.55)', color: '#fff', cursor: 'pointer',
+              }}
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
+              borderRadius: '12px', padding: '10px 16px',
+              fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+              opacity: uploading ? 0.7 : 1,
+            }}
+          >
+            {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
+            {uploading ? 'Enviando…' : 'Enviar foto de capa'}
+          </button>
+        )}
+        <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '6px' }}>
+          Aparece atrás do nome de vocês na capa do site. O ideal é uma foto na horizontal — mas qualquer formato funciona.
         </p>
       </div>
 
@@ -422,51 +496,26 @@ function PresentesSection() {
 }
 
 interface GaleriaSectionProps {
-  weddingId:         string
   galleryUrls:       string[]
   saving:            boolean
   siteExists:        boolean
   storageLimitBytes: number
-  storageUsedBytes:  number
+  usedBytes:         number
+  onUploadPhoto:     (file: File) => Promise<GalleryPhotoRecord | null>
+  onDeletePhoto:     (url: string) => Promise<boolean>
   onSave:            (values: { gallery_urls: string[] }) => Promise<PatchResult>
   onGoToCapa:        () => void
 }
 
 function GaleriaSection({
-  weddingId, galleryUrls, saving, siteExists, storageLimitBytes, storageUsedBytes, onSave, onGoToCapa,
+  galleryUrls, saving, siteExists, storageLimitBytes, usedBytes, onUploadPhoto, onDeletePhoto, onSave, onGoToCapa,
 }: GaleriaSectionProps) {
   const [urls, setUrls]           = useState<string[]>(galleryUrls)
   const [newUrl, setNewUrl]       = useState('')
-  const [usedBytes, setUsedBytes] = useState(storageUsedBytes)
-  // Tamanho de cada foto vinda de upload, por URL pública — populado pelo GET inicial
-  // (fotos de sessões anteriores) e por cada novo upload. Sem isso não dá pra descontar
-  // o valor certo da barra de uso ao excluir uma foto enviada em outra sessão.
-  const [photoSizes, setPhotoSizes] = useState<Record<string, number>>({})
   const [uploading, setUploading] = useState(false)
   const inputRef     = useRef<HTMLInputElement>(null)
   const showSpinner  = useDelayedLoading(saving)
   const showUploadSpinner = useDelayedLoading(uploading)
-
-  useEffect(() => {
-    let cancelled = false
-
-    fetch(`/api/v1/weddings/${weddingId}/gallery-photos`)
-      .then((res) => (res.ok ? (res.json() as Promise<{ data: GalleryPhotoRecord[] }>) : null))
-      .then((body) => {
-        if (cancelled || !body) return
-        setPhotoSizes((prev) => {
-          const next = { ...prev }
-          for (const photo of body.data) next[photo.public_url] = photo.size_bytes
-          return next
-        })
-      })
-      .catch(() => {
-        // Melhor esforço: sem esses dados, a barra de uso fica só ligeiramente
-        // desatualizada até o próximo carregamento da página — não é crítico.
-      })
-
-    return () => { cancelled = true }
-  }, [weddingId])
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
 
@@ -485,43 +534,11 @@ function GaleriaSection({
     if (!file || uploading) return
 
     setUploading(true)
-
-    const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
-    const supabase = createSupabaseBrowser()
-
-    // Upload direto do browser pro Storage (não passa pela Route Handler) — mesmo
-    // padrão de FileArchiveManager: evita limite de body da Route Handler e usa a RLS
-    // de storage.objects (posse pelo prefixo do path) em vez de reimplementar isso na API.
-    const { error: uploadError } = await supabase.storage.from('wedding-photos').upload(path, file)
-    if (uploadError) {
-      setUploading(false)
-      toastError('Não foi possível enviar a foto. Verifique o tamanho (máx. 8 MB) e o formato (PNG, JPG, WEBP, HEIC ou GIF).')
-      return
-    }
-
-    const res = await fetch(`/api/v1/weddings/${weddingId}/gallery-photos`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        storage_path: path,
-        size_bytes:   file.size,
-        mime_type:    file.type || null,
-      }),
-    })
-
-    if (!res.ok) {
-      // O upload já subiu pro storage; sem o registro de metadados ele fica órfão — remove.
-      await supabase.storage.from('wedding-photos').remove([path])
-      setUploading(false)
-      toastError(await readApiError(res, 'Não foi possível salvar a foto.'))
-      return
-    }
-
-    const { data } = (await res.json()) as { data: GalleryPhotoRecord }
-    setUrls((prev) => [...prev, data.public_url])
-    setPhotoSizes((prev) => ({ ...prev, [data.public_url]: data.size_bytes }))
-    setUsedBytes((prev) => prev + data.size_bytes)
+    const uploaded = await onUploadPhoto(file)
     setUploading(false)
+    if (!uploaded) return
+
+    setUrls((prev) => [...prev, uploaded.public_url])
     toastSuccess('Foto enviada com sucesso!')
   }
 
@@ -530,31 +547,9 @@ function GaleriaSection({
     setUrls((prev) => prev.filter((_, i) => i !== index))
     if (url === undefined) return
 
-    const markerIndex = url.indexOf(GALLERY_BUCKET_URL_MARKER)
-    // URL externa colada manualmente: só remove da lista, sem chamar a API.
-    if (markerIndex === -1) return
-
-    const storagePath = url.slice(markerIndex + GALLERY_BUCKET_URL_MARKER.length)
-    const removedSize = photoSizes[url] ?? 0
-
     // Best-effort: a foto já saiu da lista visível independente do resultado da chamada —
     // uma falha aqui deixa o objeto órfão no storage/tabela, mas não deve travar o usuário.
-    const res = await fetch(
-      `/api/v1/weddings/${weddingId}/gallery-photos?storage_path=${encodeURIComponent(storagePath)}`,
-      { method: 'DELETE' },
-    )
-
-    if (!res.ok) {
-      toastError(await readApiError(res, 'Não foi possível remover a foto do armazenamento.'))
-      return
-    }
-
-    setPhotoSizes((prev) => {
-      const next = { ...prev }
-      delete next[url]
-      return next
-    })
-    setUsedBytes((prev) => Math.max(0, prev - removedSize))
+    await onDeletePhoto(url)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -679,14 +674,106 @@ export default function SiteBuilder({
   const [siteId, setSiteId]       = useState<string | null>(initialSite?.id ?? null)
   const [slug, setSlug]           = useState(initialSite?.slug ?? '')
   const [published, setPublished] = useState(initialSite?.published ?? false)
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(initialSite?.cover_photo_url ?? null)
   const [content, setContent]     = useState<SiteContent>(() => parseSiteContent(initialSite?.content))
   const [saving, setSaving]       = useState(false)
   const origin                    = useOrigin()
 
+  // Cota de armazenamento e tamanhos por foto (bucket "wedding-photos") são compartilhados
+  // entre a foto de capa e a galeria — ambas usam o mesmo endpoint de registro de metadados.
+  const [usedBytes, setUsedBytes]   = useState(storageUsedBytes)
+  const [photoSizes, setPhotoSizes] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(`/api/v1/weddings/${weddingId}/gallery-photos`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ data: GalleryPhotoRecord[] }>) : null))
+      .then((body) => {
+        if (cancelled || !body) return
+        setPhotoSizes((prev) => {
+          const next = { ...prev }
+          for (const photo of body.data) next[photo.public_url] = photo.size_bytes
+          return next
+        })
+      })
+      .catch(() => {
+        // Melhor esforço: sem esses dados, a barra de uso fica só ligeiramente
+        // desatualizada até o próximo carregamento da página — não é crítico.
+      })
+
+    return () => { cancelled = true }
+  }, [weddingId])
+
   const apiBase  = `/api/v1/weddings/${weddingId}/site`
   const publicUrl = slug ? `${origin || 'https://…'}/${slug}` : null
 
-  async function patchSite(body: { slug?: string; published?: boolean; content?: SiteContent }): Promise<PatchResult> {
+  // Upload compartilhado por CapaSection e GaleriaSection: sobe os bytes direto pro
+  // Storage (client -> bucket, mesmo padrão de FileArchiveManager) e registra os
+  // metadados via API, o que soma a foto na cota de armazenamento do plano.
+  async function uploadPhoto(file: File): Promise<GalleryPhotoRecord | null> {
+    const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
+    const supabase = createSupabaseBrowser()
+
+    const { error: uploadError } = await supabase.storage.from('wedding-photos').upload(path, file)
+    if (uploadError) {
+      toastError('Não foi possível enviar a foto. Verifique o tamanho (máx. 8 MB) e o formato (PNG, JPG, WEBP, HEIC ou GIF).')
+      return null
+    }
+
+    const res = await fetch(`/api/v1/weddings/${weddingId}/gallery-photos`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storage_path: path,
+        size_bytes:   file.size,
+        mime_type:    file.type || null,
+      }),
+    })
+
+    if (!res.ok) {
+      // O upload já subiu pro storage; sem o registro de metadados ele fica órfão — remove.
+      await supabase.storage.from('wedding-photos').remove([path])
+      toastError(await readApiError(res, 'Não foi possível salvar a foto.'))
+      return null
+    }
+
+    const { data } = (await res.json()) as { data: GalleryPhotoRecord }
+    setPhotoSizes((prev) => ({ ...prev, [data.public_url]: data.size_bytes }))
+    setUsedBytes((prev) => prev + data.size_bytes)
+    return data
+  }
+
+  async function deletePhoto(url: string): Promise<boolean> {
+    const markerIndex = url.indexOf(GALLERY_BUCKET_URL_MARKER)
+    // URL externa colada manualmente: só remove da lista de quem chamou, sem tocar na API.
+    if (markerIndex === -1) return true
+
+    const storagePath = url.slice(markerIndex + GALLERY_BUCKET_URL_MARKER.length)
+    const removedSize = photoSizes[url] ?? 0
+
+    const res = await fetch(
+      `/api/v1/weddings/${weddingId}/gallery-photos?storage_path=${encodeURIComponent(storagePath)}`,
+      { method: 'DELETE' },
+    )
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível remover a foto do armazenamento.'))
+      return false
+    }
+
+    setPhotoSizes((prev) => {
+      const next = { ...prev }
+      delete next[url]
+      return next
+    })
+    setUsedBytes((prev) => Math.max(0, prev - removedSize))
+    return true
+  }
+
+  async function patchSite(
+    body: { slug?: string; published?: boolean; cover_photo_url?: string | null; content?: SiteContent },
+  ): Promise<PatchResult> {
     setSaving(true)
     const res = await fetch(apiBase, {
       method:  'PATCH',
@@ -703,16 +790,21 @@ export default function SiteBuilder({
     setSiteId(data.id)
     setSlug(data.slug)
     setPublished(data.published)
+    setCoverPhotoUrl(data.cover_photo_url)
     setContent(parseSiteContent(data.content))
     return { ok: true, message: '' }
   }
 
-  async function saveCapa(values: { slug: string; published: boolean; coverTitle: string }): Promise<PatchResult> {
+  async function saveCapa(
+    values: { slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null },
+  ): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
     if (values.coverTitle) nextContent.cover_title = values.coverTitle
     else delete nextContent.cover_title
 
-    return patchSite({ slug: values.slug, published: values.published, content: nextContent })
+    return patchSite({
+      slug: values.slug, published: values.published, cover_photo_url: values.coverPhotoUrl, content: nextContent,
+    })
   }
 
   async function saveContentPatch(patch: Partial<SiteContent>): Promise<PatchResult> {
@@ -846,8 +938,11 @@ export default function SiteBuilder({
                 slug={slug}
                 published={published}
                 coverTitle={content.cover_title ?? ''}
+                coverPhotoUrl={coverPhotoUrl}
                 publicUrl={publicUrl}
                 saving={saving}
+                onUploadPhoto={uploadPhoto}
+                onDeletePhoto={deletePhoto}
                 onSave={saveCapa}
               />
             )}
@@ -875,12 +970,13 @@ export default function SiteBuilder({
             {active === 'presentes' && <PresentesSection />}
             {active === 'galeria' && (
               <GaleriaSection
-                weddingId={weddingId}
                 galleryUrls={content.gallery_urls ?? []}
                 saving={saving}
                 siteExists={siteExists}
                 storageLimitBytes={storageLimitBytes}
-                storageUsedBytes={storageUsedBytes}
+                usedBytes={usedBytes}
+                onUploadPhoto={uploadPhoto}
+                onDeletePhoto={deletePhoto}
                 onSave={saveContentPatch}
                 onGoToCapa={() => setActive('capa')}
               />

@@ -28,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await Promise.all([
         supabase
           .from('weddings')
-          .select('couple_names, wedding_color')
+          .select('couple_names, wedding_color, wedding_color_secondary')
           .eq('id', userWedding.id)
           .maybeSingle(),
         resolveWeddingPlanId(supabase, userWedding.id),
@@ -48,6 +48,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isPaidPlan(planId) && wedding?.wedding_color
       ? deriveWeddingColorScale(wedding.wedding_color)
       : null
+  const colorScaleSecondary =
+    isPaidPlan(planId) && wedding?.wedding_color_secondary
+      ? deriveWeddingColorScale(wedding.wedding_color_secondary)
+      : null
 
   const weddingColorVars = colorScale
     ? ({
@@ -55,6 +59,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         '--wedding-color-light':  colorScale.light,
         '--wedding-color-dark':   colorScale.dark,
         '--wedding-color-subtle': colorScale.subtle,
+      } as React.CSSProperties)
+    : undefined
+
+  const weddingColorSecondaryVars = colorScaleSecondary
+    ? ({
+        '--wedding-color-secondary':        colorScaleSecondary.color,
+        '--wedding-color-secondary-light':  colorScaleSecondary.light,
+        '--wedding-color-secondary-dark':   colorScaleSecondary.dark,
+        '--wedding-color-secondary-subtle': colorScaleSecondary.subtle,
       } as React.CSSProperties)
     : undefined
 
@@ -66,6 +79,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         fontFamily: 'var(--font-body)',
         color: 'var(--fg)',
         ...weddingColorVars,
+        ...weddingColorSecondaryVars,
       }}
     >
       <Sidebar

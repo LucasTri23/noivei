@@ -65,10 +65,10 @@ export default function Sidebar({ coupleNames, plan, initial, isFreePlan, visibl
               className={cn(
                 'flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition-colors',
                 active
-                  ? 'text-[var(--wedding-color-light)]'
+                  ? 'text-[var(--wedding-color-secondary-light)]'
                   : 'text-[rgba(250,240,230,0.65)] hover:bg-[color-mix(in_srgb,var(--wedding-color)_10%,transparent)] hover:text-[rgba(250,240,230,0.9)]',
               )}
-              style={active ? { background: 'color-mix(in srgb, var(--wedding-color) 18%, transparent)' } : undefined}
+              style={active ? { background: 'color-mix(in srgb, var(--wedding-color-secondary) 18%, transparent)' } : undefined}
             >
               <Icon size={19} />
               <span style={{ fontWeight: active ? 600 : 500 }}>{label}</span>

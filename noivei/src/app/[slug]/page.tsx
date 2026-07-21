@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { getPublicSiteBySlug } from '@/lib/site/get-public-site-by-slug'
 import { createSupabaseService } from '@/lib/supabase/service'
+import { deriveWeddingColorScale } from '@/lib/theme/wedding-color'
 
 // Sites de casal ainda não entraram no roadmap de SEO/indexação do produto
 export const metadata: Metadata = {
@@ -44,6 +45,14 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+function MapPinIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z" /><circle cx="12" cy="10" r="3" />
+    </svg>
+  )
+}
+
 export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const { slug } = await params
 
@@ -63,13 +72,44 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const coverTitle  = site.content.cover_title || site.wedding.couple_names
   const mapsUrl     = buildMapsUrl(site.wedding.venue, site.wedding.city)
 
+  // Cor principal e secundária do casal — mesma derivação de escala (claro/escuro/fundo)
+  // usada no app autenticado, aplicada aqui via CSS vars para todo o site público.
+  const colorScale          = deriveWeddingColorScale(site.wedding.wedding_color)
+  const colorScaleSecondary = deriveWeddingColorScale(site.wedding.wedding_color_secondary)
+  const weddingColorVars = {
+    '--wedding-color':                  colorScale.color,
+    '--wedding-color-light':            colorScale.light,
+    '--wedding-color-dark':             colorScale.dark,
+    '--wedding-color-subtle':           colorScale.subtle,
+    '--wedding-color-secondary':        colorScaleSecondary.color,
+    '--wedding-color-secondary-light':  colorScaleSecondary.light,
+    '--wedding-color-secondary-dark':   colorScaleSecondary.dark,
+    '--wedding-color-secondary-subtle': colorScaleSecondary.subtle,
+  } as React.CSSProperties
+
+  // Fotos da galeria espalhadas pelo site em vez de só num bloco isolado: as duas
+  // primeiras acompanham "Nossa história" e "Cerimônia & festa"; o restante (se sobrar
+  // muitas) fecha o site numa seção de galeria tradicional.
+  const galleryUrls    = site.content.gallery_urls ?? []
+  const storyPhoto     = galleryUrls[0] ?? null
+  const ceremonyPhoto  = galleryUrls[1] ?? null
+  const remainingPhotos = galleryUrls.slice(2)
+
+  // Sem foto de capa, mantém o gradiente escuro atual; com foto, aplica um overlay
+  // escuro semi-transparente por cima pra manter o texto legível.
+  const coverBackground = site.cover_photo_url
+    ? `linear-gradient(rgba(20,12,4,0.6), rgba(20,12,4,0.6)), url(${site.cover_photo_url})`
+    : 'linear-gradient(150deg, #2A1E10, #3A2A18)'
+
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', ...weddingColorVars }}>
       {/* Capa */}
       <div
         className="relative overflow-hidden"
         style={{
-          background: 'linear-gradient(150deg, #2A1E10, #3A2A18)',
+          background:        coverBackground,
+          backgroundSize:     'cover',
+          backgroundPosition: 'center',
           color: '#FAF0E6', padding: '96px 24px', textAlign: 'center',
         }}
       >
@@ -95,34 +135,40 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
               {[weddingDate, place].filter(Boolean).join(' — ')}
             </p>
           )}
-          {mapsUrl && (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '7px', marginTop: '18px',
-                fontSize: '13px', fontWeight: 700, color: '#FAF0E6', textDecoration: 'none',
-                border: '1.5px solid rgba(250,240,230,0.4)', borderRadius: '99px', padding: '9px 18px',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z" /><circle cx="12" cy="10" r="3" />
-              </svg>
-              Como chegar
-            </a>
-          )}
         </div>
       </div>
+
+      {/* Divisor com as duas cores do casal */}
+      <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
       <div style={{ maxWidth: '760px', margin: '0 auto', padding: '56px 24px 80px' }}>
         {/* Nossa história */}
         {site.content.our_story && (
           <section style={{ marginBottom: '56px' }}>
             <SectionTitle>Nossa história</SectionTitle>
-            <p style={{ fontSize: '15.5px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', textAlign: 'center' }}>
-              {site.content.our_story}
-            </p>
+            <div
+              className={storyPhoto ? 'grid gap-8 md:grid-cols-[1fr_280px]' : undefined}
+              style={{ alignItems: 'center' }}
+            >
+              <p
+                style={{
+                  fontSize: '15.5px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line',
+                  textAlign: storyPhoto ? 'left' : 'center',
+                  margin: 0,
+                }}
+              >
+                {site.content.our_story}
+              </p>
+              {storyPhoto && (
+                // eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image
+                <img
+                  src={storyPhoto}
+                  alt="Foto do casal"
+                  className="rounded-2xl"
+                  style={{ width: '100%', height: '260px', objectFit: 'cover' }}
+                />
+              )}
+            </div>
           </section>
         )}
 
@@ -162,7 +208,36 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                   </p>
                 </div>
               )}
+              {ceremonyPhoto && (
+                // eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image
+                <img
+                  src={ceremonyPhoto}
+                  alt="Foto do casal"
+                  className="rounded-2xl"
+                  style={{ width: '100%', height: '100%', minHeight: '160px', objectFit: 'cover' }}
+                />
+              )}
             </div>
+
+            {/* "Como chegar" mora aqui, perto das informações de local/horário, em vez de na capa */}
+            {mapsUrl && (
+              <div style={{ textAlign: 'center', marginTop: '22px' }}>
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color-secondary-dark)', textDecoration: 'none',
+                    border: '1.5px solid var(--wedding-color-secondary)', borderRadius: '99px', padding: '9px 18px',
+                    background: 'var(--wedding-color-secondary-subtle)',
+                  }}
+                >
+                  <MapPinIcon />
+                  Como chegar
+                </a>
+              </div>
+            )}
           </section>
         )}
 
@@ -216,17 +291,17 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           </section>
         )}
 
-        {/* Galeria */}
-        {site.content.gallery_urls && site.content.gallery_urls.length > 0 && (
+        {/* Galeria — só o que sobrou depois de espalhar fotos pelas seções acima */}
+        {remainingPhotos.length > 0 && (
           <section style={{ marginBottom: '56px' }}>
             <SectionTitle>Galeria</SectionTitle>
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px,1fr))' }}>
-              {site.content.gallery_urls.map((url, index) => (
+              {remainingPhotos.map((url, index) => (
                 // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
                 <img
                   key={`${url}-${index}`}
                   src={url}
-                  alt={`Foto ${index + 1} do casal`}
+                  alt={`Foto ${index + 3} do casal`}
                   className="rounded-2xl"
                   style={{ width: '100%', height: '160px', objectFit: 'cover' }}
                 />

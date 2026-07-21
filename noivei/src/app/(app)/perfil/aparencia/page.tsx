@@ -21,7 +21,7 @@ export default async function AparenciaPage() {
     ? await Promise.all([
         supabase
           .from('weddings')
-          .select('id, wedding_color')
+          .select('id, wedding_color, wedding_color_secondary')
           .eq('id', userWedding.id)
           .maybeSingle(),
         resolveWeddingPlanId(supabase, userWedding.id),
@@ -46,6 +46,7 @@ export default async function AparenciaPage() {
       <AppearanceSettings
         weddingId={wedding?.id ?? null}
         weddingColor={wedding?.wedding_color ?? '#C6943A'}
+        weddingColorSecondary={wedding?.wedding_color_secondary ?? '#C89070'}
         isPaid={isPaidPlan(planId)}
       />
     </div>
