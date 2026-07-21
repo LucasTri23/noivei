@@ -18,4 +18,5 @@ export const AssignGuestSchema = z.object({
 })
 
 export type CreateTableInput = z.infer<typeof CreateTableSchema>
+export type UpdateTableInput = z.infer<typeof UpdateTableSchema>
 export type AssignGuestInput = z.infer<typeof AssignGuestSchema>

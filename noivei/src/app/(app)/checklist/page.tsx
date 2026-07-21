@@ -69,6 +69,17 @@ function TrashIcon() {
     </svg>
   )
 }
+function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.18s' }}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  )
+}
 
 function formatDue(dueDate: string | null): string | null {
   if (!dueDate) return null
@@ -95,6 +106,16 @@ export default function ChecklistPage() {
   const [formDueDate, setFormDueDate]     = useState('')
   const [formError, setFormError]         = useState('')
   const [saving, setSaving]               = useState(false)
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+
+  function toggleCategory(title: string) {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(title)) next.delete(title)
+      else next.add(title)
+      return next
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -427,11 +448,26 @@ export default function ChecklistPage() {
           const visible = group.items.filter(filterItem)
           if (visible.length === 0) return null
           const groupDone = group.items.filter((i) => i.completed).length
+          const isCollapsed = collapsedCategories.has(group.title)
           return (
             <div key={group.title} className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F3EAE0' }}>
-                <span className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: 'var(--fg)' }}>
-                  {group.title}
+              <button
+                type="button"
+                onClick={() => toggleCategory(group.title)}
+                aria-expanded={!isCollapsed}
+                className="flex w-full items-center justify-between px-5 py-4"
+                style={{
+                  borderBottom: isCollapsed ? 'none' : '1px solid #F3EAE0',
+                  background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <span style={{ color: 'var(--muted-fg)', display: 'flex' }}>
+                    <ChevronIcon collapsed={isCollapsed} />
+                  </span>
+                  <span className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: 'var(--fg)' }}>
+                    {group.title}
+                  </span>
                 </span>
                 <span style={{
                   fontSize: '12px', fontWeight: 600, padding: '3px 10px',
@@ -439,7 +475,8 @@ export default function ChecklistPage() {
                 }}>
                   {groupDone}/{group.items.length}
                 </span>
-              </div>
+              </button>
+              {!isCollapsed && (
               <div>
                 {visible.map((item, idx) => {
                   const isDone = item.completed
@@ -532,6 +569,7 @@ export default function ChecklistPage() {
                   )
                 })}
               </div>
+              )}
             </div>
           )
         })}

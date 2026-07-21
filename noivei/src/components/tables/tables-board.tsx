@@ -47,6 +47,26 @@ function PlusIcon() {
   )
 }
 
+function EditIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  )
+}
+
 function GuestChip({ name, title, draggable = true, onDragStart }: {
   name: string
   title?: string
@@ -91,14 +111,20 @@ const labelStyle: React.CSSProperties = {
 }
 
 export default function TablesBoard({ weddingId, initialTables, allGuests }: TablesBoardProps) {
-  const [tables, setTables]       = useState<TableWithGuests[]>(initialTables)
-  const [error, setError]         = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [saving, setSaving]       = useState(false)
-  const [formError, setFormError] = useState('')
-  const [form, setForm]           = useState({ label: '', capacity: '8' })
-  const dragging                  = useRef<DragInfo | null>(null)
-  const showSaveSpinner           = useDelayedLoading(saving)
+  const [tables, setTables]             = useState<TableWithGuests[]>(initialTables)
+  const [error, setError]               = useState('')
+  const [modalOpen, setModalOpen]       = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [formError, setFormError]       = useState('')
+  const [form, setForm]                 = useState({ label: '', capacity: '8' })
+  const [editingTable, setEditingTable] = useState<TableWithGuests | null>(null)
+  const [editForm, setEditForm]         = useState({ label: '', capacity: '8' })
+  const [editSaving, setEditSaving]     = useState(false)
+  const [editError, setEditError]       = useState('')
+  const [deletingId, setDeletingId]     = useState<string | null>(null)
+  const dragging                        = useRef<DragInfo | null>(null)
+  const showSaveSpinner                 = useDelayedLoading(saving)
+  const showEditSpinner                 = useDelayedLoading(editSaving)
 
   const apiBase = `/api/v1/weddings/${weddingId}/tables`
 
@@ -215,6 +241,59 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
     setModalOpen(false)
   }
 
+  function openEditModal(table: TableWithGuests) {
+    setEditError('')
+    setEditForm({ label: table.label, capacity: String(table.capacity) })
+    setEditingTable(table)
+  }
+
+  async function handleUpdateTable(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingTable || editSaving) return
+    setEditSaving(true)
+    setEditError('')
+
+    const res = await fetch(`${apiBase}/${editingTable.id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        label:    editForm.label.trim(),
+        capacity: Number(editForm.capacity),
+      }),
+    })
+
+    setEditSaving(false)
+    if (!res.ok) {
+      setEditError(await readApiError(res, 'Não foi possível atualizar a mesa.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: TableConfig }
+    setTables((prev) =>
+      prev.map((t) => (t.id === data.id ? { ...t, label: data.label, capacity: data.capacity } : t)),
+    )
+    setEditingTable(null)
+  }
+
+  async function handleDeleteTable(table: TableWithGuests) {
+    if (deletingId) return
+    const confirmed = window.confirm(`Excluir a mesa "${table.label}"? Os convidados voltam para "sem mesa".`)
+    if (!confirmed) return
+
+    setDeletingId(table.id)
+    setError('')
+
+    const res = await fetch(`${apiBase}/${table.id}`, { method: 'DELETE' })
+
+    setDeletingId(null)
+    if (!res.ok) {
+      setError(await readApiError(res, 'Não foi possível excluir a mesa.'))
+      return
+    }
+
+    setTables((prev) => prev.filter((t) => t.id !== table.id))
+  }
+
   return (
     <div>
       {/* Header */}
@@ -323,22 +402,54 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
                   style={{
                     padding: '12px 16px',
                     borderBottom: '1px solid #F0E8DE',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
                   }}
                 >
-                  <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {table.label}
                   </span>
-                  <span
-                    style={{
-                      fontSize: '12px', fontWeight: 700, padding: '2px 9px',
-                      borderRadius: '99px',
-                      background: full ? '#F6E4DE' : 'var(--wedding-color-subtle)',
-                      color: full ? '#C0553F' : 'var(--wedding-color-dark)',
-                    }}
-                  >
-                    {table.guests.length}/{table.capacity}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    <span
+                      style={{
+                        fontSize: '12px', fontWeight: 700, padding: '2px 9px',
+                        borderRadius: '99px',
+                        background: full ? '#F6E4DE' : 'var(--wedding-color-subtle)',
+                        color: full ? '#C0553F' : 'var(--wedding-color-dark)',
+                      }}
+                    >
+                      {table.guests.length}/{table.capacity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(table)}
+                      aria-label={`Editar ${table.label}`}
+                      title="Editar mesa"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: '24px', height: '24px', borderRadius: '8px',
+                        border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+                        cursor: 'pointer', padding: 0,
+                      }}
+                    >
+                      <EditIcon />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTable(table)}
+                      disabled={deletingId === table.id}
+                      aria-label={`Excluir ${table.label}`}
+                      title="Excluir mesa"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: '24px', height: '24px', borderRadius: '8px',
+                        border: 'none', background: 'transparent', color: '#C0553F',
+                        cursor: deletingId === table.id ? 'wait' : 'pointer', padding: 0,
+                        opacity: deletingId === table.id ? 0.5 : 1,
+                      }}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Guests */}
@@ -420,6 +531,67 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
               }}
             >
               {showSaveSpinner && <Spinner color="#fff" />} Criar mesa
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal de edição de mesa */}
+      <Modal open={editingTable !== null} onClose={() => setEditingTable(null)} title="Editar mesa">
+        <form onSubmit={handleUpdateTable} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="edit-table-label" style={labelStyle}>Nome da mesa *</label>
+            <input
+              id="edit-table-label"
+              type="text"
+              required
+              maxLength={80}
+              value={editForm.label}
+              onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label htmlFor="edit-table-capacity" style={labelStyle}>Capacidade *</label>
+            <input
+              id="edit-table-capacity"
+              type="number"
+              required
+              min={1}
+              max={100}
+              value={editForm.capacity}
+              onChange={(e) => setEditForm((f) => ({ ...f, capacity: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          {editError && (
+            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{editError}</p>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => setEditingTable(null)}
+              style={{
+                background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={editSaving}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '10px 18px',
+                fontWeight: 600, fontSize: '14px',
+                cursor: editSaving ? 'wait' : 'pointer', opacity: editSaving ? 0.7 : 1,
+              }}
+            >
+              {showEditSpinner && <Spinner color="#fff" />} Salvar
             </button>
           </div>
         </form>
