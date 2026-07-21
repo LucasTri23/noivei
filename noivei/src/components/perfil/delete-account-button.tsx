@@ -29,27 +29,16 @@ export default function DeleteAccountButton() {
     setLoading(true)
     setError('')
 
-    // LGPD: soft delete — os dados só são removidos definitivamente após 30 dias
-    // TODO Fase 2: rota de API com service role para anonimizar e excluir a conta (auth.users) de fato
-    const supabase = createSupabaseBrowser()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      router.push('/login')
-      return
-    }
+    const response = await fetch('/api/v1/account/delete', { method: 'DELETE' })
 
-    const { error: dbError } = await supabase
-      .from('weddings')
-      .update({ deleted_at: new Date().toISOString(), is_active: false })
-      .eq('user_id', user.id)
-      .is('deleted_at', null)
-
-    if (dbError) {
+    if (!response.ok) {
+      const data = await response.json()
       setLoading(false)
-      setError('Não foi possível processar a exclusão. Tente novamente.')
+      setError(data.error?.message ?? 'Não foi possível processar a exclusão. Tente novamente.')
       return
     }
 
+    const supabase = createSupabaseBrowser()
     await supabase.auth.signOut()
     router.push('/login')
   }

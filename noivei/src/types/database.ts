@@ -240,6 +240,17 @@ export interface Subscription {
   updated_at:      string
 }
 
+export interface WeddingFile {
+  id:           string
+  wedding_id:   string
+  file_name:    string
+  storage_path: string
+  size_bytes:   number
+  mime_type:    string | null
+  uploaded_by:  string
+  created_at:   string
+}
+
 export interface Profile {
   id:              string
   full_name:       string | null

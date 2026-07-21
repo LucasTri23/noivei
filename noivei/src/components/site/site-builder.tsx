@@ -1,13 +1,36 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
+
+import Spinner from '@/components/ui/spinner'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { useOrigin } from '@/hooks/use-origin'
+import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
+import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
+import type { SiteConfig } from '@/types/database'
 
 type SectionId = 'capa' | 'historia' | 'cerimonia' | 'rsvp' | 'presentes' | 'galeria'
 
 interface Section {
-  id: SectionId
+  id:    SectionId
   label: string
-  icon: React.ReactNode
+  icon:  React.ReactNode
+}
+
+interface SiteBuilderProps {
+  weddingId:   string
+  coupleNames: string
+  initialSite: SiteConfig | null
+}
+
+interface ApiErrorBody {
+  error?: { code?: string; message?: string }
+}
+
+interface PatchResult {
+  ok:      boolean
+  message: string
 }
 
 function ImageIcon() {
@@ -34,18 +57,520 @@ function GlobeIcon() {
 function ExternalLinkIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
 }
+function PlusIcon() {
+  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+}
+function TrashIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+}
 
 const SECTIONS: Section[] = [
-  { id: 'capa',     label: 'Capa',               icon: <ImageIcon /> },
-  { id: 'historia', label: 'Nossa história',      icon: <HeartIcon /> },
-  { id: 'cerimonia',label: 'Cerimônia & festa',   icon: <MapPinIcon /> },
-  { id: 'rsvp',     label: 'Confirmar presença',  icon: <MailCheckIcon /> },
-  { id: 'presentes',label: 'Lista de presentes',  icon: <GiftIcon /> },
-  { id: 'galeria',  label: 'Galeria',             icon: <CameraIcon /> },
+  { id: 'capa',      label: 'Capa',              icon: <ImageIcon /> },
+  { id: 'historia',  label: 'Nossa história',     icon: <HeartIcon /> },
+  { id: 'cerimonia', label: 'Cerimônia & festa',  icon: <MapPinIcon /> },
+  { id: 'rsvp',      label: 'Confirmar presença', icon: <MailCheckIcon /> },
+  { id: 'presentes', label: 'Lista de presentes', icon: <GiftIcon /> },
+  { id: 'galeria',   label: 'Galeria',            icon: <CameraIcon /> },
 ]
 
-export default function SiteBuilder() {
-  const [active, setActive] = useState<SectionId>('capa')
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as ApiErrorBody
+    return body.error?.message ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+const inputStyle: React.CSSProperties = {
+  border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
+  fontSize: '15px', color: 'var(--fg)', background: 'var(--surface)', outline: 'none', width: '100%',
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
+}
+
+const saveButtonStyle = (saving: boolean): React.CSSProperties => ({
+  display: 'flex', alignItems: 'center', gap: '8px',
+  background: 'var(--wedding-color)', color: '#fff', border: 'none',
+  borderRadius: '12px', padding: '11px 20px',
+  fontWeight: 600, fontSize: '14px',
+  cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
+  alignSelf: 'flex-start',
+})
+
+function FeedbackText({ error, success }: { error: string; success: string }) {
+  if (error) return <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{error}</p>
+  if (success) return <p style={{ fontSize: '13.5px', color: '#5E8B6A', margin: 0 }}>{success}</p>
+  return null
+}
+
+function GuardNotice({ onGoToCapa }: { onGoToCapa: () => void }) {
+  return (
+    <div
+      style={{
+        padding: '18px 20px', borderRadius: '14px',
+        background: 'var(--wedding-color-subtle)', border: '1px dashed #D8C6A6',
+        fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.6,
+      }}
+    >
+      Antes de editar esta seção, defina o endereço (slug) do seu site na aba{' '}
+      <button
+        type="button"
+        onClick={onGoToCapa}
+        style={{ border: 'none', background: 'none', padding: 0, color: 'var(--wedding-color)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+      >
+        Capa
+      </button>.
+    </div>
+  )
+}
+
+interface CapaSectionProps {
+  coupleNames: string
+  slug:        string
+  published:   boolean
+  coverTitle:  string
+  publicUrl:   string | null
+  saving:      boolean
+  onSave:      (values: { slug: string; published: boolean; coverTitle: string }) => Promise<PatchResult>
+}
+
+function CapaSection({ coupleNames, slug, published, coverTitle, publicUrl, saving, onSave }: CapaSectionProps) {
+  const [slugDraft, setSlugDraft]   = useState(slug)
+  const [titleDraft, setTitleDraft] = useState(coverTitle)
+  const [publishedDraft, setPublishedDraft] = useState(published)
+  const [error, setError]     = useState('')
+  const [success, setSuccess] = useState('')
+  const showSpinner = useDelayedLoading(saving)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+
+    const parsedSlug = SiteSlugSchema.safeParse(slugDraft)
+    if (!parsedSlug.success) {
+      setError(parsedSlug.error.issues[0]?.message ?? 'Slug inválido.')
+      return
+    }
+
+    const result = await onSave({ slug: parsedSlug.data, published: publishedDraft, coverTitle: titleDraft.trim() })
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    setSuccess('Capa salva com sucesso!')
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="site-cover-title" style={labelStyle}>Título da capa</label>
+        <input
+          id="site-cover-title"
+          type="text"
+          maxLength={160}
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          placeholder={coupleNames}
+          style={inputStyle}
+        />
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '6px' }}>
+          Se deixar em branco, usamos &ldquo;{coupleNames}&rdquo;.
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="site-slug" style={labelStyle}>Endereço do site</label>
+        <input
+          id="site-slug"
+          type="text"
+          required
+          maxLength={60}
+          value={slugDraft}
+          onChange={(e) => setSlugDraft(e.target.value)}
+          placeholder="ana-e-joao"
+          style={inputStyle}
+        />
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '6px' }}>
+          {publicUrl ?? 'Apenas letras minúsculas, números e hífens.'}
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '4px 0' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>Publicar site</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+            Enquanto estiver desligado, apenas você vê o site.
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={publishedDraft}
+          aria-label="Publicar site"
+          onClick={() => setPublishedDraft((v) => !v)}
+          style={{
+            width: '46px', height: '26px', borderRadius: '99px', border: 'none', flexShrink: 0,
+            background: publishedDraft ? 'var(--wedding-color)' : '#D8CCC0',
+            position: 'relative', cursor: 'pointer', transition: 'background 0.2s ease',
+          }}
+        >
+          <span
+            style={{
+              position: 'absolute', top: '3px', left: publishedDraft ? '23px' : '3px',
+              width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+              boxShadow: '0 1px 3px rgba(60,40,24,0.25)', transition: 'left 0.2s ease',
+            }}
+          />
+        </button>
+      </div>
+
+      <FeedbackText error={error} success={success} />
+
+      <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
+        {showSpinner && <Spinner color="#fff" />} Salvar capa
+      </button>
+    </form>
+  )
+}
+
+interface HistoriaSectionProps {
+  ourStory:      string
+  customMessage: string
+  saving:        boolean
+  siteExists:    boolean
+  onSave:        (values: { our_story: string; custom_message: string }) => Promise<PatchResult>
+  onGoToCapa:    () => void
+}
+
+function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, onGoToCapa }: HistoriaSectionProps) {
+  const [storyDraft, setStoryDraft]     = useState(ourStory)
+  const [messageDraft, setMessageDraft] = useState(customMessage)
+  const [error, setError]     = useState('')
+  const [success, setSuccess] = useState('')
+  const showSpinner = useDelayedLoading(saving)
+
+  if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    const result = await onSave({ our_story: storyDraft.trim(), custom_message: messageDraft.trim() })
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    setSuccess('História salva com sucesso!')
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="site-our-story" style={labelStyle}>Nossa história</label>
+        <textarea
+          id="site-our-story"
+          rows={8}
+          maxLength={4000}
+          value={storyDraft}
+          onChange={(e) => setStoryDraft(e.target.value)}
+          placeholder="Como vocês se conheceram, o pedido, curiosidades sobre o casal…"
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
+        />
+      </div>
+      <div>
+        <label htmlFor="site-custom-message" style={labelStyle}>Mensagem para os convidados</label>
+        <textarea
+          id="site-custom-message"
+          rows={3}
+          maxLength={600}
+          value={messageDraft}
+          onChange={(e) => setMessageDraft(e.target.value)}
+          placeholder="Um recado especial para quem visitar o site."
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
+        />
+      </div>
+
+      <FeedbackText error={error} success={success} />
+
+      <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
+        {showSpinner && <Spinner color="#fff" />} Salvar história
+      </button>
+    </form>
+  )
+}
+
+interface CerimoniaSectionProps {
+  ceremonyInfo:  string
+  receptionInfo: string
+  saving:        boolean
+  siteExists:    boolean
+  onSave:        (values: { ceremony_info: string; reception_info: string }) => Promise<PatchResult>
+  onGoToCapa:    () => void
+}
+
+function CerimoniaSection({ ceremonyInfo, receptionInfo, saving, siteExists, onSave, onGoToCapa }: CerimoniaSectionProps) {
+  const [ceremonyDraft, setCeremonyDraft]   = useState(ceremonyInfo)
+  const [receptionDraft, setReceptionDraft] = useState(receptionInfo)
+  const [error, setError]     = useState('')
+  const [success, setSuccess] = useState('')
+  const showSpinner = useDelayedLoading(saving)
+
+  if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    const result = await onSave({ ceremony_info: ceremonyDraft.trim(), reception_info: receptionDraft.trim() })
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    setSuccess('Informações salvas com sucesso!')
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="site-ceremony-info" style={labelStyle}>Cerimônia</label>
+        <textarea
+          id="site-ceremony-info"
+          rows={4}
+          maxLength={2000}
+          value={ceremonyDraft}
+          onChange={(e) => setCeremonyDraft(e.target.value)}
+          placeholder="Endereço, horário e observações da cerimônia."
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
+        />
+      </div>
+      <div>
+        <label htmlFor="site-reception-info" style={labelStyle}>Festa</label>
+        <textarea
+          id="site-reception-info"
+          rows={4}
+          maxLength={2000}
+          value={receptionDraft}
+          onChange={(e) => setReceptionDraft(e.target.value)}
+          placeholder="Endereço, horário e observações da recepção/festa."
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
+        />
+      </div>
+
+      <FeedbackText error={error} success={success} />
+
+      <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
+        {showSpinner && <Spinner color="#fff" />} Salvar cerimônia & festa
+      </button>
+    </form>
+  )
+}
+
+function RsvpSection() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <p style={{ fontSize: '14px', color: 'var(--fg)', lineHeight: 1.6, margin: 0 }}>
+        Não há um formulário público de confirmação de presença. Cada convidado recebe um link pessoal
+        de RSVP por WhatsApp, gerado a partir da sua lista de convidados.
+      </p>
+      <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: 0 }}>
+        Gerencie os convites e envie os links em{' '}
+        <Link href="/convidados" style={{ color: 'var(--wedding-color)', fontWeight: 600, textDecoration: 'underline' }}>
+          Convidados
+        </Link>.
+      </p>
+    </div>
+  )
+}
+
+function PresentesSection() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <p style={{ fontSize: '14px', color: 'var(--fg)', lineHeight: 1.6, margin: 0 }}>
+        Os itens da sua lista de presentes aparecem automaticamente no site público — não é preciso
+        cadastrá-los aqui novamente.
+      </p>
+      <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: 0 }}>
+        Gerencie os itens em{' '}
+        <Link href="/presentes" style={{ color: 'var(--wedding-color)', fontWeight: 600, textDecoration: 'underline' }}>
+          Lista de presentes
+        </Link>.
+      </p>
+    </div>
+  )
+}
+
+interface GaleriaSectionProps {
+  galleryUrls: string[]
+  saving:      boolean
+  siteExists:  boolean
+  onSave:      (values: { gallery_urls: string[] }) => Promise<PatchResult>
+  onGoToCapa:  () => void
+}
+
+function GaleriaSection({ galleryUrls, saving, siteExists, onSave, onGoToCapa }: GaleriaSectionProps) {
+  const [urls, setUrls]       = useState<string[]>(galleryUrls)
+  const [newUrl, setNewUrl]   = useState('')
+  const [error, setError]     = useState('')
+  const [success, setSuccess] = useState('')
+  const showSpinner = useDelayedLoading(saving)
+
+  if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
+
+  function addUrl() {
+    const trimmed = newUrl.trim()
+    if (!trimmed) return
+    setUrls((prev) => [...prev, trimmed])
+    setNewUrl('')
+  }
+
+  function removeUrl(index: number) {
+    setUrls((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    const result = await onSave({ gallery_urls: urls })
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    setSuccess('Galeria salva com sucesso!')
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="site-gallery-url" style={labelStyle}>Adicionar imagem (URL)</label>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            id="site-gallery-url"
+            type="url"
+            maxLength={2048}
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addUrl() } }}
+            placeholder="https://..."
+            style={inputStyle}
+          />
+          <button
+            type="button"
+            onClick={addUrl}
+            aria-label="Adicionar imagem"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '46px', flexShrink: 0, border: 'none', borderRadius: '12px',
+              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', cursor: 'pointer',
+            }}
+          >
+            <PlusIcon />
+          </button>
+        </div>
+      </div>
+
+      {urls.length === 0 ? (
+        <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0 }}>Nenhuma imagem adicionada ainda.</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {urls.map((url, index) => (
+            <li
+              key={`${url}-${index}`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '8px 10px', borderRadius: '10px', border: '1px solid #EBDDD0',
+              }}
+            >
+              <span style={{ flex: 1, fontSize: '13px', color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {url}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeUrl(index)}
+                aria-label="Remover imagem"
+                style={{ border: 'none', background: 'transparent', color: '#C0553F', cursor: 'pointer', padding: '4px' }}
+              >
+                <TrashIcon />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <FeedbackText error={error} success={success} />
+
+      <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
+        {showSpinner && <Spinner color="#fff" />} Salvar galeria
+      </button>
+    </form>
+  )
+}
+
+export default function SiteBuilder({ weddingId, coupleNames, initialSite }: SiteBuilderProps) {
+  const [active, setActive]       = useState<SectionId>('capa')
+  const [siteId, setSiteId]       = useState<string | null>(initialSite?.id ?? null)
+  const [slug, setSlug]           = useState(initialSite?.slug ?? '')
+  const [published, setPublished] = useState(initialSite?.published ?? false)
+  const [content, setContent]     = useState<SiteContent>(() => parseSiteContent(initialSite?.content))
+  const [saving, setSaving]       = useState(false)
+  const origin                    = useOrigin()
+
+  const apiBase  = `/api/v1/weddings/${weddingId}/site`
+  const publicUrl = slug ? `${origin || 'https://…'}/${slug}` : null
+
+  async function patchSite(body: { slug?: string; published?: boolean; content?: SiteContent }): Promise<PatchResult> {
+    setSaving(true)
+    const res = await fetch(apiBase, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    })
+    setSaving(false)
+
+    if (!res.ok) {
+      return { ok: false, message: await readApiError(res, 'Não foi possível salvar. Tente novamente.') }
+    }
+
+    const { data } = (await res.json()) as { data: SiteConfig }
+    setSiteId(data.id)
+    setSlug(data.slug)
+    setPublished(data.published)
+    setContent(parseSiteContent(data.content))
+    return { ok: true, message: '' }
+  }
+
+  async function saveCapa(values: { slug: string; published: boolean; coverTitle: string }): Promise<PatchResult> {
+    const nextContent: SiteContent = { ...content }
+    if (values.coverTitle) nextContent.cover_title = values.coverTitle
+    else delete nextContent.cover_title
+
+    return patchSite({ slug: values.slug, published: values.published, content: nextContent })
+  }
+
+  async function saveContentPatch(patch: Partial<SiteContent>): Promise<PatchResult> {
+    const nextContent: SiteContent = { ...content }
+
+    const textKeys = ['cover_title', 'our_story', 'ceremony_info', 'reception_info', 'custom_message'] as const
+    for (const key of textKeys) {
+      if (!(key in patch)) continue
+      const value = patch[key]
+      if (value) nextContent[key] = value
+      else delete nextContent[key]
+    }
+
+    if ('gallery_urls' in patch) {
+      if (patch.gallery_urls && patch.gallery_urls.length > 0) nextContent.gallery_urls = patch.gallery_urls
+      else delete nextContent.gallery_urls
+    }
+
+    return patchSite({ content: nextContent })
+  }
+
+  const siteExists = siteId !== null
 
   return (
     <div>
@@ -60,20 +585,35 @@ export default function SiteBuilder() {
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '14px', color: 'var(--muted-fg)' }}>
             <GlobeIcon />
-            <span>wednest.com/seu-casamento</span>
+            <span>{publicUrl ?? `${origin || 'https://…'}/seu-slug`}</span>
           </div>
         </div>
-        <button
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'var(--wedding-color)', color: '#fff', border: 'none',
-            borderRadius: '12px', padding: '11px 18px',
-            fontWeight: 600, fontSize: '14px', cursor: 'pointer',
-            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
-          }}
-        >
-          <ExternalLinkIcon /> Publicar
-        </button>
+        {published && publicUrl ? (
+          <a
+            href={publicUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color)', color: '#fff', textDecoration: 'none',
+              borderRadius: '12px', padding: '11px 18px',
+              fontWeight: 600, fontSize: '14px',
+              boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
+            }}
+          >
+            <ExternalLinkIcon /> Ver site publicado
+          </a>
+        ) : (
+          <span
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
+              borderRadius: '12px', padding: '11px 18px', fontWeight: 600, fontSize: '14px',
+            }}
+          >
+            {siteExists ? 'Rascunho — ainda não publicado' : 'Configure a capa para criar seu site'}
+          </span>
+        )}
       </div>
 
       {/* Two columns */}
@@ -106,7 +646,7 @@ export default function SiteBuilder() {
           })}
         </div>
 
-        {/* Browser preview */}
+        {/* Editor panel */}
         <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 10px 28px rgba(60,40,24,0.10)' }}>
           {/* Browser bar */}
           <div
@@ -127,53 +667,57 @@ export default function SiteBuilder() {
                 flex: 1, padding: '5px 14px', borderRadius: '8px',
                 background: '#FFFFFF', border: '1px solid #EBDDD0',
                 fontSize: '12.5px', color: 'var(--muted-fg)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}
             >
-              wednest.com/seu-casamento
+              {publicUrl ?? `${origin || 'https://…'}/seu-slug`}
             </div>
           </div>
 
-          {/* Preview content */}
-          <div
-            style={{
-              height: '520px', position: 'relative', overflow: 'hidden',
-              background: 'linear-gradient(170deg, #F4EADC, #EBD2CB)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            {/* Dot pattern */}
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 22%, transparent) 1.2px, transparent 1.4px)', backgroundSize: '26px 26px' }}
-            />
-
-            <div style={{ position: 'relative', textAlign: 'center', padding: '0 24px' }}>
-              <div
-                className="font-display"
-                style={{ fontSize: 'clamp(48px,8vw,80px)', fontWeight: 500, color: 'var(--fg)', lineHeight: 0.95 }}
-              >
-                Seu Nome & Seu Par
-              </div>
-              <div
-                className="font-display"
-                style={{ fontStyle: 'italic', fontSize: '22px', color: 'var(--wedding-color-dark)', marginTop: '12px' }}
-              >
-                Data do seu casamento
-              </div>
-
-              <button
-                style={{
-                  marginTop: '32px',
-                  display: 'inline-flex', alignItems: 'center', gap: '8px',
-                  background: 'var(--wedding-color)', color: '#fff', border: 'none',
-                  borderRadius: '12px', padding: '13px 26px',
-                  fontWeight: 600, fontSize: '15px', cursor: 'pointer',
-                  boxShadow: '0 8px 22px color-mix(in srgb, var(--wedding-color) 38%, transparent)',
-                }}
-              >
-                Confirmar presença
-              </button>
-            </div>
+          {/* Editor content */}
+          <div style={{ padding: '26px' }}>
+            {active === 'capa' && (
+              <CapaSection
+                coupleNames={coupleNames}
+                slug={slug}
+                published={published}
+                coverTitle={content.cover_title ?? ''}
+                publicUrl={publicUrl}
+                saving={saving}
+                onSave={saveCapa}
+              />
+            )}
+            {active === 'historia' && (
+              <HistoriaSection
+                ourStory={content.our_story ?? ''}
+                customMessage={content.custom_message ?? ''}
+                saving={saving}
+                siteExists={siteExists}
+                onSave={saveContentPatch}
+                onGoToCapa={() => setActive('capa')}
+              />
+            )}
+            {active === 'cerimonia' && (
+              <CerimoniaSection
+                ceremonyInfo={content.ceremony_info ?? ''}
+                receptionInfo={content.reception_info ?? ''}
+                saving={saving}
+                siteExists={siteExists}
+                onSave={saveContentPatch}
+                onGoToCapa={() => setActive('capa')}
+              />
+            )}
+            {active === 'rsvp' && <RsvpSection />}
+            {active === 'presentes' && <PresentesSection />}
+            {active === 'galeria' && (
+              <GaleriaSection
+                galleryUrls={content.gallery_urls ?? []}
+                saving={saving}
+                siteExists={siteExists}
+                onSave={saveContentPatch}
+                onGoToCapa={() => setActive('capa')}
+              />
+            )}
           </div>
         </div>
       </div>
