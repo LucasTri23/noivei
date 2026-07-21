@@ -1,27 +1,55 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 
-interface Table {
-  id: string
-  label: string
-  cap: number
-  guests: string[]
+import Modal from '@/components/ui/modal'
+import Spinner from '@/components/ui/spinner'
+import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import type { Guest, TableConfig } from '@/types/database'
+
+export type TableGuest = Pick<Guest, 'id' | 'name' | 'group_name'>
+
+export interface TableWithGuests extends TableConfig {
+  guests: TableGuest[]
 }
 
-interface State {
-  unassigned: string[]
-  tables: Table[]
+interface TablesBoardProps {
+  weddingId:     string
+  initialTables: TableWithGuests[]
+  allGuests:     TableGuest[]
 }
 
-// Sem dados padrão ainda — mesas vazias até definirmos o template
-const INITIAL: State = {
-  unassigned: [],
-  tables: [],
+interface ApiErrorBody {
+  error?: { code?: string; message?: string }
 }
 
-function GuestChip({ name, draggable = true, onDragStart }: {
+interface DragInfo {
+  guestId: string
+  source:  string
+}
+
+const UNASSIGNED = 'unassigned'
+
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as ApiErrorBody
+    return body.error?.message ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+function PlusIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
+function GuestChip({ name, title, draggable = true, onDragStart }: {
   name: string
+  title?: string
   draggable?: boolean
   onDragStart?: () => void
 }) {
@@ -30,6 +58,7 @@ function GuestChip({ name, draggable = true, onDragStart }: {
     <div
       draggable={draggable}
       onDragStart={onDragStart}
+      title={title}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '6px',
         padding: '5px 10px', borderRadius: '99px',
@@ -52,72 +81,178 @@ function GuestChip({ name, draggable = true, onDragStart }: {
   )
 }
 
-export default function TablesBoard() {
-  const [state, setState] = useState<State>(INITIAL)
-  const dragging = useRef<{ name: string; source: string } | null>(null)
+const inputStyle: React.CSSProperties = {
+  border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
+  fontSize: '15px', color: 'var(--fg)', background: 'var(--surface)', outline: 'none', width: '100%',
+}
 
-  function handleDragStart(name: string, source: string) {
-    dragging.current = { name, source }
+const labelStyle: React.CSSProperties = {
+  fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
+}
+
+export default function TablesBoard({ weddingId, initialTables, allGuests }: TablesBoardProps) {
+  const [tables, setTables]       = useState<TableWithGuests[]>(initialTables)
+  const [error, setError]         = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState('')
+  const [form, setForm]           = useState({ label: '', capacity: '8' })
+  const dragging                  = useRef<DragInfo | null>(null)
+  const showSaveSpinner           = useDelayedLoading(saving)
+
+  const apiBase = `/api/v1/weddings/${weddingId}/tables`
+
+  const assignedIds = new Set(tables.flatMap((t) => t.guests.map((g) => g.id)))
+  const unassigned  = allGuests.filter((g) => !assignedIds.has(g.id))
+
+  const totalGuests = tables.reduce((sum, t) => sum + t.guests.length, 0)
+  const totalCap    = tables.reduce((sum, t) => sum + t.capacity, 0)
+
+  function handleDragStart(guestId: string, source: string) {
+    dragging.current = { guestId, source }
   }
 
-  function handleDrop(target: string) {
-    if (!dragging.current) return
-    const { name, source } = dragging.current
+  async function resyncTables(fallback: TableWithGuests[]) {
+    try {
+      const res = await fetch(apiBase)
+      if (!res.ok) {
+        setTables(fallback)
+        return
+      }
+      const { data } = (await res.json()) as { data: TableWithGuests[] }
+      setTables(data)
+    } catch {
+      setTables(fallback)
+    }
+  }
+
+  async function handleDrop(target: string) {
+    const info = dragging.current
+    dragging.current = null
+    if (!info) return
+    const { guestId, source } = info
     if (source === target) return
 
-    setState((prev) => {
-      const next: State = {
-        unassigned: [...prev.unassigned],
-        tables: prev.tables.map((t) => ({ ...t, guests: [...t.guests] })),
-      }
+    const guest = allGuests.find((g) => g.id === guestId)
+    if (!guest) return
 
-      // Remove from source
-      if (source === 'unassigned') {
-        next.unassigned = next.unassigned.filter((g) => g !== name)
-      } else {
-        const t = next.tables.find((t) => t.id === source)
-        if (t) t.guests = t.guests.filter((g) => g !== name)
+    // Evita chamada desnecessária quando já sabemos que a mesa de destino está cheia
+    if (target !== UNASSIGNED) {
+      const destination = tables.find((t) => t.id === target)
+      if (destination && destination.guests.length >= destination.capacity) {
+        setError('Esta mesa já atingiu a capacidade máxima.')
+        return
       }
+    }
 
-      // Add to target
-      if (target === 'unassigned') {
-        next.unassigned.push(name)
-      } else {
-        const t = next.tables.find((t) => t.id === target)
-        if (t && t.guests.length < t.cap) {
-          t.guests.push(name)
-        } else if (t && t.guests.length >= t.cap) {
-          // full — return to source
-          if (source === 'unassigned') next.unassigned.push(name)
-          else {
-            const s = next.tables.find((tb) => tb.id === source)
-            if (s) s.guests.push(name)
-          }
+    const previous = tables
+    setError('')
+    setTables((prev) => {
+      const next = prev.map((t) => ({ ...t, guests: [...t.guests] }))
+      if (source !== UNASSIGNED) {
+        const src = next.find((t) => t.id === source)
+        if (src) src.guests = src.guests.filter((g) => g.id !== guestId)
+      }
+      if (target !== UNASSIGNED) {
+        const dst = next.find((t) => t.id === target)
+        if (dst) dst.guests.push(guest)
+      }
+      return next
+    })
+
+    try {
+      if (source !== UNASSIGNED) {
+        const res = await fetch(`${apiBase}/${source}/assign/${guestId}`, { method: 'DELETE' })
+        if (!res.ok) {
+          setTables(previous)
+          setError(await readApiError(res, 'Não foi possível mover o convidado.'))
+          return
         }
       }
 
-      return next
-    })
-    dragging.current = null
+      if (target !== UNASSIGNED) {
+        const res = await fetch(`${apiBase}/${target}/assign`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ guest_id: guestId }),
+        })
+        if (!res.ok) {
+          setError(await readApiError(res, 'Não foi possível alocar o convidado nesta mesa.'))
+          await resyncTables(previous)
+          return
+        }
+      }
+    } catch {
+      setError('Erro de conexão com o servidor. Tente novamente.')
+      await resyncTables(previous)
+    }
   }
 
-  const totalGuests = state.tables.reduce((sum, t) => sum + t.guests.length, 0)
-  const totalCap    = state.tables.reduce((sum, t) => sum + t.cap, 0)
+  async function handleCreateTable(e: React.FormEvent) {
+    e.preventDefault()
+    if (saving) return
+    setSaving(true)
+    setFormError('')
+
+    const res = await fetch(apiBase, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        label:    form.label.trim(),
+        capacity: Number(form.capacity),
+      }),
+    })
+
+    setSaving(false)
+    if (!res.ok) {
+      setFormError(await readApiError(res, 'Não foi possível criar a mesa.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: TableConfig }
+    setTables((prev) => [...prev, { ...data, guests: [] }])
+    setForm({ label: '', capacity: '8' })
+    setModalOpen(false)
+  }
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1
-          className="font-display"
-          style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1
+            className="font-display"
+            style={{ fontWeight: 500, fontSize: 'clamp(30px,4.2vw,42px)', lineHeight: 1.05, color: 'var(--fg)' }}
+          >
+            Organização das mesas
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
+            Arraste os convidados para as mesas · {totalGuests}/{totalCap} lugares preenchidos
+          </p>
+        </div>
+        <button
+          onClick={() => { setFormError(''); setModalOpen(true) }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: 'var(--wedding-color)', color: '#fff', border: 'none',
+            borderRadius: '12px', padding: '10px 16px',
+            fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
+          }}
         >
-          Organização das mesas
-        </h1>
-        <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
-          Arraste os convidados para as mesas · {totalGuests}/{totalCap} lugares preenchidos
-        </p>
+          <PlusIcon /> Nova mesa
+        </button>
       </div>
+
+      {error && (
+        <div
+          className="mb-5 rounded-2xl p-4"
+          style={{ background: '#F6E4DE', border: '1px solid #C0553F', fontSize: '14px', color: '#C0553F' }}
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-5" style={{ gridTemplateColumns: '260px 1fr' }}>
         {/* Unassigned */}
@@ -128,25 +263,26 @@ export default function TablesBoard() {
               textTransform: 'uppercase', color: 'var(--muted-fg)', marginBottom: '10px',
             }}
           >
-            Sem mesa ({state.unassigned.length})
+            Sem mesa ({unassigned.length})
           </div>
           <div
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => handleDrop('unassigned')}
+            onDrop={() => handleDrop(UNASSIGNED)}
             style={{
               minHeight: '220px', borderRadius: '18px', padding: '14px',
               border: '2px dashed #EBDDD0', background: 'var(--wedding-color-subtle)',
               display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'flex-start',
             }}
           >
-            {state.unassigned.map((name) => (
+            {unassigned.map((guest) => (
               <GuestChip
-                key={name}
-                name={name}
-                onDragStart={() => handleDragStart(name, 'unassigned')}
+                key={guest.id}
+                name={guest.name}
+                title={guest.group_name ?? undefined}
+                onDragStart={() => handleDragStart(guest.id, UNASSIGNED)}
               />
             ))}
-            {state.unassigned.length === 0 && (
+            {unassigned.length === 0 && (
               <span style={{ fontSize: '13px', color: '#C8B4A0', padding: '8px 4px' }}>
                 Todos alocados!
               </span>
@@ -156,7 +292,7 @@ export default function TablesBoard() {
 
         {/* Tables grid */}
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))' }}>
-          {state.tables.length === 0 && (
+          {tables.length === 0 && (
             <div
               style={{
                 gridColumn: '1 / -1', borderRadius: '18px', padding: '40px',
@@ -167,8 +303,8 @@ export default function TablesBoard() {
               Nenhuma mesa criada ainda.
             </div>
           )}
-          {state.tables.map((table) => {
-            const full = table.guests.length >= table.cap
+          {tables.map((table) => {
+            const full = table.guests.length >= table.capacity
             return (
               <div
                 key={table.id}
@@ -176,7 +312,7 @@ export default function TablesBoard() {
                 onDrop={() => handleDrop(table.id)}
                 style={{
                   borderRadius: '18px', background: 'var(--surface)',
-                  border: `2px dashed ${full ? '#EBDDD0' : '#EBDDD0'}`,
+                  border: '2px dashed #EBDDD0',
                   overflow: 'hidden',
                   boxShadow: '0 4px 14px rgba(60,40,24,0.06)',
                   minHeight: '130px',
@@ -201,17 +337,18 @@ export default function TablesBoard() {
                       color: full ? '#C0553F' : 'var(--wedding-color-dark)',
                     }}
                   >
-                    {table.guests.length}/{table.cap}
+                    {table.guests.length}/{table.capacity}
                   </span>
                 </div>
 
                 {/* Guests */}
                 <div style={{ padding: '12px 16px', display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '64px' }}>
-                  {table.guests.map((name) => (
+                  {table.guests.map((guest) => (
                     <GuestChip
-                      key={name}
-                      name={name}
-                      onDragStart={() => handleDragStart(name, table.id)}
+                      key={guest.id}
+                      name={guest.name}
+                      title={guest.group_name ?? undefined}
+                      onDragStart={() => handleDragStart(guest.id, table.id)}
                     />
                   ))}
                   {table.guests.length === 0 && (
@@ -225,6 +362,68 @@ export default function TablesBoard() {
           })}
         </div>
       </div>
+
+      {/* Modal de nova mesa */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova mesa">
+        <form onSubmit={handleCreateTable} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="table-label" style={labelStyle}>Nome da mesa *</label>
+            <input
+              id="table-label"
+              type="text"
+              required
+              maxLength={80}
+              value={form.label}
+              onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+              placeholder="Mesa 1, Família da noiva…"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label htmlFor="table-capacity" style={labelStyle}>Capacidade *</label>
+            <input
+              id="table-capacity"
+              type="number"
+              required
+              min={1}
+              max={100}
+              value={form.capacity}
+              onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          {formError && (
+            <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{formError}</p>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              style={{
+                background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '10px 18px',
+                fontWeight: 600, fontSize: '14px',
+                cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
+              }}
+            >
+              {showSaveSpinner && <Spinner color="#fff" />} Criar mesa
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
