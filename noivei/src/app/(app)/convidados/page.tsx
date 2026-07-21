@@ -8,7 +8,7 @@ export default async function ConvidadosPage() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id')
+    .select('id, rsvp_message_template')
     .is('deleted_at', null)
     .order('created_at')
     .limit(1)
@@ -39,6 +39,7 @@ export default async function ConvidadosPage() {
       weddingId={wedding.id as string}
       initialGuests={(guests ?? []) as Guest[]}
       guestLimit={limitCheck.limit}
+      rsvpMessageTemplate={wedding.rsvp_message_template as string | null}
     />
   )
 }

@@ -12,7 +12,7 @@ export default async function DadosDoCasamentoPage() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id, bride_name, groom_name, wedding_date, venue, city, budget, style')
+    .select('id, bride_name, groom_name, wedding_date, venue, city, budget, style, rsvp_message_template')
     .eq('user_id', user.id)
     .is('deleted_at', null)
     .order('created_at')
@@ -47,6 +47,7 @@ export default async function DadosDoCasamentoPage() {
             city:         wedding.city,
             budget:       wedding.budget,
             style:        wedding.style,
+            rsvp_message_template: wedding.rsvp_message_template,
           }}
         />
       </div>

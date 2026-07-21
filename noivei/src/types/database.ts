@@ -52,6 +52,7 @@ export interface Wedding {
   budget:         number | null
   style:          WeddingStyle | null
   wedding_color:  string
+  rsvp_message_template: string | null
   wedding_score:  number
   score_calculated_at: string | null
   is_active:      boolean

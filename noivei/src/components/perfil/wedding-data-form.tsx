@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
@@ -10,6 +10,7 @@ import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import Spinner from '@/components/ui/spinner'
 import DatePicker from '@/components/ui/date-picker'
 import CurrencyInput from '@/components/ui/currency-input'
+import { DEFAULT_RSVP_MESSAGE_TEMPLATE, fillRsvpMessageTemplate } from '@/lib/rsvp/build-whatsapp-link'
 import type { WeddingStyle } from '@/types/database'
 
 const STYLE_OPTIONS: { value: WeddingStyle; label: string }[] = [
@@ -30,6 +31,7 @@ const WeddingDataSchema = z.object({
   city:         z.string().trim().max(120, 'Cidade muito longa').optional(),
   budget:       z.number().nullable().optional(),
   style:        z.union([z.enum(['rustico', 'classico', 'moderno', 'boho', 'minimalista', 'romantico', 'outro']), z.literal('')]).optional(),
+  rsvp_message_template: z.string().trim().max(500, 'Mensagem muito longa').optional(),
 })
 type WeddingDataFields = z.infer<typeof WeddingDataSchema>
 
@@ -43,6 +45,7 @@ interface WeddingDataFormProps {
     city:         string | null
     budget:       number | null
     style:        WeddingStyle | null
+    rsvp_message_template: string | null
   }
 }
 
@@ -55,6 +58,10 @@ const labelStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
   fontSize: '15px', color: 'var(--fg)', background: 'var(--surface)', outline: 'none', width: '100%',
+}
+
+function previewRsvpMessage(template: string): string {
+  return fillRsvpMessageTemplate(template, 'Maria', 'https://noivei.app/rsvp/exemplo-token')
 }
 
 export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormProps) {
@@ -74,8 +81,11 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
       city:         initial.city ?? '',
       budget:       initial.budget,
       style:        initial.style ?? '',
+      rsvp_message_template: initial.rsvp_message_template ?? DEFAULT_RSVP_MESSAGE_TEMPLATE,
     },
   })
+
+  const messageTemplate = useWatch({ control, name: 'rsvp_message_template' })
 
   async function onSubmit(data: WeddingDataFields) {
     setLoading(true)
@@ -97,6 +107,7 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
         city:         data.city?.trim() || null,
         budget:       data.budget ?? null,
         style:        data.style || null,
+        rsvp_message_template: data.rsvp_message_template?.trim() || DEFAULT_RSVP_MESSAGE_TEMPLATE,
         ...(coupleNames ? { couple_names: coupleNames } : {}),
       })
       .eq('id', weddingId)
@@ -173,6 +184,32 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
               <CurrencyInput id="budget" value={field.value ?? null} onChange={field.onChange} />
             )}
           />
+        </div>
+      </div>
+
+      <div style={fieldWrapStyle}>
+        <label style={labelStyle} htmlFor="rsvp_message_template">Mensagem de convite (WhatsApp)</label>
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '-2px 0 2px' }}>
+          Usada no botão de WhatsApp da tela de Convidados. Use <strong>{'{nome}'}</strong> para o nome do convidado
+          e <strong>{'{link}'}</strong> para o link de confirmação — ambos são substituídos automaticamente.
+        </p>
+        <textarea
+          id="rsvp_message_template"
+          rows={3}
+          maxLength={500}
+          {...register('rsvp_message_template')}
+          placeholder={DEFAULT_RSVP_MESSAGE_TEMPLATE}
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        {errors.rsvp_message_template && (
+          <p style={{ fontSize: '12px', color: '#C0553F' }}>{errors.rsvp_message_template.message}</p>
+        )}
+        <div
+          className="rounded-xl p-3"
+          style={{ background: 'var(--wedding-color-subtle)', fontSize: '13px', color: 'var(--fg)', lineHeight: 1.5 }}
+        >
+          <span style={{ fontWeight: 600, display: 'block', marginBottom: '2px' }}>Prévia:</span>
+          {previewRsvpMessage(messageTemplate || DEFAULT_RSVP_MESSAGE_TEMPLATE)}
         </div>
       </div>
 
