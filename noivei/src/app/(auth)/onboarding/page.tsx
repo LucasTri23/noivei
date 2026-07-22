@@ -14,6 +14,7 @@ import { generateChecklistItems } from '@/lib/checklist/generate'
 import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
 import { isPaidPlan } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
+import { toastError } from '@/store/toast.store'
 
 interface IbgeMunicipio {
   nome: string
@@ -190,7 +191,7 @@ export default function OnboardingPage() {
       : { ...DEFAULT_ANSWERS, convidados }
     const weddingDate = data.date || null
 
-    const { data: wedding } = await supabase
+    const { data: wedding, error: weddingError } = await supabase
       .from('weddings')
       .insert({
         user_id:      user.id,
@@ -207,44 +208,61 @@ export default function OnboardingPage() {
       .select('id')
       .single()
 
-    if (wedding) {
-      if (paidPlan) {
-        await supabase.from('wedding_preferences').insert({
-          wedding_id: wedding.id,
-          answers:    finalAnswers,
-        })
+    // Sem essa checagem, uma falha aqui (RLS, migration não aplicada, coluna
+    // faltando etc.) passava batido: o código seguia direto pro router.push
+    // no final, o dashboard via que não existe casamento e mandava de volta pro
+    // onboarding — que reinicia do zero (todas as respostas digitadas se perdem),
+    // dando a impressão de "voltou pra primeira pergunta" sem explicar o motivo.
+    if (weddingError || !wedding) {
+      // Detalhe fica só no console (debug) — nunca expor erro cru do banco na UI.
+      console.error('[onboarding] falha ao criar casamento:', weddingError)
+      setLoading(false)
+      toastError('Não foi possível criar o seu casamento. Tente novamente em instantes.')
+      return
+    }
 
-        try {
-          const facts = deriveFacts(finalAnswers, weddingDate)
-          await generateChecklistItems(supabase, wedding.id, facts, weddingDate)
-        } catch {
-          // Checklist pode ser gerado depois em /checklist — não bloqueia a entrada no dashboard
-        }
-      } else {
-        try {
-          await generateFreeChecklistItems(supabase, wedding.id)
-        } catch {
-          // Checklist pode ser gerado depois em /checklist — não bloqueia a entrada no dashboard
-        }
+    if (paidPlan) {
+      await supabase.from('wedding_preferences').insert({
+        wedding_id: wedding.id,
+        answers:    finalAnswers,
+      })
+
+      try {
+        const facts = deriveFacts(finalAnswers, weddingDate)
+        await generateChecklistItems(supabase, wedding.id, facts, weddingDate)
+      } catch {
+        // Checklist pode ser gerado depois em /checklist — não bloqueia a entrada no dashboard
+      }
+    } else {
+      try {
+        await generateFreeChecklistItems(supabase, wedding.id)
+      } catch {
+        // Checklist pode ser gerado depois em /checklist — não bloqueia a entrada no dashboard
       }
     }
 
     // Cadastro cria assinatura gratuita via trigger — plano pago atualiza a existente
     // (mesmo padrão simulado do PlanSelector; gateway real é escopo da Fase 2).
+    // O casamento já foi criado com sucesso acima — uma falha só nesta parte não deve
+    // travar a entrada no dashboard, só avisar que o plano precisa ser escolhido de novo.
     if (paidPlan) {
-      const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      try {
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-      if (subscription) {
-        await supabase.from('subscriptions').update({ plan_id: data.plan }).eq('id', subscription.id)
-      } else {
-        await supabase.from('subscriptions').insert({ user_id: user.id, plan_id: data.plan, status: 'active' })
+        if (subscription) {
+          await supabase.from('subscriptions').update({ plan_id: data.plan }).eq('id', subscription.id)
+        } else {
+          await supabase.from('subscriptions').insert({ user_id: user.id, plan_id: data.plan, status: 'active' })
+        }
+      } catch {
+        toastError('Seu casamento foi criado, mas não foi possível ativar o plano pago agora — escolha de novo em Perfil > Planos.')
       }
     }
 
