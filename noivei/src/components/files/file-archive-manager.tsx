@@ -101,6 +101,8 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
 export default function FileArchiveManager({ weddingId, initialFiles, storageLimitBytes }: FileArchiveManagerProps) {
   const [files, setFiles]           = useState<WeddingFile[]>(initialFiles)
   const [uploading, setUploading]   = useState(false)
+  // Progresso do lote de upload (múltiplos arquivos selecionados de uma vez) — null fora de um upload
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
   const [deleting, setDeleting]     = useState<WeddingFile | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
@@ -111,24 +113,17 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   const usedBytes = files.reduce((sum, f) => sum + f.size_bytes, 0)
   const usedPct   = storageLimitBytes > 0 ? Math.min(100, (usedBytes / storageLimitBytes) * 100) : 0
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || uploading) return
-
-    setUploading(true)
-
+  // Envia um único arquivo: sobe os bytes direto pro Storage (não passa pela Route Handler —
+  // evita o limite de body de poucos MB dos Route Handlers em produção e usa a RLS de
+  // storage.objects, que já garante posse pelo prefixo do path) e registra os metadados via API.
+  async function uploadOneFile(file: File): Promise<boolean> {
     const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
     const supabase = createSupabaseBrowser()
 
-    // Upload direto do browser pro Storage (não passa pela Route Handler): evita o limite
-    // de body de poucos MB dos Route Handlers em produção e usa a RLS de storage.objects
-    // (que já garante posse pelo prefixo do path) em vez de reimplementar isso na API.
     const { error: uploadError } = await supabase.storage.from('wedding-files').upload(path, file)
     if (uploadError) {
-      setUploading(false)
-      toastError('Não foi possível enviar o arquivo. Verifique o tamanho (máx. 10 MB) e tente novamente.')
-      return
+      toastError(`Não foi possível enviar "${file.name}". Verifique o tamanho (máx. 10 MB) e tente novamente.`)
+      return false
     }
 
     const res = await fetch(apiBase, {
@@ -145,13 +140,36 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
     if (!res.ok) {
       // O upload já subiu pro storage; sem o registro de metadados ele fica órfão — remove.
       await supabase.storage.from('wedding-files').remove([path])
-      setUploading(false)
-      toastError(await readApiError(res, 'Não foi possível salvar o arquivo.'))
-      return
+      toastError(`"${file.name}": ${await readApiError(res, 'Não foi possível salvar o arquivo.')}`)
+      return false
     }
 
     const { data } = (await res.json()) as { data: WeddingFile }
     setFiles((prev) => [data, ...prev])
+    return true
+  }
+
+  // Upload em lote: envia um arquivo de cada vez (sequencial, não em paralelo) para que a
+  // checagem de cota de armazenamento (checkStorageLimit, feita a cada POST) sempre veja o
+  // uso já atualizado pelos uploads anteriores do mesmo lote. Decisão de UX: seguimos o lote
+  // mesmo se um arquivo estourar a cota ou falhar por outro motivo — os que couberem são
+  // salvos normalmente (cada falha já mostra seu próprio erro), em vez de abortar tudo no
+  // primeiro problema e descartar uploads que já eram válidos.
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    if (selected.length === 0 || uploading) return
+
+    setUploading(true)
+
+    for (let i = 0; i < selected.length; i++) {
+      setUploadProgress({ current: i + 1, total: selected.length })
+      const file = selected[i]
+      if (!file) continue
+      await uploadOneFile(file)
+    }
+
+    setUploadProgress(null)
     setUploading(false)
   }
 
@@ -216,9 +234,9 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
           }}
         >
           {showUploadSpinner ? <Spinner color="#fff" /> : <UploadIcon />}
-          {uploading ? 'Enviando…' : 'Enviar arquivo'}
+          {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Enviar arquivo'}
         </button>
-        <input ref={inputRef} type="file" onChange={handleFileChange} style={{ display: 'none' }} />
+        <input ref={inputRef} type="file" multiple onChange={handleFileChange} style={{ display: 'none' }} />
       </div>
 
       {/* Barra de uso */}

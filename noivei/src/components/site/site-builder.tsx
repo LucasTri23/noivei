@@ -159,25 +159,29 @@ function GuardNotice({ onGoToCapa }: { onGoToCapa: () => void }) {
 }
 
 interface CapaSectionProps {
-  coupleNames:   string
-  slug:          string
-  published:     boolean
-  coverTitle:    string
-  coverPhotoUrl: string | null
-  publicUrl:     string | null
-  saving:        boolean
+  coupleNames:         string
+  slug:                string
+  published:           boolean
+  coverTitle:          string
+  coverPhotoUrl:       string | null
+  coverPhotoPosition:  number
+  publicUrl:           string | null
+  saving:              boolean
   onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto: (url: string) => Promise<boolean>
-  onSave: (values: { slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null }) => Promise<PatchResult>
+  onSave: (values: {
+    slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
+  }) => Promise<PatchResult>
 }
 
 function CapaSection({
-  coupleNames, slug, published, coverTitle, coverPhotoUrl, publicUrl, saving, onUploadPhoto, onDeletePhoto, onSave,
+  coupleNames, slug, published, coverTitle, coverPhotoUrl, coverPhotoPosition, publicUrl, saving, onUploadPhoto, onDeletePhoto, onSave,
 }: CapaSectionProps) {
   const [slugDraft, setSlugDraft]   = useState(slug)
   const [titleDraft, setTitleDraft] = useState(coverTitle)
   const [publishedDraft, setPublishedDraft] = useState(published)
   const [coverDraft, setCoverDraft] = useState<string | null>(coverPhotoUrl)
+  const [positionDraft, setPositionDraft] = useState(coverPhotoPosition)
   const [uploading, setUploading]   = useState(false)
   // Erro de validação do slug fica local ao campo — não é resultado de uma ação de rede
   const [error, setError]     = useState('')
@@ -196,6 +200,7 @@ function CapaSection({
     if (!uploaded) return
 
     setCoverDraft(uploaded.public_url)
+    setPositionDraft(50) // Foto nova: volta pro centro em vez de manter o ajuste da foto anterior
   }
 
   async function handleRemoveCover() {
@@ -217,6 +222,7 @@ function CapaSection({
 
     const result = await onSave({
       slug: parsedSlug.data, published: publishedDraft, coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft,
+      coverPhotoPosition: positionDraft,
     })
     if (!result.ok) {
       toastError(result.message)
@@ -246,23 +252,48 @@ function CapaSection({
       <div>
         <label style={labelStyle}>Foto de capa</label>
         {coverDraft ? (
-          <div className="relative overflow-hidden rounded-2xl" style={{ border: '1.5px solid #EBDDD0' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
-            <img src={coverDraft} alt="Foto de capa" style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} />
-            <button
-              type="button"
-              onClick={handleRemoveCover}
-              aria-label="Remover foto de capa"
-              style={{
-                position: 'absolute', top: '10px', right: '10px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '30px', height: '30px', border: 'none', borderRadius: '10px',
-                background: 'rgba(20,12,4,0.55)', color: '#fff', cursor: 'pointer',
-              }}
-            >
-              <TrashIcon />
-            </button>
-          </div>
+          <>
+            <div className="relative overflow-hidden rounded-2xl" style={{ border: '1.5px solid #EBDDD0' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
+              <img
+                src={coverDraft}
+                alt="Foto de capa"
+                style={{ width: '100%', height: '150px', objectFit: 'cover', objectPosition: `center ${positionDraft}%`, display: 'block' }}
+              />
+              <button
+                type="button"
+                onClick={handleRemoveCover}
+                aria-label="Remover foto de capa"
+                style={{
+                  position: 'absolute', top: '10px', right: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '30px', height: '30px', border: 'none', borderRadius: '10px',
+                  background: 'rgba(20,12,4,0.55)', color: '#fff', cursor: 'pointer',
+                }}
+              >
+                <TrashIcon />
+              </button>
+            </div>
+
+            <div style={{ marginTop: '12px' }}>
+              <label htmlFor="site-cover-position" style={{ ...labelStyle, marginBottom: '4px' }}>
+                Posição vertical da foto
+              </label>
+              <input
+                id="site-cover-position"
+                type="range"
+                min={0}
+                max={100}
+                value={positionDraft}
+                onChange={(e) => setPositionDraft(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--wedding-color)' }}
+              />
+              <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+                {positionDraft === 0 ? 'Topo' : positionDraft === 100 ? 'Base' : positionDraft === 50 ? 'Centro' : `${positionDraft}%`}
+                {' — '}ajuste se o casal ficar cortado na prévia acima.
+              </p>
+            </div>
+          </>
         ) : (
           <button
             type="button"
@@ -513,6 +544,8 @@ function GaleriaSection({
   const [urls, setUrls]           = useState<string[]>(galleryUrls)
   const [newUrl, setNewUrl]       = useState('')
   const [uploading, setUploading] = useState(false)
+  // Progresso do lote de upload (múltiplos arquivos selecionados de uma vez) — null fora de um upload
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
   const showSpinner  = useDelayedLoading(saving)
   const showUploadSpinner = useDelayedLoading(uploading)
@@ -528,18 +561,48 @@ function GaleriaSection({
     setNewUrl('')
   }
 
+  // Upload em lote: envia um arquivo de cada vez (sequencial, não em paralelo) para que a
+  // checagem de cota de armazenamento (checkStorageLimit, feita a cada POST) sempre veja o
+  // uso já atualizado pelos uploads anteriores do mesmo lote. Decisão de UX: continuamos o
+  // lote mesmo se um arquivo estourar a cota ou falhar — os que couberem são enviados
+  // normalmente, e o resumo ao final avisa quantos não couberam (em vez de abortar o lote
+  // inteiro no primeiro erro, o que descartaria uploads que já eram válidos).
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!file || uploading) return
+    if (files.length === 0 || uploading) return
 
     setUploading(true)
-    const uploaded = await onUploadPhoto(file)
-    setUploading(false)
-    if (!uploaded) return
+    let successCount = 0
+    const failedNames: string[] = []
 
-    setUrls((prev) => [...prev, uploaded.public_url])
-    toastSuccess('Foto enviada com sucesso!')
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress({ current: i + 1, total: files.length })
+      const file = files[i]
+      if (!file) continue
+
+      const uploaded = await onUploadPhoto(file)
+      if (uploaded) {
+        setUrls((prev) => [...prev, uploaded.public_url])
+        successCount++
+      } else {
+        failedNames.push(file.name)
+      }
+    }
+
+    setUploadProgress(null)
+    setUploading(false)
+
+    if (successCount > 0) {
+      toastSuccess(
+        files.length === 1
+          ? 'Foto enviada com sucesso!'
+          : `${successCount} de ${files.length} fotos enviadas com sucesso!`,
+      )
+    }
+    if (failedNames.length > 0) {
+      toastError(`Não foi possível enviar: ${failedNames.join(', ')}.`)
+    }
   }
 
   async function removeUrl(index: number) {
@@ -627,9 +690,9 @@ function GaleriaSection({
           }}
         >
           {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
-          {uploading ? 'Enviando…' : 'Enviar do computador'}
+          {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Enviar do computador'}
         </button>
-        <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+        <input ref={inputRef} type="file" accept="image/*" multiple onChange={handleFileChange} style={{ display: 'none' }} />
       </div>
 
       {urls.length === 0 ? (
@@ -675,6 +738,7 @@ export default function SiteBuilder({
   const [slug, setSlug]           = useState(initialSite?.slug ?? '')
   const [published, setPublished] = useState(initialSite?.published ?? false)
   const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(initialSite?.cover_photo_url ?? null)
+  const [coverPhotoPosition, setCoverPhotoPosition] = useState(initialSite?.cover_photo_position ?? 50)
   const [content, setContent]     = useState<SiteContent>(() => parseSiteContent(initialSite?.content))
   const [saving, setSaving]       = useState(false)
   const origin                    = useOrigin()
@@ -772,7 +836,10 @@ export default function SiteBuilder({
   }
 
   async function patchSite(
-    body: { slug?: string; published?: boolean; cover_photo_url?: string | null; content?: SiteContent },
+    body: {
+      slug?: string; published?: boolean; cover_photo_url?: string | null
+      cover_photo_position?: number; content?: SiteContent
+    },
   ): Promise<PatchResult> {
     setSaving(true)
     const res = await fetch(apiBase, {
@@ -791,19 +858,23 @@ export default function SiteBuilder({
     setSlug(data.slug)
     setPublished(data.published)
     setCoverPhotoUrl(data.cover_photo_url)
+    setCoverPhotoPosition(data.cover_photo_position)
     setContent(parseSiteContent(data.content))
     return { ok: true, message: '' }
   }
 
   async function saveCapa(
-    values: { slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null },
+    values: {
+      slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
+    },
   ): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
     if (values.coverTitle) nextContent.cover_title = values.coverTitle
     else delete nextContent.cover_title
 
     return patchSite({
-      slug: values.slug, published: values.published, cover_photo_url: values.coverPhotoUrl, content: nextContent,
+      slug: values.slug, published: values.published, cover_photo_url: values.coverPhotoUrl,
+      cover_photo_position: values.coverPhotoPosition, content: nextContent,
     })
   }
 
@@ -939,6 +1010,7 @@ export default function SiteBuilder({
                 published={published}
                 coverTitle={content.cover_title ?? ''}
                 coverPhotoUrl={coverPhotoUrl}
+                coverPhotoPosition={coverPhotoPosition}
                 publicUrl={publicUrl}
                 saving={saving}
                 onUploadPhoto={uploadPhoto}

@@ -14,8 +14,9 @@ export interface PublicSiteInfo {
     wedding_color:           string
     wedding_color_secondary: string
   }
-  content:         SiteContent
-  cover_photo_url: string | null
+  content:              SiteContent
+  cover_photo_url:      string | null
+  cover_photo_position: number
   gifts: {
     id:           string
     name:         string
@@ -34,7 +35,7 @@ export async function getPublicSiteBySlug(
 ): Promise<PublicSiteInfo | null> {
   const { data: site, error } = await supabase
     .from('site_config')
-    .select('wedding_id, content, cover_photo_url')
+    .select('wedding_id, content, cover_photo_url, cover_photo_position')
     .eq('slug', slug)
     .eq('published', true)
     .maybeSingle()
@@ -69,8 +70,9 @@ export async function getPublicSiteBySlug(
       wedding_color:           wedding.wedding_color as string,
       wedding_color_secondary: wedding.wedding_color_secondary as string,
     },
-    content:         parseSiteContent(site.content as Record<string, Json | undefined> | null),
-    cover_photo_url: (site.cover_photo_url as string | null) ?? null,
-    gifts:           (gifts ?? []) as PublicSiteInfo['gifts'],
+    content:              parseSiteContent(site.content as Record<string, Json | undefined> | null),
+    cover_photo_url:      (site.cover_photo_url as string | null) ?? null,
+    cover_photo_position: (site.cover_photo_position as number | null) ?? 50,
+    gifts:                (gifts ?? []) as PublicSiteInfo['gifts'],
   }
 }

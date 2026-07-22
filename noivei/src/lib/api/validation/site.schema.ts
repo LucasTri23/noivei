@@ -10,10 +10,11 @@ export const SiteSlugSchema = z
 
 export const UpdateSiteConfigSchema = z
   .object({
-    slug:            SiteSlugSchema,
-    published:       z.boolean(),
-    cover_photo_url: z.url('URL inválida.').nullable(),
-    content:         z.record(z.string(), z.unknown()),
+    slug:                 SiteSlugSchema,
+    published:            z.boolean(),
+    cover_photo_url:      z.url('URL inválida.').nullable(),
+    cover_photo_position: z.number().int().min(0).max(100),
+    content:              z.record(z.string(), z.unknown()),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo para atualizar.')

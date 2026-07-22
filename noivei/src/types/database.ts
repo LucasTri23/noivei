@@ -125,13 +125,14 @@ export interface TableAssignment {
 }
 
 export interface SiteConfig {
-  id:              string
-  wedding_id:      string
-  slug:            string
-  published:       boolean
-  cover_photo_url: string | null
-  content:         Record<string, Json | undefined>
-  created_at:      string
+  id:                    string
+  wedding_id:            string
+  slug:                  string
+  published:             boolean
+  cover_photo_url:       string | null
+  cover_photo_position:  number
+  content:               Record<string, Json | undefined>
+  created_at:            string
 }
 
 export interface TimelineTask {
@@ -210,6 +211,7 @@ export interface WeddingSite {
   slug:           string
   published:      boolean
   cover_photo_url: string | null
+  cover_photo_position: number
   our_story:      string | null
   event_date:     string | null
   event_time:     string | null

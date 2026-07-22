@@ -53,6 +53,30 @@ function MapPinIcon() {
   )
 }
 
+interface TimelineEntry {
+  key:   string
+  label: string
+  body:  string
+  photo: string | null
+}
+
+// Cada bloco de texto existente (história/cerimônia/festa) vira uma "parada" na linha do
+// tempo e consome uma foto da galeria, na ordem em que ambas aparecem. Decisão de design:
+// o número de blocos segue o texto disponível (não as fotos) — um bloco sem foto ainda
+// aparece, só que centralizado, sem quebrar o zigue-zague dos vizinhos. As fotos que sobram
+// depois de preencher os blocos fecham o site numa seção de galeria tradicional.
+function buildTimelineEntries(content: { our_story?: string; ceremony_info?: string; reception_info?: string }, galleryUrls: string[]): TimelineEntry[] {
+  const source: { key: string; label: string; body: string | undefined }[] = [
+    { key: 'historia',  label: 'Nossa história', body: content.our_story },
+    { key: 'cerimonia', label: 'Cerimônia',       body: content.ceremony_info },
+    { key: 'festa',     label: 'Festa',           body: content.reception_info },
+  ]
+
+  return source
+    .filter((entry): entry is { key: string; label: string; body: string } => Boolean(entry.body))
+    .map((entry, index) => ({ ...entry, photo: galleryUrls[index] ?? null }))
+}
+
 export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const { slug } = await params
 
@@ -87,19 +111,22 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
     '--wedding-color-secondary-subtle': colorScaleSecondary.subtle,
   } as React.CSSProperties
 
-  // Fotos da galeria espalhadas pelo site em vez de só num bloco isolado: as duas
-  // primeiras acompanham "Nossa história" e "Cerimônia & festa"; o restante (se sobrar
-  // muitas) fecha o site numa seção de galeria tradicional.
-  const galleryUrls    = site.content.gallery_urls ?? []
-  const storyPhoto     = galleryUrls[0] ?? null
-  const ceremonyPhoto  = galleryUrls[1] ?? null
-  const remainingPhotos = galleryUrls.slice(2)
+  // Fotos da galeria espalhadas pelo site em vez de só num bloco isolado: acompanham os
+  // blocos da linha do tempo "Nossa história" (ver buildTimelineEntries); o restante (se
+  // sobrarem muitas) fecha o site numa seção de galeria tradicional.
+  const galleryUrls     = site.content.gallery_urls ?? []
+  const timelineEntries = buildTimelineEntries(site.content, galleryUrls)
+  const timelineTitle   = site.content.our_story ? 'Nossa história' : 'Cerimônia & festa'
+  const remainingPhotos = galleryUrls.slice(timelineEntries.length)
 
   // Sem foto de capa, mantém o gradiente escuro atual; com foto, aplica um overlay
   // escuro semi-transparente por cima pra manter o texto legível.
   const coverBackground = site.cover_photo_url
     ? `linear-gradient(rgba(20,12,4,0.6), rgba(20,12,4,0.6)), url(${site.cover_photo_url})`
     : 'linear-gradient(150deg, #2A1E10, #3A2A18)'
+  // Posição vertical ajustável pelo casal no editor (0=topo, 50=centro, 100=base) —
+  // evita que o "cover" corte o casal fora do quadro em fotos com composição diferente.
+  const coverBackgroundPositionY = site.cover_photo_position
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh', ...weddingColorVars }}>
@@ -109,7 +136,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
         style={{
           background:        coverBackground,
           backgroundSize:     'cover',
-          backgroundPosition: 'center',
+          backgroundPosition: `center ${coverBackgroundPositionY}%`,
           color: '#FAF0E6', padding: '96px 24px', textAlign: 'center',
         }}
       >
@@ -142,86 +169,85 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
       <div style={{ maxWidth: '760px', margin: '0 auto', padding: '56px 24px 80px' }}>
-        {/* Nossa história */}
-        {site.content.our_story && (
-          <section style={{ marginBottom: '56px' }}>
-            <SectionTitle>Nossa história</SectionTitle>
+        {/* Nossa história — linha do tempo com fotos alternando de lado, ligadas por um
+            fio vertical na cor secundária (só aparece em telas médias+, onde há duas
+            colunas de fato; no mobile os blocos empilham e o fio some). */}
+        {timelineEntries.length > 0 && (
+          <section style={{ marginBottom: '56px', position: 'relative' }}>
+            <SectionTitle>{timelineTitle}</SectionTitle>
+
             <div
-              className={storyPhoto ? 'grid gap-8 md:grid-cols-[1fr_280px]' : undefined}
-              style={{ alignItems: 'center' }}
-            >
-              <p
-                style={{
-                  fontSize: '15.5px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line',
-                  textAlign: storyPhoto ? 'left' : 'center',
-                  margin: 0,
-                }}
-              >
-                {site.content.our_story}
-              </p>
-              {storyPhoto && (
-                // eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image
-                <img
-                  src={storyPhoto}
-                  alt="Foto do casal"
-                  className="rounded-2xl"
-                  style={{ width: '100%', height: '260px', objectFit: 'cover' }}
-                />
-              )}
-            </div>
-          </section>
-        )}
+              aria-hidden
+              className="hidden md:block"
+              style={{
+                position: 'absolute', top: '8px', bottom: '8px', left: '50%', width: '2px',
+                background: 'linear-gradient(180deg, transparent, var(--wedding-color-secondary) 6%, var(--wedding-color-secondary) 94%, transparent)',
+                transform: 'translateX(-50%)', zIndex: 0,
+              }}
+            />
 
-        {site.content.custom_message && (
-          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
-            <p
-              className="font-display"
-              style={{ fontStyle: 'italic', fontSize: '20px', color: 'var(--wedding-color-dark)', lineHeight: 1.6, margin: 0 }}
-            >
-              &ldquo;{site.content.custom_message}&rdquo;
-            </p>
-          </section>
-        )}
+            <div className="flex flex-col gap-14" style={{ position: 'relative', zIndex: 1 }}>
+              {timelineEntries.map((entry, index) => {
+                // Blocos ímpares invertem os lados (foto à esquerda, texto à direita) —
+                // é o que produz o zigue-zague conforme a página desce.
+                const photoFirst = index % 2 === 1
 
-        {/* Cerimônia & festa */}
-        {(site.content.ceremony_info || site.content.reception_info) && (
-          <section style={{ marginBottom: '56px' }}>
-            <SectionTitle>Cerimônia &amp; festa</SectionTitle>
-            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px,1fr))' }}>
-              {site.content.ceremony_info && (
-                <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '8px' }}>
-                    Cerimônia
+                const label = (
+                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
+                    {entry.label}
                   </div>
-                  <p style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }}>
-                    {site.content.ceremony_info}
+                )
+                const body = (
+                  <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }}>
+                    {entry.body}
                   </p>
-                </div>
-              )}
-              {site.content.reception_info && (
-                <div className="rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '8px' }}>
-                    Festa
+                )
+
+                return (
+                  <div key={entry.key} style={{ position: 'relative' }}>
+                    {/* Nó da linha do tempo, centralizado no meio vertical do bloco */}
+                    <div
+                      aria-hidden
+                      className="hidden md:block"
+                      style={{
+                        position: 'absolute', top: '50%', left: '50%', width: '14px', height: '14px',
+                        borderRadius: '50%', background: 'var(--wedding-color-secondary)',
+                        border: '3px solid var(--bg)', transform: 'translate(-50%,-50%)', zIndex: 2,
+                      }}
+                    />
+
+                    {entry.photo ? (
+                      <div className="grid gap-6 md:grid-cols-2 md:items-center">
+                        <div className={photoFirst ? 'md:order-2' : 'md:order-1'}>
+                          {label}
+                          {body}
+                        </div>
+                        <div className={photoFirst ? 'md:order-1' : 'md:order-2'}>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
+                          <img
+                            src={entry.photo}
+                            alt="Foto do casal"
+                            className="rounded-2xl"
+                            style={{ width: '100%', height: '260px', objectFit: 'cover', display: 'block' }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      // Bloco sem foto disponível: fica centralizado em vez de quebrar o
+                      // zigue-zague dos vizinhos (acontece quando há mais texto que fotos).
+                      <div style={{ maxWidth: '520px', margin: '0 auto', textAlign: 'center' }}>
+                        {label}
+                        {body}
+                      </div>
+                    )}
                   </div>
-                  <p style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }}>
-                    {site.content.reception_info}
-                  </p>
-                </div>
-              )}
-              {ceremonyPhoto && (
-                // eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image
-                <img
-                  src={ceremonyPhoto}
-                  alt="Foto do casal"
-                  className="rounded-2xl"
-                  style={{ width: '100%', height: '100%', minHeight: '160px', objectFit: 'cover' }}
-                />
-              )}
+                )
+              })}
             </div>
 
             {/* "Como chegar" mora aqui, perto das informações de local/horário, em vez de na capa */}
             {mapsUrl && (
-              <div style={{ textAlign: 'center', marginTop: '22px' }}>
+              <div style={{ textAlign: 'center', marginTop: '36px' }}>
                 <a
                   href={mapsUrl}
                   target="_blank"
@@ -238,6 +264,17 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                 </a>
               </div>
             )}
+          </section>
+        )}
+
+        {site.content.custom_message && (
+          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
+            <p
+              className="font-display"
+              style={{ fontStyle: 'italic', fontSize: '20px', color: 'var(--wedding-color-dark)', lineHeight: 1.6, margin: 0 }}
+            >
+              &ldquo;{site.content.custom_message}&rdquo;
+            </p>
           </section>
         )}
 
@@ -301,7 +338,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                 <img
                   key={`${url}-${index}`}
                   src={url}
-                  alt={`Foto ${index + 3} do casal`}
+                  alt={`Foto ${timelineEntries.length + index + 1} do casal`}
                   className="rounded-2xl"
                   style={{ width: '100%', height: '160px', objectFit: 'cover' }}
                 />

@@ -65,11 +65,12 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       const { data, error } = await supabase
         .from('site_config')
         .insert({
-          wedding_id:      wid,
-          slug:            parsed.data.slug,
-          published:       parsed.data.published ?? false,
-          cover_photo_url: parsed.data.cover_photo_url ?? null,
-          content:         parsed.data.content ?? {},
+          wedding_id:           wid,
+          slug:                 parsed.data.slug,
+          published:            parsed.data.published ?? false,
+          cover_photo_url:      parsed.data.cover_photo_url ?? null,
+          cover_photo_position: parsed.data.cover_photo_position ?? 50,
+          content:              parsed.data.content ?? {},
         })
         .select()
         .single()
