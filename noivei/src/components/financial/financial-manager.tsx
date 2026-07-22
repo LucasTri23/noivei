@@ -6,7 +6,7 @@ import Link from 'next/link'
 import CurrencyInput from '@/components/ui/currency-input'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
-import { isPaidPlan, isPlusPlan, type PlanId } from '@/constants/plans'
+import { isPaidPlan, type PlanId } from '@/constants/plans'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { QUOTE_TYPES, QUOTE_TYPE_LABELS } from '@/lib/api/validation/financial-quote.schema'
 import { toastError, toastSuccess } from '@/store/toast.store'
@@ -21,6 +21,7 @@ interface FinancialManagerProps {
   initialCategoryBudgets: FinancialCategoryBudget[]
   planId:                 PlanId
   entryLimit:             number
+  weddingDate:            string | null
 }
 
 type FinancialView = 'lancamentos' | 'orcamentos'
@@ -90,6 +91,14 @@ function addMonths(dueDate: string, months: number): string {
   return toIsoDate(new Date(y, (m - 1) + months, d))
 }
 
+function addDays(dueDate: string, days: number): string {
+  const [y, m, d] = dueDate.split('-').map(Number)
+  if (!y || !m || !d) return dueDate
+  const date = new Date(y, m - 1, d)
+  date.setDate(date.getDate() + days)
+  return toIsoDate(date)
+}
+
 // Distribui o total em `count` parcelas iguais, jogando o resto de centavos (arredondamento)
 // nas primeiras parcelas — garante que a soma bate exatamente com o total, sempre.
 function splitEvenly(totalCents: number, count: number): number[] {
@@ -116,6 +125,34 @@ function buildPlanItems(totalCents: number, count: number, firstDueDate: string)
     amount_cents,
     due_date: i === 0 ? firstDueDate : addMonths(firstDueDate, i),
   }))
+}
+
+type PlanMode = 'monthly' | 'wedding_anchor'
+
+// A última parcela é ancorada em (data do casamento - N dias); as anteriores são
+// posicionadas de trás pra frente, em intervalos mensais, até chegar na 1ª — assim o
+// casal fecha o parcelamento perto do casamento em vez de simplesmente somar meses
+// pra frente a partir de uma data de início.
+function buildWeddingAnchorPlanItems(totalCents: number, count: number, weddingDate: string, daysBeforeWedding: number): InstallmentPlanItem[] {
+  const anchorDate = addDays(weddingDate, -daysBeforeWedding)
+  return splitEvenly(totalCents, count).map((amount_cents, i) => ({
+    amount_cents,
+    due_date: addMonths(anchorDate, -(count - 1 - i)),
+  }))
+}
+
+function computePlanItems(
+  totalCents:        number,
+  mode:               PlanMode,
+  count:              number,
+  firstDueDate:       string,
+  weddingDate:        string | null,
+  daysBeforeWedding:  number,
+): InstallmentPlanItem[] {
+  if (mode === 'wedding_anchor' && weddingDate) {
+    return buildWeddingAnchorPlanItems(totalCents, count, weddingDate, daysBeforeWedding)
+  }
+  return buildPlanItems(totalCents, count, firstDueDate)
 }
 
 function groupInstallmentsByEntry(
@@ -215,7 +252,7 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
-export default function FinancialManager({ weddingId, budgetCents, initialEntries, initialQuotes, initialInstallments, initialCategoryBudgets, planId, entryLimit }: FinancialManagerProps) {
+export default function FinancialManager({ weddingId, budgetCents, initialEntries, initialQuotes, initialInstallments, initialCategoryBudgets, planId, entryLimit, weddingDate }: FinancialManagerProps) {
   const [view, setView]           = useState<FinancialView>('lancamentos')
   const [entries, setEntries]     = useState<FinancialEntry[]>(initialEntries)
   const [modalOpen, setModalOpen] = useState(false)
@@ -247,8 +284,8 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [expandedEntryId, setExpandedEntryId]     = useState<string | null>(null)
   const [loadingInstallmentsId, setLoadingInstallmentsId] = useState<string | null>(null)
   const [planEntry, setPlanEntry]                 = useState<FinancialEntry | null>(null)
-  const [planForm, setPlanForm]                   = useState<{ count: number; firstDueDate: string; items: InstallmentPlanItem[] }>(
-    { count: 2, firstDueDate: '', items: [] },
+  const [planForm, setPlanForm]                   = useState<{ count: number; firstDueDate: string; mode: PlanMode; daysBeforeWedding: number; items: InstallmentPlanItem[] }>(
+    { count: 2, firstDueDate: '', mode: 'monthly', daysBeforeWedding: 30, items: [] },
   )
   const [savingPlan, setSavingPlan]               = useState(false)
   const [togglingInstallmentId, setTogglingInstallmentId] = useState<string | null>(null)
@@ -259,7 +296,6 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const categoryBudgetsApiBase = `/api/v1/weddings/${weddingId}/financial-category-budgets`
 
   const isPaid  = isPaidPlan(planId)
-  const isPlus  = isPlusPlan(planId)
   const atLimit = entries.length >= entryLimit
 
   const budget    = budgetCents ?? 0
@@ -288,8 +324,10 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     .map((type) => ({ type, label: QUOTE_TYPE_LABELS[type], items: quotes.filter((q) => q.type === type) }))
     .filter((group) => group.items.length > 0)
 
-  // Relatório avançado (Premium Plus): próximos vencimentos ainda não quitados,
-  // incluindo os já vencidos (para destacá-los), até 30 dias à frente.
+  // Relatório avançado (Premium + Premium Plus): próximos vencimentos ainda não
+  // quitados, incluindo os já vencidos (para destacá-los), até 30 dias à frente.
+  // Antes era exclusivo do Premium Plus; o controle financeiro completo (parcelas,
+  // valores pago/restante) é um recurso de todo plano pago, não só do nível superior.
   const today   = new Date()
   today.setHours(0, 0, 0, 0)
   const horizon = new Date(today)
@@ -297,7 +335,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
 
   // Lançamentos com plano de parcelas têm o vencimento por parcela (não mais em
   // entry.due_date) — cada parcela pendente entra como um item próprio na lista.
-  const upcomingDue: UpcomingDueItem[] = isPlus
+  const upcomingDue: UpcomingDueItem[] = isPaid
     ? entries
         .flatMap((entry): UpcomingDueItem[] => {
           const entryInstallments = installments[entry.id]
@@ -322,6 +360,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         .filter((item) => item.dueDate <= horizon)
         .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
     : []
+
+  // Agregado de parcelas de TODOS os lançamentos (não só as dos próximos 30 dias) —
+  // dá o retrato completo de quanto já foi pago e quanto falta via parcelamento.
+  const allInstallments        = Object.values(installments).flat()
+  const installmentsPaidTotal  = allInstallments.filter((i) => i.paid).reduce((sum, i) => sum + i.amount_cents, 0)
+  const pendingInstallments    = allInstallments.filter((i) => !i.paid)
+  const installmentsDueTotal   = pendingInstallments.reduce((sum, i) => sum + i.amount_cents, 0)
+  const pendingInstallmentsCount = pendingInstallments.length
 
   function openCreate() {
     setEditing(null)
@@ -654,18 +700,41 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       : buildPlanItems(entry.total_amount, count, firstDueDate)
 
     setPlanEntry(entry)
-    setPlanForm({ count, firstDueDate, items })
+    setPlanForm({ count, firstDueDate, mode: 'monthly', daysBeforeWedding: 30, items })
   }
 
   function handlePlanCountChange(count: number) {
     if (!planEntry) return
     const clamped = Math.min(60, Math.max(1, count))
-    setPlanForm((f) => ({ ...f, count: clamped, items: buildPlanItems(planEntry.total_amount, clamped, f.firstDueDate) }))
+    setPlanForm((f) => ({
+      ...f, count: clamped,
+      items: computePlanItems(planEntry.total_amount, f.mode, clamped, f.firstDueDate, weddingDate, f.daysBeforeWedding),
+    }))
   }
 
   function handlePlanFirstDueDateChange(dueDate: string) {
     if (!planEntry) return
-    setPlanForm((f) => ({ ...f, firstDueDate: dueDate, items: buildPlanItems(planEntry.total_amount, f.count, dueDate) }))
+    setPlanForm((f) => ({
+      ...f, firstDueDate: dueDate,
+      items: computePlanItems(planEntry.total_amount, f.mode, f.count, dueDate, weddingDate, f.daysBeforeWedding),
+    }))
+  }
+
+  function handlePlanModeChange(mode: PlanMode) {
+    if (!planEntry) return
+    setPlanForm((f) => ({
+      ...f, mode,
+      items: computePlanItems(planEntry.total_amount, mode, f.count, f.firstDueDate, weddingDate, f.daysBeforeWedding),
+    }))
+  }
+
+  function handlePlanDaysBeforeWeddingChange(days: number) {
+    if (!planEntry) return
+    const clamped = Math.max(0, days)
+    setPlanForm((f) => ({
+      ...f, daysBeforeWedding: clamped,
+      items: computePlanItems(planEntry.total_amount, f.mode, f.count, f.firstDueDate, weddingDate, clamped),
+    }))
   }
 
   function handlePlanItemAmountChange(index: number, cents: number | null) {
@@ -1346,15 +1415,33 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         </>
       )}
 
-      {/* Próximos vencimentos — relatório avançado exclusivo do Premium Plus */}
-      {view === 'lancamentos' && isPlus && (
+      {/* Parcelas e vencimentos — relatório avançado dos planos pagos (Premium e Premium Plus) */}
+      {view === 'lancamentos' && isPaid && (
         <div className="mt-5 rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
           <h3 className="font-display mb-1" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
-            Próximos vencimentos
+            Parcelas e vencimentos
           </h3>
           <p style={{ fontSize: '13px', color: 'var(--muted-fg)', marginBottom: '18px' }}>
-            Lançamentos e parcelas em aberto que vencem nos próximos 30 dias, incluindo os já vencidos
+            Resumo de todas as parcelas em aberto, mais os lançamentos e parcelas que vencem nos próximos 30 dias, incluindo os já vencidos
           </p>
+
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', marginBottom: '20px' }}>
+            {[
+              { label: 'Pago em parcelas',      value: fmt(installmentsPaidTotal),        color: '#5E8B6A' },
+              { label: 'Restante em parcelas',  value: fmt(installmentsDueTotal),         color: '#9A7020' },
+              { label: 'Parcelas pendentes',    value: String(pendingInstallmentsCount),  color: 'var(--fg)' },
+            ].map((mc) => (
+              <div key={mc.label} className="rounded-xl p-4" style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #F0E8DE' }}>
+                <div style={{ fontSize: '11px', color: 'var(--muted-fg)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {mc.label}
+                </div>
+                <div className="font-display" style={{ fontSize: '20px', fontWeight: 500, color: mc.color }}>
+                  {mc.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {upcomingDue.length === 0 ? (
             <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)' }}>Nenhum vencimento em aberto nos próximos 30 dias.</p>
           ) : (
@@ -1625,10 +1712,48 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                   type="date"
                   value={planForm.firstDueDate}
                   onChange={(e) => handlePlanFirstDueDateChange(e.target.value)}
-                  style={inputStyle}
+                  disabled={planForm.mode === 'wedding_anchor'}
+                  style={{ ...inputStyle, opacity: planForm.mode === 'wedding_anchor' ? 0.5 : 1 }}
                 />
               </div>
             </div>
+
+            {/* Tipo de parcelamento — diferencial Premium/Premium Plus; Gratuito mantém o
+                comportamento mensal fixo de sempre, sem esse seletor. */}
+            {isPaid && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="plan-mode" style={labelStyle}>Tipo de parcelamento</label>
+                  <select
+                    id="plan-mode"
+                    value={planForm.mode}
+                    onChange={(e) => handlePlanModeChange(e.target.value as PlanMode)}
+                    style={inputStyle}
+                  >
+                    <option value="monthly">Mensal (mesmo dia todo mês)</option>
+                    <option value="wedding_anchor" disabled={!weddingDate}>Data específica perto do casamento</option>
+                  </select>
+                  {!weddingDate && (
+                    <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '6px' }}>
+                      Defina a data do casamento nas configurações para usar esta opção.
+                    </p>
+                  )}
+                </div>
+                {planForm.mode === 'wedding_anchor' && weddingDate && (
+                  <div>
+                    <label htmlFor="plan-days-before-wedding" style={labelStyle}>Quantos dias antes do casamento?</label>
+                    <input
+                      id="plan-days-before-wedding"
+                      type="number"
+                      min={0}
+                      value={planForm.daysBeforeWedding}
+                      onChange={(e) => handlePlanDaysBeforeWeddingChange(Number(e.target.value) || 0)}
+                      style={inputStyle}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-3" style={{ maxHeight: '320px', overflowY: 'auto' }}>
               {planForm.items.map((item, index) => (

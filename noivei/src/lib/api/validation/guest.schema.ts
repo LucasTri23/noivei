@@ -18,12 +18,13 @@ export const CreateGuestSchema = z.object({
 
 export const UpdateGuestSchema = z
   .object({
-    name:       z.string().trim().min(1).max(120),
-    group_name: z.string().trim().min(1).max(80).nullable(),
-    status:     GuestStatusSchema,
-    email:      z.email('E-mail inválido.').nullable(),
-    phone:      z.string().trim().min(5).max(30).nullable(),
-    party_size: PartySizeSchema,
+    name:           z.string().trim().min(1).max(120),
+    group_name:     z.string().trim().min(1).max(80).nullable(),
+    status:         GuestStatusSchema,
+    email:          z.email('E-mail inválido.').nullable(),
+    phone:          z.string().trim().min(5).max(30).nullable(),
+    party_size:     PartySizeSchema,
+    invite_sent_at: z.iso.datetime().nullable(),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo para atualizar.')

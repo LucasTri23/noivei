@@ -92,6 +92,10 @@ function WhatsAppIcon() {
   )
 }
 
+function formatInviteSentAt(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+}
+
 async function readApiError(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as ApiErrorBody
@@ -262,6 +266,16 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
       messageTemplate: rsvpMessageTemplate,
     })
     window.open(url, '_blank')
+
+    // Best-effort: só pra o casal saber quem já recebeu o link (aparece como badge na
+    // lista) — uma falha aqui não deve impedir o envio, que já aconteceu acima.
+    const sentAt = new Date().toISOString()
+    setGuests((prev) => prev.map((g) => (g.id === guest.id ? { ...g, invite_sent_at: sentAt } : g)))
+    fetch(`${apiBase}/${guest.id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ invite_sent_at: sentAt }),
+    }).catch(() => {})
   }
 
   async function handleDelete(guest: Guest) {
@@ -452,6 +466,28 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
                   {guest.attending_count !== null && (
                     <span style={{ fontWeight: 600, color: '#5E8B6A' }}>
                       {details ? ' · ' : ''}{guest.attending_count} de {guest.party_size} confirmado(s)
+                    </span>
+                  )}
+                </div>
+                <div style={{ marginTop: '3px' }}>
+                  {guest.invite_sent_at ? (
+                    <span
+                      title={`Convite enviado em ${new Date(guest.invite_sent_at).toLocaleDateString('pt-BR')}`}
+                      style={{
+                        fontSize: '11px', fontWeight: 600, color: '#5E8B6A',
+                        background: '#E9EFE6', borderRadius: '99px', padding: '2px 8px',
+                      }}
+                    >
+                      Convite enviado · {formatInviteSentAt(guest.invite_sent_at)}
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: '11px', fontWeight: 600, color: '#9A7A60',
+                        background: 'var(--wedding-color-subtle)', borderRadius: '99px', padding: '2px 8px',
+                      }}
+                    >
+                      Convite ainda não enviado
                     </span>
                   )}
                 </div>

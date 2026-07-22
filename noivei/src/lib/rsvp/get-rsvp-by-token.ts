@@ -27,6 +27,10 @@ export interface RsvpInfo {
     // Só preenchido no plano pago — personalização de cor é recurso Premium, o
     // Gratuito nunca deve ver o painel de destaque saindo do marrom padrão.
     wedding_color_secondary: string | null
+    // Slug do site público, só quando publicado — usado pra redirecionar o convidado
+    // pra lá depois de confirmar presença. null tanto se o casal nunca criou o site
+    // quanto se criou mas não publicou; os dois casos são "sem site pra redirecionar".
+    site_slug: string | null
   }
 }
 
@@ -45,12 +49,18 @@ export async function getRsvpByToken(
 
   const weddingId = guest.wedding_id as string
 
-  const [{ data: wedding }, planId] = await Promise.all([
+  const [{ data: wedding }, { data: site }, planId] = await Promise.all([
     supabase
       .from('weddings')
       .select('couple_names, wedding_date, venue, city, wedding_color_secondary')
       .eq('id', weddingId)
       .is('deleted_at', null)
+      .maybeSingle(),
+    supabase
+      .from('site_config')
+      .select('slug')
+      .eq('wedding_id', weddingId)
+      .eq('published', true)
       .maybeSingle(),
     resolveWeddingPlanId(supabase, weddingId),
   ])
@@ -71,6 +81,7 @@ export async function getRsvpByToken(
       wedding_color_secondary: isPaidPlan(planId)
         ? (wedding.wedding_color_secondary as string | null)
         : null,
+      site_slug: (site?.slug as string | null) ?? null,
     },
   }
 }

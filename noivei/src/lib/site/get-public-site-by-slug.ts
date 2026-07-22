@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { toGiftPhotoPublicUrl } from '@/lib/gifts/gift-photo-storage'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
 import type { GiftRegistryType, Json } from '@/types/database'
 
@@ -67,13 +68,21 @@ export async function getPublicSiteBySlug(
 
   const { data: gifts } = await supabase
     .from('gift_registry_items')
-    .select('id, name, description, price_cents, store_url, image_url, gift_type, is_purchased')
+    .select('id, name, description, price_cents, store_url, image_url, image_storage_path, gift_type, is_purchased')
     .eq('wedding_id', weddingId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 
   const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
   const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, content.gallery_urls ?? [])
+
+  // Foto enviada do dispositivo: recalcula a URL pública a partir do path a cada leitura
+  // (nunca confia num image_url gravado) — mesmo motivo de resolveGalleryPhotos acima.
+  const resolvedGifts = ((gifts ?? []) as (PublicSiteInfo['gifts'][number] & { image_storage_path: string | null })[])
+    .map(({ image_storage_path, ...gift }) => ({
+      ...gift,
+      image_url: image_storage_path ? toGiftPhotoPublicUrl(supabase, image_storage_path) : gift.image_url,
+    }))
 
   return {
     wedding: {
@@ -88,7 +97,7 @@ export async function getPublicSiteBySlug(
     galleryPhotos,
     cover_photo_url:      (site.cover_photo_url as string | null) ?? null,
     cover_photo_position: (site.cover_photo_position as number | null) ?? 50,
-    gifts:                (gifts ?? []) as PublicSiteInfo['gifts'],
+    gifts:                resolvedGifts,
   }
 }
 

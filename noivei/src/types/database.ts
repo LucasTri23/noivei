@@ -74,6 +74,7 @@ export interface Guest {
   party_size:      number
   attending_count: number | null
   parent_guest_id: string | null
+  invite_sent_at:  string | null
   created_at:      string
 }
 
@@ -197,18 +198,23 @@ export interface WeddingTable {
 export type GiftRegistryType = 'link' | 'app_payment'
 
 export interface GiftRegistryItem {
-  id:           string
-  wedding_id:   string
-  name:         string
-  description:  string | null
-  price_cents:  number | null
-  store_url:    string | null
-  image_url:    string | null
-  gift_type:    GiftRegistryType
-  is_purchased: boolean
-  purchased_by: string | null
-  sort_order:   number
-  created_at:   string
+  id:                 string
+  wedding_id:         string
+  name:               string
+  description:        string | null
+  price_cents:        number | null
+  store_url:          string | null
+  image_url:          string | null
+  // Preenchido só quando a foto foi enviada do dispositivo (em vez de link colado) —
+  // image_url é recalculado a partir dele em toda leitura, ver get-public-site-by-slug.ts
+  // e gifts/route.ts.
+  image_storage_path: string | null
+  image_size_bytes:   number | null
+  gift_type:          GiftRegistryType
+  is_purchased:       boolean
+  purchased_by:       string | null
+  sort_order:         number
+  created_at:         string
 }
 
 export interface WeddingSite {
@@ -340,6 +346,23 @@ export interface WeddingPartyEntry {
   paired_with_entry_id: string | null
   sort_order:           number
   created_at:           string
+}
+
+export type CouponDiscountType = 'percent' | 'fixed'
+
+export interface Coupon {
+  id:                 string
+  code:               string
+  discount_type:      CouponDiscountType
+  discount_value:     number
+  applies_to_plan_id: string | null
+  max_redemptions:    number | null
+  redemption_count:   number
+  valid_from:         string | null
+  valid_until:        string | null
+  is_active:          boolean
+  created_at:         string
+  updated_at:         string
 }
 
 export type FinancialQuoteType = 'local' | 'buffet' | 'fotografia' | 'decoracao' | 'musica' | 'outro'

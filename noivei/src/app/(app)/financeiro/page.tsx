@@ -10,7 +10,7 @@ async function FinanceiroContent() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id, budget')
+    .select('id, budget, wedding_date')
     .is('deleted_at', null)
     .order('created_at')
     .limit(1)
@@ -79,6 +79,7 @@ async function FinanceiroContent() {
       initialCategoryBudgets={(categoryBudgets ?? []) as FinancialCategoryBudget[]}
       planId={planId as PlanId}
       entryLimit={limitCheck.limit}
+      weddingDate={(wedding.wedding_date as string | null) ?? null}
     />
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
@@ -12,6 +13,10 @@ interface RsvpFormProps {
   token:             string
   initialStatus:     GuestStatus
   initialPartySize:  number
+  // Slug do site público do casal, só quando publicado — usado pra redirecionar o
+  // convidado pra lá depois de confirmar presença. null = fica na própria página de
+  // RSVP (sem site publicado ainda pra mandar o convidado, ou o casal recusou).
+  siteSlug:          string | null
 }
 
 interface RespondErrorBody {
@@ -56,7 +61,8 @@ function validateCompanions(companions: CompanionForm[]): CompanionFormError[] {
   })
 }
 
-export default function RsvpForm({ token, initialStatus, initialPartySize }: RsvpFormProps) {
+export default function RsvpForm({ token, initialStatus, initialPartySize, siteSlug }: RsvpFormProps) {
+  const router = useRouter()
   const [status, setStatus]   = useState<GuestStatus>(initialStatus)
   // Nunca pré-preenchido: o telefone existente não é devolvido pela API de propósito
   // (ver get-rsvp-by-token.ts) — se aparecesse aqui já preenchido, qualquer um que
@@ -146,6 +152,14 @@ export default function RsvpForm({ token, initialStatus, initialPartySize }: Rsv
 
     setStatus(answer)
     setSaved(true)
+
+    // Só redireciona pro site quando ele existe e está publicado (ver siteSlug em
+    // get-rsvp-by-token.ts) — sem site pra mandar o convidado, ele fica na própria
+    // página de RSVP vendo a mensagem de confirmação normalmente. O pequeno atraso
+    // deixa a mensagem de sucesso aparecer antes de sair da página.
+    if (answer === 'confirmado' && siteSlug) {
+      setTimeout(() => router.push(`/${siteSlug}`), 1500)
+    }
   }
 
   const answered = status !== 'pendente'
