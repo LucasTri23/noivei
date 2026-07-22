@@ -63,15 +63,18 @@ export interface Wedding {
 }
 
 export interface Guest {
-  id:          string
-  wedding_id:  string
-  name:        string
-  group_name:  string | null
-  status:      GuestStatus
-  rsvp_token:  string
-  email:       string | null
-  phone:       string | null
-  created_at:  string
+  id:              string
+  wedding_id:      string
+  name:            string
+  group_name:      string | null
+  status:          GuestStatus
+  rsvp_token:      string
+  email:           string | null
+  phone:           string | null
+  party_size:      number
+  attending_count: number | null
+  parent_guest_id: string | null
+  created_at:      string
 }
 
 export interface ChecklistItem {

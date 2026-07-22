@@ -9,12 +9,23 @@ import { toastError } from '@/store/toast.store'
 import type { GuestStatus } from '@/types/database'
 
 interface RsvpFormProps {
-  token:         string
-  initialStatus: GuestStatus
+  token:             string
+  initialStatus:     GuestStatus
+  initialPartySize:  number
 }
 
 interface RespondErrorBody {
   error?: { code?: string; message?: string }
+}
+
+interface CompanionForm {
+  name:  string
+  phone: string
+}
+
+interface CompanionFormError {
+  name?:  string
+  phone?: string
 }
 
 type Answer = 'confirmado' | 'recusado'
@@ -28,16 +39,52 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
-export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
+function validateCompanions(companions: CompanionForm[]): CompanionFormError[] {
+  return companions.map((companion) => {
+    const errors: CompanionFormError = {}
+
+    if (!companion.name.trim()) errors.name = 'Informe o nome do acompanhante.'
+
+    const parsedPhone = PhoneSchema.safeParse(companion.phone)
+    if (!parsedPhone.success) {
+      errors.phone = companion.phone.trim().length === 0
+        ? 'Informe o telefone do acompanhante.'
+        : (parsedPhone.error.issues[0]?.message ?? 'Telefone inválido.')
+    }
+
+    return errors
+  })
+}
+
+export default function RsvpForm({ token, initialStatus, initialPartySize }: RsvpFormProps) {
   const [status, setStatus]   = useState<GuestStatus>(initialStatus)
   // Nunca pré-preenchido: o telefone existente não é devolvido pela API de propósito
   // (ver get-rsvp-by-token.ts) — se aparecesse aqui já preenchido, qualquer um que
   // abrisse o link veria o número certo e a conferência não serviria pra nada.
   const [phone, setPhone]     = useState('')
   const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [attendingCount, setAttendingCount] = useState(1)
+  const [companions, setCompanions]         = useState<CompanionForm[]>([])
+  const [companionErrors, setCompanionErrors] = useState<CompanionFormError[]>([])
   const [saving, setSaving]   = useState<Answer | null>(null)
   const [saved, setSaved]     = useState(false)
   const showSpinner = useDelayedLoading(saving !== null)
+
+  function handleAttendingCountChange(value: number) {
+    setAttendingCount(value)
+    setCompanionErrors([])
+    setCompanions((prev) => {
+      const needed = Math.max(0, value - 1)
+      const next = prev.slice(0, needed)
+      while (next.length < needed) next.push({ name: '', phone: '' })
+      return next
+    })
+  }
+
+  function updateCompanion(index: number, field: keyof CompanionForm, value: string) {
+    setCompanions((prev) => prev.map((companion, i) => (i === index ? { ...companion, [field]: value } : companion)))
+    setCompanionErrors((prev) => prev.map((error, i) => (i === index ? { ...error, [field]: undefined } : error)))
+  }
 
   async function respond(answer: Answer) {
     if (saving) return
@@ -45,10 +92,20 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
     // Telefone é exigido pras duas respostas (confirmar e recusar) — o servidor
     // confere se bate com o que o casal cadastrou (ou aceita e grava, se for a
     // primeira resposta desse convidado).
-    const parsed = PhoneSchema.safeParse(phone)
-    if (!parsed.success) {
-      setPhoneError(phone.trim().length === 0 ? 'Informe seu telefone para responder.' : (parsed.error.issues[0]?.message ?? 'Telefone inválido.'))
+    const parsedPhone = PhoneSchema.safeParse(phone)
+    if (!parsedPhone.success) {
+      setPhoneError(phone.trim().length === 0 ? 'Informe seu telefone para responder.' : (parsedPhone.error.issues[0]?.message ?? 'Telefone inválido.'))
       return
+    }
+
+    // Acompanhantes só valem pra confirmação — espelha a mesma regra do servidor
+    // (ver UpdateRsvpSchema) pra dar feedback cedo, sem substituir a validação de lá.
+    if (answer === 'confirmado' && attendingCount > 1) {
+      const errors = validateCompanions(companions)
+      setCompanionErrors(errors)
+      if (errors.some((error) => error.name || error.phone)) return
+    } else {
+      setCompanionErrors([])
     }
 
     setPhoneError(null)
@@ -58,7 +115,18 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
     const res = await fetch(`/api/v1/rsvp/${encodeURIComponent(token)}`, {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ status: answer, phone: phone.trim() || null }),
+      body: JSON.stringify({
+        status: answer,
+        phone:  phone.trim() || null,
+        ...(answer === 'confirmado'
+          ? {
+              attending_count: attendingCount,
+              companions: attendingCount > 1
+                ? companions.map((companion) => ({ name: companion.name.trim(), phone: companion.phone.trim() }))
+                : [],
+            }
+          : {}),
+      }),
     })
 
     setSaving(null)
@@ -66,6 +134,10 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
       const body = (await res.json().catch(() => null)) as RespondErrorBody | null
       if (body?.error?.code === 'PHONE_MISMATCH') {
         setPhoneError(body.error.message ?? 'Telefone não confere com o cadastrado.')
+        return
+      }
+      if (body?.error?.code === 'ATTENDING_COUNT_EXCEEDS_PARTY_SIZE') {
+        toastError(body.error.message ?? 'A quantidade informada excede o número de pessoas do convite.')
         return
       }
       toastError('Não foi possível registrar sua resposta. Tente novamente.')
@@ -118,6 +190,70 @@ export default function RsvpForm({ token, initialStatus }: RsvpFormProps) {
           <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{phoneError}</p>
         )}
       </div>
+
+      {initialPartySize > 1 && (
+        <div style={{ marginBottom: '18px' }}>
+          <label htmlFor="rsvp-attending-count" style={labelStyle}>Quantos vão comparecer?</label>
+          <select
+            id="rsvp-attending-count"
+            value={attendingCount}
+            onChange={(e) => handleAttendingCountChange(Number(e.target.value))}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            {Array.from({ length: initialPartySize }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '6px 0 0' }}>
+            Este convite cobre até {initialPartySize} pessoa{initialPartySize > 1 ? 's' : ''}. Se for mais de
+            uma, informe os dados de quem vai com você.
+          </p>
+        </div>
+      )}
+
+      {initialPartySize > 1 && attendingCount > 1 && (
+        <div style={{ marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {companions.map((companion, index) => (
+            <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label htmlFor={`rsvp-companion-name-${index}`} style={labelStyle}>
+                  Nome do acompanhante {index + 1}
+                </label>
+                <input
+                  id={`rsvp-companion-name-${index}`}
+                  type="text"
+                  maxLength={120}
+                  value={companion.name}
+                  onChange={(e) => updateCompanion(index, 'name', e.target.value)}
+                  placeholder="Nome completo"
+                  style={{ ...inputStyle, ...(companionErrors[index]?.name ? { borderColor: '#C0553F' } : {}) }}
+                />
+                {companionErrors[index]?.name && (
+                  <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.name}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor={`rsvp-companion-phone-${index}`} style={labelStyle}>
+                  Telefone do acompanhante {index + 1}
+                </label>
+                <input
+                  id={`rsvp-companion-phone-${index}`}
+                  type="tel"
+                  minLength={8}
+                  maxLength={20}
+                  value={companion.phone}
+                  onChange={(e) => updateCompanion(index, 'phone', e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  style={{ ...inputStyle, ...(companionErrors[index]?.phone ? { borderColor: '#C0553F' } : {}) }}
+                />
+                {companionErrors[index]?.phone && (
+                  <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.phone}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
         <button

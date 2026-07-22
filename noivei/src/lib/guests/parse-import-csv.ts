@@ -1,4 +1,4 @@
-import { ImportGuestRowSchema, type ImportGuestRow } from '@/lib/api/validation/guest.schema'
+import { ImportGuestRowSchema, PartySizeSchema, type ImportGuestRow } from '@/lib/api/validation/guest.schema'
 
 // Espelha o limite e o parsing de `POST /api/v1/weddings/[wid]/guests/import` — usado só
 // para preview no client. O server continua sendo a autoridade de validação (nunca confiar
@@ -38,12 +38,23 @@ export function parseImportCsv(csv: string): ParseImportCsvResult {
 
   if (!tooManyRows) {
     for (const { line, number } of rows) {
-      const [name = '', email = '', groupName = ''] = line.split(',').map((part) => part.trim())
+      const [name = '', email = '', groupName = '', partySizeRaw = ''] = line.split(',').map((part) => part.trim())
+
+      let partySize = 1
+      if (partySizeRaw) {
+        const parsedPartySize = PartySizeSchema.safeParse(Number.parseInt(partySizeRaw, 10))
+        if (!parsedPartySize.success) {
+          invalidRows.push({ line: number, message: 'Quantidade de pessoas inválida (use um número de 1 a 20).' })
+          continue
+        }
+        partySize = parsedPartySize.data
+      }
 
       const parsed = ImportGuestRowSchema.safeParse({
         name,
         email:      email || null,
         group_name: groupName || null,
+        party_size: partySize,
       })
 
       if (!parsed.success) {

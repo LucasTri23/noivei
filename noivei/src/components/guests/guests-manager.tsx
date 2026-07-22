@@ -118,7 +118,7 @@ function previewBannerStyle(bg: string, color: string): React.CSSProperties {
 }
 
 const IMPORT_TEMPLATE_CSV =
-  'nome,email,grupo\nMaria Silva,maria@email.com,Família da noiva\nJoão Souza,,Amigos do trabalho\n'
+  'nome,email,grupo,quantidade\nMaria Silva,maria@email.com,Família da noiva,4\nJoão Souza,,Amigos do trabalho,1\n'
 
 function downloadImportTemplate() {
   const blob = new Blob([IMPORT_TEMPLATE_CSV], { type: 'text/csv;charset=utf-8;' })
@@ -136,7 +136,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
   const [importing, setImporting]       = useState(false)
-  const [form, setForm]                 = useState({ name: '', email: '', phone: '', group_name: '' })
+  const [form, setForm]                 = useState({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
   const [helpOpen, setHelpOpen]         = useState(false)
   const [previewCsv, setPreviewCsv]     = useState<string | null>(null)
   const [previewResult, setPreviewResult] = useState<ParseImportCsvResult | null>(null)
@@ -182,6 +182,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
         email:      form.email.trim() || null,
         phone:      form.phone.trim() || null,
         group_name: form.group_name.trim() || null,
+        party_size: form.party_size,
       }),
     })
 
@@ -193,7 +194,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
 
     const { data } = (await res.json()) as { data: Guest }
     setGuests((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')))
-    setForm({ name: '', email: '', phone: '', group_name: '' })
+    setForm({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
     setModalOpen(false)
   }
 
@@ -430,11 +431,29 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
                 {initial}
               </div>
               <div style={{ flex: 1, minWidth: '160px' }}>
-                <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
-                  {guest.name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
+                    {guest.name}
+                  </span>
+                  {guest.party_size > 1 && (
+                    <span
+                      title={`Convite para até ${guest.party_size} pessoas`}
+                      style={{
+                        fontSize: '11px', fontWeight: 700, color: 'var(--wedding-color-dark)',
+                        background: 'var(--wedding-color-subtle)', borderRadius: '99px', padding: '2px 8px',
+                      }}
+                    >
+                      até {guest.party_size} pessoas
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
                   {details || 'Sem detalhes'}
+                  {guest.attending_count !== null && (
+                    <span style={{ fontWeight: 600, color: '#5E8B6A' }}>
+                      {details ? ' · ' : ''}{guest.attending_count} de {guest.party_size} confirmado(s)
+                    </span>
+                  )}
                 </div>
               </div>
               <select
@@ -479,7 +498,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
         {visible.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
             {guests.length === 0
-              ? 'Nenhum convidado ainda. Adicione o primeiro ou importe um CSV (nome,email,grupo).'
+              ? 'Nenhum convidado ainda. Adicione o primeiro ou importe um CSV (nome,email,grupo,quantidade).'
               : 'Nenhum convidado encontrado para este filtro.'}
           </div>
         )}
@@ -537,6 +556,23 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
               style={inputStyle}
             />
           </div>
+          <div>
+            <label htmlFor="guest-party-size" style={labelStyle}>Quantidade de pessoas</label>
+            <input
+              id="guest-party-size"
+              type="number"
+              min={1}
+              max={20}
+              value={form.party_size}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, party_size: Math.min(20, Math.max(1, Number.parseInt(e.target.value, 10) || 1)) }))
+              }
+              style={inputStyle}
+            />
+            <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '6px 0 0' }}>
+              Inclui o próprio convidado — ex.: 4 = Maria + 3 acompanhantes.
+            </p>
+          </div>
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
@@ -579,11 +615,12 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
               padding: '10px 12px', fontSize: '13px', color: 'var(--wedding-color-dark)',
             }}
           >
-            nome,email,grupo
+            nome,email,grupo,quantidade
           </code>
           <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <li><strong>nome</strong> é obrigatório.</li>
-            <li><strong>email</strong> e <strong>grupo</strong> são opcionais — deixe o campo vazio entre as vírgulas.</li>
+            <li><strong>email</strong>, <strong>grupo</strong> e <strong>quantidade</strong> são opcionais — deixe o campo vazio entre as vírgulas.</li>
+            <li><strong>quantidade</strong> é o número de pessoas que o convite cobre (1 a 20, já incluindo o próprio convidado) — se não usar essa coluna, assume 1 (arquivos no formato antigo de 3 colunas continuam funcionando).</li>
             <li>Não use vírgulas dentro dos campos (não há suporte a campos entre aspas).</li>
             <li>A primeira linha pode ser um cabeçalho — se começar com &quot;nome&quot;, ela é ignorada automaticamente.</li>
             <li>Limite de {IMPORT_MAX_ROWS} convidados por arquivo.</li>
@@ -595,9 +632,9 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
               fontSize: '12.5px', margin: 0, whiteSpace: 'pre-wrap', color: 'var(--fg)',
             }}
           >
-{`nome,email,grupo
-Maria Silva,maria@email.com,Família da noiva
-João Souza,,Amigos do trabalho`}
+{`nome,email,grupo,quantidade
+Maria Silva,maria@email.com,Família da noiva,4
+João Souza,,Amigos do trabalho,1`}
           </pre>
           <button
             type="button"
@@ -656,6 +693,11 @@ João Souza,,Amigos do trabalho`}
                         <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{row.guest.name}</span>
                         <span style={{ color: 'var(--muted-fg)' }}>{row.guest.email ?? '—'}</span>
                         <span style={{ color: 'var(--muted-fg)' }}>{row.guest.group_name ?? '—'}</span>
+                        {row.guest.party_size > 1 && (
+                          <span style={{ color: 'var(--wedding-color-dark)', fontWeight: 600 }}>
+                            até {row.guest.party_size} pessoas
+                          </span>
+                        )}
                       </>
                     )}
                   </div>

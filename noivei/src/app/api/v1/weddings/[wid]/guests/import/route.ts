@@ -1,6 +1,6 @@
 import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
-import { ImportGuestRowSchema, type ImportGuestRow } from '@/lib/api/validation/guest.schema'
+import { ImportGuestRowSchema, PartySizeSchema, type ImportGuestRow } from '@/lib/api/validation/guest.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkGuestLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
@@ -19,8 +19,10 @@ interface RowError {
 
 /**
  * Importa convidados em lote a partir de CSV em texto puro no body.
- * Formato: nome,email,grupo (uma linha por convidado, separador vírgula,
- * sem suporte a campos entre aspas). Linha de cabeçalho "nome,..." é ignorada.
+ * Formato: nome,email,grupo,quantidade (uma linha por convidado, separador vírgula,
+ * sem suporte a campos entre aspas). A 4ª coluna (quantidade) é opcional — assume 1
+ * se ausente/vazia, mantendo compatibilidade com arquivos no formato antigo de 3
+ * colunas. Linha de cabeçalho "nome,..." é ignorada.
  * Import é tudo-ou-nada: qualquer linha inválida rejeita o lote inteiro (400).
  */
 export async function POST(req: Request, { params }: RouteContext) {
@@ -53,12 +55,23 @@ export async function POST(req: Request, { params }: RouteContext) {
     const rowErrors: RowError[] = []
 
     for (const { line, number } of rows) {
-      const [name = '', email = '', groupName = ''] = line.split(',').map((part) => part.trim())
+      const [name = '', email = '', groupName = '', partySizeRaw = ''] = line.split(',').map((part) => part.trim())
+
+      let partySize = 1
+      if (partySizeRaw) {
+        const parsedPartySize = PartySizeSchema.safeParse(Number.parseInt(partySizeRaw, 10))
+        if (!parsedPartySize.success) {
+          rowErrors.push({ line: number, message: 'Quantidade de pessoas inválida (use um número de 1 a 20).' })
+          continue
+        }
+        partySize = parsedPartySize.data
+      }
 
       const parsed = ImportGuestRowSchema.safeParse({
         name,
         email:      email || null,
         group_name: groupName || null,
+        party_size: partySize,
       })
 
       if (!parsed.success) {

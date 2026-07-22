@@ -13,8 +13,11 @@ import type { GuestStatus } from '@/types/database'
 // pra nada.
 export interface RsvpInfo {
   guest: {
-    name:   string
-    status: GuestStatus
+    name:            string
+    status:          GuestStatus
+    // Quantas pessoas o convite cobre (definido pelo casal) — seguro expor, é só um
+    // número; o formulário usa pra limitar quantos acompanhantes podem ser informados.
+    party_size:      number
   }
   wedding: {
     couple_names: string
@@ -34,7 +37,7 @@ export async function getRsvpByToken(
 ): Promise<RsvpInfo | null> {
   const { data: guest, error } = await supabase
     .from('guests')
-    .select('name, status, wedding_id')
+    .select('name, status, wedding_id, party_size')
     .eq('rsvp_token', token)
     .maybeSingle()
 
@@ -56,8 +59,9 @@ export async function getRsvpByToken(
 
   return {
     guest: {
-      name:   guest.name as string,
-      status: guest.status as GuestStatus,
+      name:       guest.name as string,
+      status:     guest.status as GuestStatus,
+      party_size: guest.party_size as number,
     },
     wedding: {
       couple_names: wedding.couple_names as string,

@@ -143,7 +143,7 @@ export default async function RsvpPage({ params }: RsvpPageProps) {
           Você foi convidado(a) para este grande dia. Podemos contar com a sua presença?
         </p>
 
-        <RsvpForm token={parsedToken.data} initialStatus={rsvp.guest.status} />
+        <RsvpForm token={parsedToken.data} initialStatus={rsvp.guest.status} initialPartySize={rsvp.guest.party_size} />
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '26px', textAlign: 'center' }}>
           Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest

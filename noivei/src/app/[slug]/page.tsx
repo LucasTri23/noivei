@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { getPublicSiteBySlug, type PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
-import type { SiteContent } from '@/lib/site/site-content'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 
@@ -67,72 +66,17 @@ function TimelineHeartIcon() {
 // foto) — simula o efeito de polaroids coladas levemente tortas.
 const TIMELINE_PHOTO_ROTATIONS = [-3, 2.5, -2, 3, -1.5, 2, -2.5, 1.5]
 
-// Só as 8 primeiras fotos entram no layout intercalado da timeline — a partir da 9ª (ou
-// se sobrar foto além dos blocos de texto disponíveis), tudo cai na Galeria tradicional.
+// Até 8 fotos entram na história (metade de cada lado) — o restante fecha o site
+// numa seção de Galeria tradicional mais abaixo.
 const TIMELINE_MAX_PHOTOS = 8
 
-interface TimelineEntry {
-  key:   string
-  label?: string
-  body:  string
-  photo: PublicGalleryPhoto | null
-}
-
-// Divide o texto único de "Nossa história" em parágrafos — quebra em uma ou mais linhas em
-// branco (`\n\s*\n`), que é como o casal naturalmente separa trechos num textarea. Cada
-// parágrafo vira seu próprio bloco na timeline, sem título repetido acima do texto (só a
-// seção como um todo tem um título, via SectionTitle) — diferente da versão anterior com
-// capítulos cadastrados manualmente, que repetia o mesmo rótulo em cada bloco.
-function splitStoryParagraphs(ourStory: string | undefined): string[] {
-  if (!ourStory) return []
-  return ourStory
-    .split(/\n\s*\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-}
-
-// Cada bloco de texto (parágrafos da história + cerimônia/festa) vira uma "parada" na linha do
-// tempo e consome uma foto da galeria, na ordem em que ambas aparecem. Decisão de design:
-// o número de blocos segue o texto disponível (não as fotos) — um bloco sem foto ainda
-// aparece, só que sem imagem ao lado. Só as primeiras TIMELINE_MAX_PHOTOS fotos entram
-// aqui; o restante (inclusive as que sobram depois de preencher os blocos) fecha o site
-// numa seção de galeria tradicional. Diferente dos blocos de cerimônia/festa (que mantêm
-// seu rótulo próprio), os parágrafos da história não têm `label` — evita repetir "Nossa
-// história" em cima de cada trecho.
-function buildTimelineEntries(
-  content:       Pick<SiteContent, 'our_story' | 'ceremony_info' | 'reception_info'>,
-  galleryPhotos: PublicGalleryPhoto[],
-): TimelineEntry[] {
-  const source: { key: string; label?: string; body: string | undefined }[] = [
-    ...splitStoryParagraphs(content.our_story).map((paragraph, index) => ({
-      key:  `historia-${index}`,
-      body: paragraph,
-    })),
-    { key: 'cerimonia', label: 'Cerimônia', body: content.ceremony_info },
-    { key: 'festa',     label: 'Festa',     body: content.reception_info },
-  ]
-
-  return source
-    .filter((entry): entry is { key: string; label?: string; body: string } => Boolean(entry.body))
-    .map((entry, index) => ({
-      ...entry,
-      photo: index < TIMELINE_MAX_PHOTOS ? (galleryPhotos[index] ?? null) : null,
-    }))
-}
-
-// Foto em moldura "polaroid" — usada somente nas laterais da história.
-function PolaroidPhoto({ photo, index, alt, align }: { photo: PublicGalleryPhoto; index: number; alt: string; align?: 'left' | 'right' }) {
+// Foto em moldura "polaroid" — usada tanto nas laterais da história (desktop)
+// quanto na grade abaixo do texto (mobile).
+function PolaroidPhoto({ photo, index, alt }: { photo: PublicGalleryPhoto; index: number; alt: string }) {
   const rotation = TIMELINE_PHOTO_ROTATIONS[index % TIMELINE_PHOTO_ROTATIONS.length]
-  // Centralizado no mobile (coluna única); a partir de `lg` encosta na borda externa da
-  // sua coluna, reforçando a sensação de "foto na lateral" do layout de 3 colunas.
-  const alignClassName =
-    align === 'left' ? 'mx-auto lg:ml-0 lg:mr-auto' : align === 'right' ? 'mx-auto lg:ml-auto lg:mr-0' : 'mx-auto'
 
   return (
-    <div
-      className={alignClassName}
-      style={{ position: 'relative', maxWidth: '255px', width: '100%', transform: `rotate(${rotation}deg)` }}
-    >
+    <div style={{ position: 'relative', maxWidth: '255px', width: '100%', margin: '0 auto', transform: `rotate(${rotation}deg)` }}>
       <div
         aria-hidden
         style={{
@@ -168,20 +112,24 @@ function PolaroidPhoto({ photo, index, alt, align }: { photo: PublicGalleryPhoto
   )
 }
 
-// Fio curvo que sai da fotografia lateral e chega ao texto central. Só é exibido junto
-// com o layout de 3 colunas (a partir de `lg`) — no mobile as fotos vão abaixo do texto
-// e não há fio nenhum (ver "hidden lg:block" no chamador).
-function StoryWire({ side }: { side: 'left' | 'right' }) {
+// Linha curta e independente por foto — termina antes da coluna central (não atravessa
+// o texto) e nunca se cruza com a linha da foto vizinha, porque cada uma só ocupa o
+// espaço entre a própria foto e a borda do texto, nunca o vão inteiro entre colunas.
+function PhotoConnector({ side }: { side: 'left' | 'right' }) {
   const path = side === 'left'
-    ? 'M 205 82 C 285 82, 275 145, 420 145 C 455 145, 465 120, 500 120'
-    : 'M 795 82 C 715 82, 725 145, 580 145 C 545 145, 535 120, 500 120'
+    ? 'M 0 12 C 28 12, 34 34, 72 34 C 94 34, 102 24, 118 24'
+    : 'M 118 12 C 90 12, 84 34, 46 34 C 24 34, 16 24, 0 24'
 
   return (
     <svg
       aria-hidden
-      viewBox="0 0 1000 180"
-      preserveAspectRatio="none"
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'visible' }}
+      className="hidden xl:block"
+      viewBox="0 0 118 46"
+      style={{
+        position: 'absolute', top: '50%',
+        ...(side === 'left' ? { left: 'calc(100% - 8px)' } : { right: 'calc(100% - 8px)' }),
+        width: '118px', height: '46px', transform: 'translateY(-50%)', overflow: 'visible', zIndex: 0,
+      }}
     >
       <path
         d={path}
@@ -191,14 +139,24 @@ function StoryWire({ side }: { side: 'left' | 'right' }) {
         strokeLinecap="round"
         opacity="0.62"
       />
-      <circle cx="500" cy="120" r="8" fill="var(--surface)" stroke="var(--wedding-color-secondary)" strokeWidth="2" />
-      <path
-        d="M496.5 118.5c0-2.8 4-3.7 4-0.5 0-3.2 4-2.3 4 0.5 0 2.8-4 5.2-4 5.2s-4-2.4-4-5.2Z"
-        fill="none"
-        stroke="var(--wedding-color-secondary-dark)"
-        strokeWidth="1.2"
+      <circle
+        cx={side === 'left' ? '118' : '0'}
+        cy="24"
+        r="4.5"
+        fill="var(--bg)"
+        stroke="var(--wedding-color-secondary)"
+        strokeWidth="1.5"
       />
     </svg>
+  )
+}
+
+function StorySidePhoto({ photo, index, side }: { photo: PublicGalleryPhoto; index: number; side: 'left' | 'right' }) {
+  return (
+    <div style={{ position: 'relative', zIndex: 1 }}>
+      <PolaroidPhoto photo={photo} index={index} alt={`Foto ${index + 1} do casal`} />
+      <PhotoConnector side={side} />
+    </div>
   )
 }
 
@@ -242,15 +200,14 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
     '--brand-dark-gradient-to':         brandDarkGradient.to,
   } as React.CSSProperties
 
-  // Fotos da galeria espalhadas pelo site em vez de só num bloco isolado: acompanham os
-  // blocos da linha do tempo "Nossa história" (ver buildTimelineEntries), até o teto de
-  // TIMELINE_MAX_PHOTOS; o restante (as que sobram dos blocos + tudo após a 8ª) fecha o
-  // site numa seção de galeria tradicional.
-  const galleryPhotos     = site.galleryPhotos
-  const timelineEntries   = buildTimelineEntries(site.content, galleryPhotos)
-  const timelineTitle     = site.content.our_story ? 'Nossa história' : 'Cerimônia & festa'
-  const consumedPhotos    = Math.min(timelineEntries.length, TIMELINE_MAX_PHOTOS)
-  const remainingPhotos   = galleryPhotos.slice(consumedPhotos)
+  // Até oito fotos compõem a história: metade na lateral esquerda e metade na direita,
+  // independente dos parágrafos do texto (o texto é um bloco único e contínuo).
+  const galleryPhotos    = site.galleryPhotos
+  const storyPhotos      = galleryPhotos.slice(0, TIMELINE_MAX_PHOTOS)
+  const leftStoryPhotos  = storyPhotos.filter((_, index) => index % 2 === 0)
+  const rightStoryPhotos = storyPhotos.filter((_, index) => index % 2 === 1)
+  const consumedPhotos   = storyPhotos.length
+  const remainingPhotos  = galleryPhotos.slice(consumedPhotos)
 
   // Sem foto de capa, mantém o gradiente escuro atual; com foto, aplica um overlay
   // escuro semi-transparente por cima pra manter o texto legível.
@@ -302,91 +259,92 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
       <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '56px 24px 80px' }}>
-        {/* Nossa história — texto sempre centralizado, fotos alternando de lado e ligadas
-            ao texto por um fio curvo. O layout de 3 colunas só entra a partir de `lg`
-            (1024px) — o grid precisa de ~860px pra caber (270px + 320-460px + 270px de
-            colunas fixas/mínimas), então ativar já em `md` (768px) estouraria a largura
-            em tablets e janelas de notebook menores; no mobile/tablet a foto cai abaixo
-            do texto (ver bloco "lg:hidden" mais abaixo). */}
-        {timelineEntries.length > 0 && (
-          <section style={{ marginBottom: '56px', position: 'relative' }}>
-            <SectionTitle>{timelineTitle}</SectionTitle>
+        {/* Nossa história — texto único e contínuo no centro, fotos independentes nas
+            laterais. O layout de 3 colunas só entra a partir de `xl` (1280px): as
+            colunas de foto (255px cada) + o texto (360-520px) + os dois gaps de 80px
+            somam ~1030px de largura mínima — ativar já em `md`/`lg` deixaria menos
+            espaço do que isso disponível (o container tem no máximo 1180px, e ainda
+            perde padding lateral), estourando a borda. No mobile/tablet, o texto
+            aparece inteiro primeiro e as fotos vêm depois, numa grade de 2 colunas. */}
+        {site.content.our_story && (
+          <section style={{ marginBottom: '64px' }}>
+            <SectionTitle>Nossa história</SectionTitle>
 
-            <div className="flex flex-col gap-16">
-              {timelineEntries.map((entry, index) => {
-                const photoSide: 'left' | 'right' = index % 2 === 0 ? 'left' : 'right'
+            <div className="hidden xl:grid xl:grid-cols-[255px_minmax(360px,520px)_255px] xl:gap-x-20 xl:items-start xl:justify-center">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '34px' }}>
+                {leftStoryPhotos.map((photo, index) => (
+                  <StorySidePhoto key={`${photo.url}-left-${index}`} photo={photo} index={index * 2} side="left" />
+                ))}
+              </div>
 
-                const label = entry.label && (
-                  <div
-                    style={{
-                      fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em',
-                      textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px',
-                    }}
-                  >
-                    {entry.label}
-                  </div>
-                )
+              <div
+                style={{
+                  position: 'relative', zIndex: 2, textAlign: 'center',
+                  padding: '20px 24px 28px', borderRadius: '24px',
+                  background: 'color-mix(in srgb, var(--bg) 96%, transparent)',
+                }}
+              >
+                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 2, whiteSpace: 'pre-line', margin: 0 }}>
+                  {site.content.our_story}
+                </p>
+              </div>
 
-                return (
-                  <div
-                    key={entry.key}
-                    style={{ position: 'relative', minHeight: entry.photo ? '260px' : undefined }}
-                  >
-                    {entry.photo && (
-                      <div className="hidden lg:block">
-                        <StoryWire side={photoSide} />
-                      </div>
-                    )}
-
-                    <div
-                      className="grid items-center gap-6 lg:grid-cols-[270px_minmax(320px,460px)_270px] lg:justify-center"
-                      style={{ position: 'relative', zIndex: 1 }}
-                    >
-                      <div className="hidden lg:block">
-                        {entry.photo && photoSide === 'left' && (
-                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" align="left" />
-                        )}
-                      </div>
-
-                      <div
-                        style={{
-                          maxWidth: '460px', margin: '0 auto', textAlign: 'center',
-                          background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
-                          padding: '14px 18px', borderRadius: '18px',
-                        }}
-                      >
-                        {label}
-                        <p
-                          style={{
-                            fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8,
-                            whiteSpace: 'pre-line', margin: 0,
-                          }}
-                        >
-                          {entry.body}
-                        </p>
-                      </div>
-
-                      <div className="hidden lg:block">
-                        {entry.photo && photoSide === 'right' && (
-                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" align="right" />
-                        )}
-                      </div>
-
-                      {/* No celular/tablet: texto aparece primeiro (já renderizado acima),
-                          foto vem logo abaixo — o conteúdo não muda, só a posição. */}
-                      {entry.photo && (
-                        <div className="lg:hidden" style={{ marginTop: '18px' }}>
-                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '150px' }}>
+                {rightStoryPhotos.map((photo, index) => (
+                  <StorySidePhoto key={`${photo.url}-right-${index}`} photo={photo} index={index * 2 + 1} side="right" />
+                ))}
+              </div>
             </div>
 
+            {/* No celular/tablet, o texto continua inteiro e as fotos aparecem abaixo em duas colunas. */}
+            <div className="xl:hidden">
+              <p
+                style={{
+                  maxWidth: '560px', margin: '0 auto', textAlign: 'center',
+                  fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line',
+                }}
+              >
+                {site.content.our_story}
+              </p>
+
+              {storyPhotos.length > 0 && (
+                <div className="grid grid-cols-2 gap-6" style={{ marginTop: '38px' }}>
+                  {storyPhotos.map((photo, index) => (
+                    <PolaroidPhoto key={`${photo.url}-mobile-${index}`} photo={photo} index={index} alt={`Foto ${index + 1} do casal`} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Cerimônia & Festa — sempre abaixo da história */}
+        {(site.content.ceremony_info || site.content.reception_info) && (
+          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
+            {site.content.ceremony_info && (
+              <div style={{ maxWidth: '560px', margin: '0 auto 30px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
+                  Cerimônia
+                </div>
+                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }}>
+                  {site.content.ceremony_info}
+                </p>
+              </div>
+            )}
+
+            {site.content.reception_info && (
+              <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
+                  Festa
+                </div>
+                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }}>
+                  {site.content.reception_info}
+                </p>
+              </div>
+            )}
+
             {mapsUrl && (
-              <div style={{ textAlign: 'center', marginTop: '36px' }}>
+              <div style={{ textAlign: 'center', marginTop: '30px' }}>
                 <a
                   href={mapsUrl}
                   target="_blank"
@@ -467,7 +425,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           </section>
         )}
 
-        {/* Galeria — só o que sobrou depois de espalhar fotos pelas seções acima */}
+        {/* Galeria — só o que sobrou depois de espalhar fotos pela história */}
         {remainingPhotos.length > 0 && (
           <section style={{ marginBottom: '56px' }}>
             <SectionTitle>Galeria</SectionTitle>
