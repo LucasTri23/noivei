@@ -54,8 +54,7 @@ function MapPinIcon() {
   )
 }
 
-// Ícones pequenos e decorativos que ciclam por posição do bloco da timeline (não há dado
-// estruturado de "categoria" por bloco de texto) — coração, alianças, recado, estrela.
+// Ícone decorativo do pin da foto polaroid.
 function TimelineHeartIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -63,28 +62,6 @@ function TimelineHeartIcon() {
     </svg>
   )
 }
-function TimelineRingIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="9" cy="15" r="5" /><circle cx="16" cy="9" r="5" />
-    </svg>
-  )
-}
-function TimelineChatIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-    </svg>
-  )
-}
-function TimelineStarIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  )
-}
-const TIMELINE_NODE_ICONS = [TimelineHeartIcon, TimelineRingIcon, TimelineChatIcon, TimelineStarIcon]
 
 // Rotação leve e determinística por índice (não muda a cada render, mas varia foto a
 // foto) — simula o efeito de polaroids coladas levemente tortas.
@@ -117,11 +94,11 @@ function splitStoryParagraphs(ourStory: string | undefined): string[] {
 // Cada bloco de texto (parágrafos da história + cerimônia/festa) vira uma "parada" na linha do
 // tempo e consome uma foto da galeria, na ordem em que ambas aparecem. Decisão de design:
 // o número de blocos segue o texto disponível (não as fotos) — um bloco sem foto ainda
-// aparece, só que centralizado, sem quebrar o zigue-zague dos vizinhos. Só as primeiras
-// TIMELINE_MAX_PHOTOS fotos entram aqui; o restante (inclusive as que sobram depois de
-// preencher os blocos) fecha o site numa seção de galeria tradicional. Diferente dos blocos
-// de cerimônia/festa (que mantêm seu rótulo próprio), os parágrafos da história não têm
-// `label` — evita repetir "Nossa história" em cima de cada trecho.
+// aparece, só que sem imagem ao lado. Só as primeiras TIMELINE_MAX_PHOTOS fotos entram
+// aqui; o restante (inclusive as que sobram depois de preencher os blocos) fecha o site
+// numa seção de galeria tradicional. Diferente dos blocos de cerimônia/festa (que mantêm
+// seu rótulo próprio), os parágrafos da história não têm `label` — evita repetir "Nossa
+// história" em cima de cada trecho.
 function buildTimelineEntries(
   content:       Pick<SiteContent, 'our_story' | 'ceremony_info' | 'reception_info'>,
   galleryPhotos: PublicGalleryPhoto[],
@@ -143,56 +120,36 @@ function buildTimelineEntries(
     }))
 }
 
-// Gera um path SVG em "S" contínuo (um monte por bloco, alternando o lado) que serve de fio
-// orgânico ligando os blocos da timeline. Usa preserveAspectRatio="none" no <svg> pai pra
-// esticar em qualquer altura de container sem precisar calcular a altura real em pixels
-// no servidor — não é pixel-perfeito, mas fica visualmente ondulado em vez de uma reta.
-function buildTimelineWavePath(blockCount: number): string {
-  const width     = 40
-  const segment    = 100
-  const midX       = width / 2
-  const amplitude  = 13
-
-  let d = `M ${midX} 0`
-  for (let i = 0; i < blockCount; i++) {
-    const yStart = i * segment
-    const yEnd   = yStart + segment
-    const yMid   = yStart + segment / 2
-    const dir    = i % 2 === 0 ? 1 : -1
-    const cx     = midX + dir * amplitude
-    d += ` Q ${cx} ${yMid} ${midX} ${yEnd}`
-  }
-  return d
-}
-
-// Foto em moldura "polaroid" — fundo creme simulando a borda física, sombra suave, leve
-// rotação por índice e um pin decorativo em forma de coração no topo.
+// Foto em moldura "polaroid" — usada somente nas laterais da história.
 function PolaroidPhoto({ photo, index, alt, align }: { photo: PublicGalleryPhoto; index: number; alt: string; align?: 'left' | 'right' }) {
   const rotation = TIMELINE_PHOTO_ROTATIONS[index % TIMELINE_PHOTO_ROTATIONS.length]
-  // Centralizado no mobile (coluna única); a partir de `md` encosta na borda externa da
-  // sua coluna (em vez de ficar centralizado dentro da metade), reforçando a sensação de
-  // "foto na lateral" agora que o contêiner da seção é mais largo (1040px).
+  // Centralizado no mobile (coluna única); a partir de `lg` encosta na borda externa da
+  // sua coluna, reforçando a sensação de "foto na lateral" do layout de 3 colunas.
   const alignClassName =
-    align === 'left' ? 'mx-auto md:ml-0 md:mr-auto' : align === 'right' ? 'mx-auto md:ml-auto md:mr-0' : 'mx-auto'
+    align === 'left' ? 'mx-auto lg:ml-0 lg:mr-auto' : align === 'right' ? 'mx-auto lg:ml-auto lg:mr-0' : 'mx-auto'
 
   return (
-    <div className={alignClassName} style={{ position: 'relative', maxWidth: '320px', width: '100%', transform: `rotate(${rotation}deg)` }}>
+    <div
+      className={alignClassName}
+      style={{ position: 'relative', maxWidth: '255px', width: '100%', transform: `rotate(${rotation}deg)` }}
+    >
       <div
         aria-hidden
         style={{
-          position: 'absolute', top: '-13px', left: '50%', width: '28px', height: '28px',
+          position: 'absolute', top: '-12px', left: '50%', width: '24px', height: '24px',
           transform: 'translateX(-50%) rotate(-8deg)', borderRadius: '50%',
           background: 'var(--wedding-color-secondary)', color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 3px 8px rgba(60,40,24,0.28)', zIndex: 2,
+          boxShadow: '0 3px 8px rgba(60,40,24,0.25)', zIndex: 3,
         }}
       >
         <TimelineHeartIcon />
       </div>
+
       <div
         style={{
-          background: '#FFFCF6', padding: '10px 10px 30px', borderRadius: '3px',
-          boxShadow: '0 16px 32px rgba(60,40,24,0.18), 0 3px 8px rgba(60,40,24,0.12)',
+          background: '#FFFCF6', padding: '9px 9px 26px', borderRadius: '3px',
+          boxShadow: '0 16px 32px rgba(60,40,24,0.16), 0 3px 8px rgba(60,40,24,0.10)',
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage/externa, sem domínio fixo para configurar no next/image */}
@@ -200,14 +157,48 @@ function PolaroidPhoto({ photo, index, alt, align }: { photo: PublicGalleryPhoto
           src={photo.url}
           alt={alt}
           style={{
-            width: '100%', height: '250px', display: 'block', borderRadius: '2px',
-            objectFit:     photo.fit_contain ? 'contain' : 'cover',
+            width: '100%', height: '205px', display: 'block', borderRadius: '2px',
+            objectFit: photo.fit_contain ? 'contain' : 'cover',
             objectPosition: `center ${photo.position_y}%`,
-            background:    photo.fit_contain ? '#F1E9DD' : undefined,
+            background: photo.fit_contain ? '#F1E9DD' : undefined,
           }}
         />
       </div>
     </div>
+  )
+}
+
+// Fio curvo que sai da fotografia lateral e chega ao texto central. Só é exibido junto
+// com o layout de 3 colunas (a partir de `lg`) — no mobile as fotos vão abaixo do texto
+// e não há fio nenhum (ver "hidden lg:block" no chamador).
+function StoryWire({ side }: { side: 'left' | 'right' }) {
+  const path = side === 'left'
+    ? 'M 205 82 C 285 82, 275 145, 420 145 C 455 145, 465 120, 500 120'
+    : 'M 795 82 C 715 82, 725 145, 580 145 C 545 145, 535 120, 500 120'
+
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 1000 180"
+      preserveAspectRatio="none"
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'visible' }}
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke="var(--wedding-color-secondary)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.62"
+      />
+      <circle cx="500" cy="120" r="8" fill="var(--surface)" stroke="var(--wedding-color-secondary)" strokeWidth="2" />
+      <path
+        d="M496.5 118.5c0-2.8 4-3.7 4-0.5 0-3.2 4-2.3 4 0.5 0 2.8-4 5.2-4 5.2s-4-2.4-4-5.2Z"
+        fill="none"
+        stroke="var(--wedding-color-secondary-dark)"
+        strokeWidth="1.2"
+      />
+    </svg>
   )
 }
 
@@ -310,102 +301,90 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       {/* Divisor com as duas cores do casal */}
       <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
-      <div style={{ maxWidth: '1040px', margin: '0 auto', padding: '56px 24px 80px' }}>
-        {/* Nossa história — linha do tempo com fotos em moldura polaroid alternando de
-            lado, ligadas por um fio dourado orgânico/curvo (só aparece em telas médias+,
-            onde há duas colunas de fato; no mobile os blocos empilham e o fio some). */}
+      <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '56px 24px 80px' }}>
+        {/* Nossa história — texto sempre centralizado, fotos alternando de lado e ligadas
+            ao texto por um fio curvo. O layout de 3 colunas só entra a partir de `lg`
+            (1024px) — o grid precisa de ~860px pra caber (270px + 320-460px + 270px de
+            colunas fixas/mínimas), então ativar já em `md` (768px) estouraria a largura
+            em tablets e janelas de notebook menores; no mobile/tablet a foto cai abaixo
+            do texto (ver bloco "lg:hidden" mais abaixo). */}
         {timelineEntries.length > 0 && (
           <section style={{ marginBottom: '56px', position: 'relative' }}>
             <SectionTitle>{timelineTitle}</SectionTitle>
 
-            <svg
-              aria-hidden
-              className="hidden md:block"
-              viewBox={`0 0 40 ${timelineEntries.length * 100}`}
-              preserveAspectRatio="none"
-              style={{
-                position: 'absolute', top: '8px', left: '50%', width: '40px',
-                height: 'calc(100% - 16px)', transform: 'translateX(-50%)', zIndex: 0,
-              }}
-            >
-              <path
-                d={buildTimelineWavePath(timelineEntries.length)}
-                fill="none"
-                stroke="var(--wedding-color-secondary)"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                opacity="0.55"
-              />
-            </svg>
-
-            <div className="flex flex-col gap-14" style={{ position: 'relative', zIndex: 1 }}>
+            <div className="flex flex-col gap-16">
               {timelineEntries.map((entry, index) => {
-                // Blocos ímpares invertem os lados (foto à esquerda, texto à direita) —
-                // é o que produz o zigue-zague conforme a página desce.
-                const photoFirst = index % 2 === 1
-                const NodeIcon   = TIMELINE_NODE_ICONS[index % TIMELINE_NODE_ICONS.length] ?? TimelineHeartIcon
+                const photoSide: 'left' | 'right' = index % 2 === 0 ? 'left' : 'right'
 
-                // Só os blocos de cerimônia/festa têm rótulo próprio — os parágrafos da
-                // história não repetem "Nossa história" em cima de cada trecho.
                 const label = entry.label && (
-                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
+                  <div
+                    style={{
+                      fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em',
+                      textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px',
+                    }}
+                  >
                     {entry.label}
                   </div>
                 )
-                const body = (
-                  <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }}>
-                    {entry.body}
-                  </p>
-                )
 
                 return (
-                  <div key={entry.key} style={{ position: 'relative' }}>
-                    {/* Ícone circular sobre o fio, centralizado no meio vertical do bloco —
-                        cicla entre coração/alianças/recado/estrela por posição do bloco. */}
-                    <div
-                      aria-hidden
-                      className="hidden md:flex"
-                      style={{
-                        position: 'absolute', top: '50%', left: '50%', width: '34px', height: '34px',
-                        alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
-                        background: 'var(--surface)', color: 'var(--wedding-color-secondary-dark)',
-                        border: '2px solid var(--wedding-color-secondary)',
-                        transform: 'translate(-50%,-50%)', zIndex: 2,
-                        boxShadow: '0 4px 10px rgba(60,40,24,0.14)',
-                      }}
-                    >
-                      <NodeIcon />
-                    </div>
-
-                    {entry.photo ? (
-                      <div className="grid gap-6 md:grid-cols-2 md:items-center">
-                        <div className={photoFirst ? 'md:order-2' : 'md:order-1'}>
-                          {label}
-                          {body}
-                        </div>
-                        <div className={photoFirst ? 'md:order-1' : 'md:order-2'}>
-                          <PolaroidPhoto
-                            photo={entry.photo}
-                            index={index}
-                            alt="Foto do casal"
-                            align={photoFirst ? 'left' : 'right'}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      // Bloco sem foto disponível: fica centralizado em vez de quebrar o
-                      // zigue-zague dos vizinhos (acontece quando há mais texto que fotos).
-                      <div style={{ maxWidth: '520px', margin: '0 auto', textAlign: 'center' }}>
-                        {label}
-                        {body}
+                  <div
+                    key={entry.key}
+                    style={{ position: 'relative', minHeight: entry.photo ? '260px' : undefined }}
+                  >
+                    {entry.photo && (
+                      <div className="hidden lg:block">
+                        <StoryWire side={photoSide} />
                       </div>
                     )}
+
+                    <div
+                      className="grid items-center gap-6 lg:grid-cols-[270px_minmax(320px,460px)_270px] lg:justify-center"
+                      style={{ position: 'relative', zIndex: 1 }}
+                    >
+                      <div className="hidden lg:block">
+                        {entry.photo && photoSide === 'left' && (
+                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" align="left" />
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          maxWidth: '460px', margin: '0 auto', textAlign: 'center',
+                          background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
+                          padding: '14px 18px', borderRadius: '18px',
+                        }}
+                      >
+                        {label}
+                        <p
+                          style={{
+                            fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8,
+                            whiteSpace: 'pre-line', margin: 0,
+                          }}
+                        >
+                          {entry.body}
+                        </p>
+                      </div>
+
+                      <div className="hidden lg:block">
+                        {entry.photo && photoSide === 'right' && (
+                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" align="right" />
+                        )}
+                      </div>
+
+                      {/* No celular/tablet: texto aparece primeiro (já renderizado acima),
+                          foto vem logo abaixo — o conteúdo não muda, só a posição. */}
+                      {entry.photo && (
+                        <div className="lg:hidden" style={{ marginTop: '18px' }}>
+                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}
             </div>
 
-            {/* "Como chegar" mora aqui, perto das informações de local/horário, em vez de na capa */}
             {mapsUrl && (
               <div style={{ textAlign: 'center', marginTop: '36px' }}>
                 <a
