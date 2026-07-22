@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
-import type { Json } from '@/types/database'
+import type { GiftRegistryType, Json } from '@/types/database'
 
 // Foto da galeria com metadados de recorte já resolvidos — position_y/fit_contain vêm de
 // wedding_gallery_photos (fotos enviadas do computador); URLs coladas manualmente não têm
@@ -34,6 +34,7 @@ export interface PublicSiteInfo {
     price_cents:  number | null
     store_url:    string | null
     image_url:    string | null
+    gift_type:    GiftRegistryType
     is_purchased: boolean
   }[]
 }
@@ -66,7 +67,7 @@ export async function getPublicSiteBySlug(
 
   const { data: gifts } = await supabase
     .from('gift_registry_items')
-    .select('id, name, description, price_cents, store_url, image_url, is_purchased')
+    .select('id, name, description, price_cents, store_url, image_url, gift_type, is_purchased')
     .eq('wedding_id', weddingId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })

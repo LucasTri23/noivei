@@ -194,6 +194,8 @@ export interface WeddingTable {
   created_at:  string
 }
 
+export type GiftRegistryType = 'link' | 'app_payment'
+
 export interface GiftRegistryItem {
   id:           string
   wedding_id:   string
@@ -202,6 +204,7 @@ export interface GiftRegistryItem {
   price_cents:  number | null
   store_url:    string | null
   image_url:    string | null
+  gift_type:    GiftRegistryType
   is_purchased: boolean
   purchased_by: string | null
   sort_order:   number
@@ -364,4 +367,13 @@ export interface FinancialInstallment {
   paid:                boolean
   paid_at:             string | null
   created_at:          string
+}
+
+export interface FinancialCategoryBudget {
+  id:           string
+  wedding_id:   string
+  category:     string
+  budget_cents: number
+  created_at:   string
+  updated_at:   string
 }

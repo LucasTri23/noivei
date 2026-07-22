@@ -10,16 +10,17 @@ import { isPaidPlan, isPlusPlan, type PlanId } from '@/constants/plans'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { QUOTE_TYPES, QUOTE_TYPE_LABELS } from '@/lib/api/validation/financial-quote.schema'
 import { toastError, toastSuccess } from '@/store/toast.store'
-import type { FinancialEntry, FinancialInstallment, FinancialQuote, FinancialQuoteType } from '@/types/database'
+import type { FinancialCategoryBudget, FinancialEntry, FinancialInstallment, FinancialQuote, FinancialQuoteType } from '@/types/database'
 
 interface FinancialManagerProps {
-  weddingId:            string
-  budgetCents:          number | null
-  initialEntries:       FinancialEntry[]
-  initialQuotes:        FinancialQuote[]
-  initialInstallments:  FinancialInstallment[]
-  planId:               PlanId
-  entryLimit:           number
+  weddingId:              string
+  budgetCents:            number | null
+  initialEntries:         FinancialEntry[]
+  initialQuotes:          FinancialQuote[]
+  initialInstallments:    FinancialInstallment[]
+  initialCategoryBudgets: FinancialCategoryBudget[]
+  planId:                 PlanId
+  entryLimit:             number
 }
 
 type FinancialView = 'lancamentos' | 'orcamentos'
@@ -214,7 +215,7 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
-export default function FinancialManager({ weddingId, budgetCents, initialEntries, initialQuotes, initialInstallments, planId, entryLimit }: FinancialManagerProps) {
+export default function FinancialManager({ weddingId, budgetCents, initialEntries, initialQuotes, initialInstallments, initialCategoryBudgets, planId, entryLimit }: FinancialManagerProps) {
   const [view, setView]           = useState<FinancialView>('lancamentos')
   const [entries, setEntries]     = useState<FinancialEntry[]>(initialEntries)
   const [modalOpen, setModalOpen] = useState(false)
@@ -232,6 +233,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [selectingId, setSelectingId]       = useState<string | null>(null)
   const showQuoteSpinner = useDelayedLoading(savingQuote)
 
+  const [categoryBudgets, setCategoryBudgets]   = useState<FinancialCategoryBudget[]>(initialCategoryBudgets)
+  const [budgetDrafts, setBudgetDrafts]         = useState<Record<string, number | null>>({})
+  const [savingBudgetCategory, setSavingBudgetCategory] = useState<string | null>(null)
+  const [deletingBudgetId, setDeletingBudgetId] = useState<string | null>(null)
+  const [newBudgetCategory, setNewBudgetCategory] = useState('')
+  const [newBudgetAmount, setNewBudgetAmount]     = useState<number | null>(null)
+  const [savingNewBudget, setSavingNewBudget]     = useState(false)
+
   const [installments, setInstallments]           = useState<Record<string, FinancialInstallment[]>>(
     () => groupInstallmentsByEntry(initialEntries, initialInstallments),
   )
@@ -247,6 +256,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
 
   const apiBase      = `/api/v1/weddings/${weddingId}/financial`
   const quotesApiBase = `/api/v1/weddings/${weddingId}/financial-quotes`
+  const categoryBudgetsApiBase = `/api/v1/weddings/${weddingId}/financial-category-budgets`
 
   const isPaid  = isPaidPlan(planId)
   const isPlus  = isPlusPlan(planId)
@@ -267,6 +277,10 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
     }
   })
+
+  // Categorias elegíveis para meta de gastos: as que já têm lançamento, mais as que só
+  // têm meta salva (sem nenhum lançamento ainda) — pra a linha não sumir da lista.
+  const budgetCategoryNames = [...new Set([...categories.map((c) => c.name), ...categoryBudgets.map((b) => b.category)])]
 
   // Orçamentos agrupados por tipo, na ordem fixa de QUOTE_TYPES (não na ordem de criação),
   // pra manter as seções sempre no mesmo lugar conforme o casal adiciona/remove cotações.
@@ -513,6 +527,100 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         ? 'Orçamento selecionado! O lançamento foi criado no Financeiro e a tarefa do Checklist foi marcada como concluída.'
         : 'Orçamento selecionado! O lançamento foi criado no Financeiro.',
     )
+  }
+
+  function getCategoryBudget(category: string): FinancialCategoryBudget | undefined {
+    return categoryBudgets.find((b) => b.category === category)
+  }
+
+  function getBudgetDraftValue(category: string): number | null {
+    if (category in budgetDrafts) return budgetDrafts[category] ?? null
+    return getCategoryBudget(category)?.budget_cents ?? null
+  }
+
+  function upsertCategoryBudgetInState(data: FinancialCategoryBudget) {
+    setCategoryBudgets((prev) => {
+      const exists = prev.some((b) => b.id === data.id)
+      return exists ? prev.map((b) => (b.id === data.id ? data : b)) : [...prev, data]
+    })
+  }
+
+  async function handleSaveCategoryBudget(category: string) {
+    if (savingBudgetCategory) return
+    const cents = getBudgetDraftValue(category)
+    if (cents === null) {
+      toastError('Informe um valor de meta válido.')
+      return
+    }
+
+    setSavingBudgetCategory(category)
+    const res = await fetch(categoryBudgetsApiBase, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ category, budget_cents: cents }),
+    })
+    setSavingBudgetCategory(null)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível salvar a meta de gastos.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: FinancialCategoryBudget }
+    upsertCategoryBudgetInState(data)
+    setBudgetDrafts((prev) => {
+      const next = { ...prev }
+      delete next[category]
+      return next
+    })
+    toastSuccess('Meta de gastos salva!')
+  }
+
+  async function handleDeleteCategoryBudget(budget: FinancialCategoryBudget) {
+    if (deletingBudgetId) return
+    if (!window.confirm(`Remover a meta de gastos da categoria "${budget.category}"?`)) return
+
+    setDeletingBudgetId(budget.id)
+    const res = await fetch(`${categoryBudgetsApiBase}/${budget.id}`, { method: 'DELETE' })
+    setDeletingBudgetId(null)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível remover a meta de gastos.'))
+      return
+    }
+
+    setCategoryBudgets((prev) => prev.filter((b) => b.id !== budget.id))
+    toastSuccess('Meta de gastos removida.')
+  }
+
+  async function handleAddNewCategoryBudget(e: React.FormEvent) {
+    e.preventDefault()
+    if (savingNewBudget) return
+
+    const category = newBudgetCategory.trim()
+    if (!category || newBudgetAmount === null) {
+      toastError('Informe a categoria e o valor da meta.')
+      return
+    }
+
+    setSavingNewBudget(true)
+    const res = await fetch(categoryBudgetsApiBase, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ category, budget_cents: newBudgetAmount }),
+    })
+    setSavingNewBudget(false)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível salvar a meta de gastos.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: FinancialCategoryBudget }
+    upsertCategoryBudgetInState(data)
+    setNewBudgetCategory('')
+    setNewBudgetAmount(null)
+    toastSuccess('Meta de gastos adicionada!')
   }
 
   // As parcelas já vêm carregadas do servidor (initialInstallments) — este fetch só
@@ -786,19 +894,29 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
               )}
               {categories.map((cat) => {
                 const catPct = cat.total > 0 ? Math.round((cat.paid / cat.total) * 100) : 0
+                const catBudget = getCategoryBudget(cat.name)
+                const overBudget = catBudget ? cat.total > catBudget.budget_cents : false
+                // Categoria sem meta definida mantém a cor fixa da paleta (comportamento atual);
+                // só troca pra vermelho/secundária quando o casal define uma meta pra ela.
+                const barColor = catBudget ? (overBudget ? '#C0553F' : 'var(--wedding-color-secondary)') : cat.color
                 return (
                   <div key={cat.name}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--fg)' }}>{cat.name}</span>
                       <span style={{ fontSize: '12.5px', color: 'var(--muted-fg)' }}>
                         {fmt(cat.paid)} / {fmt(cat.total)}
+                        {catBudget && (
+                          <span style={{ color: overBudget ? '#C0553F' : 'var(--muted-fg)', fontWeight: overBudget ? 700 : 400 }}>
+                            {' '}· meta {fmt(catBudget.budget_cents)}
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div style={{ height: '8px', borderRadius: '99px', background: '#F0E8DE', overflow: 'hidden' }}>
                       <div
                         style={{
                           height: '100%', borderRadius: '99px',
-                          background: cat.color,
+                          background: barColor,
                           width: `${catPct}%`,
                         }}
                       />
@@ -1021,6 +1139,110 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       {/* Orçamentos por categoria — recurso Completo (Premium+): cadastra várias cotações
           por tipo (ex.: 3 espaços) e escolhe uma, que vira lançamento real no Financeiro. */}
       {view === 'orcamentos' && isPaid && (
+        <>
+        <div className="mt-5 rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+          <div className="mb-5">
+            <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 500, color: 'var(--fg)' }}>
+              Meta de gastos por categoria
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '4px' }}>
+              Defina quanto pretende gastar em cada categoria. Se o comprometido passar da meta, a categoria fica
+              vermelha lá em &quot;Por categoria&quot;; dentro do combinado, fica na cor do casal.
+            </p>
+          </div>
+
+          {budgetCategoryNames.length === 0 ? (
+            <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', marginBottom: '18px' }}>
+              Nenhuma categoria lançada ainda. Adicione uma meta abaixo.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3" style={{ marginBottom: '20px' }}>
+              {budgetCategoryNames.map((name) => {
+                const catBudget = getCategoryBudget(name)
+                return (
+                  <div key={name} className="flex flex-wrap items-center gap-3 rounded-xl p-3" style={{ background: 'var(--wedding-color-subtle)', border: '1px solid #F0E8DE' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--fg)', flex: 1, minWidth: '140px' }}>
+                      {name}
+                    </span>
+                    <div style={{ width: '160px' }}>
+                      <CurrencyInput
+                        id={`budget-amount-${name}`}
+                        value={getBudgetDraftValue(name)}
+                        onChange={(cents) => setBudgetDrafts((prev) => ({ ...prev, [name]: cents }))}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveCategoryBudget(name)}
+                      disabled={savingBudgetCategory === name}
+                      style={{
+                        background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                        borderRadius: '10px', padding: '8px 14px', fontWeight: 600, fontSize: '13px',
+                        cursor: savingBudgetCategory === name ? 'wait' : 'pointer',
+                        opacity: savingBudgetCategory === name ? 0.7 : 1, flexShrink: 0,
+                      }}
+                    >
+                      Salvar
+                    </button>
+                    {catBudget && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategoryBudget(catBudget)}
+                        disabled={deletingBudgetId === catBudget.id}
+                        title="Remover meta"
+                        aria-label={`Remover meta de gastos da categoria ${name}`}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: deletingBudgetId === catBudget.id ? 'wait' : 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0 }}
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <form onSubmit={handleAddNewCategoryBudget} className="flex flex-wrap items-end gap-3">
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label htmlFor="new-budget-category" style={labelStyle}>Nova categoria</label>
+              <input
+                id="new-budget-category"
+                type="text"
+                maxLength={80}
+                list="budget-category-suggestions"
+                value={newBudgetCategory}
+                onChange={(e) => setNewBudgetCategory(e.target.value)}
+                placeholder="Lua de mel"
+                style={inputStyle}
+              />
+              <datalist id="budget-category-suggestions">
+                {CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+            <div style={{ width: '160px' }}>
+              <label htmlFor="new-budget-amount" style={labelStyle}>Meta</label>
+              <CurrencyInput
+                id="new-budget-amount"
+                value={newBudgetAmount}
+                onChange={setNewBudgetAmount}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={savingNewBudget}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '11px 16px',
+                fontWeight: 600, fontSize: '13.5px',
+                cursor: savingNewBudget ? 'wait' : 'pointer', opacity: savingNewBudget ? 0.7 : 1,
+              }}
+            >
+              <PlusIcon /> Adicionar meta
+            </button>
+          </form>
+        </div>
+
         <div className="mt-5 rounded-2xl bg-[var(--surface)] p-6" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -1121,6 +1343,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* Próximos vencimentos — relatório avançado exclusivo do Premium Plus */}

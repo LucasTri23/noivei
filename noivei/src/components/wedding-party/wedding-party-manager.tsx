@@ -91,7 +91,22 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
-const EMPTY_FORM = { guest_id: '', role: '', carries_rings: false, paired_with_entry_id: '' }
+const EMPTY_FORM = { guest_id: '', role: '', carries_rings: false, hasPair: false, paired_with_entry_id: '' }
+
+// "Padrinho"/"Madrinha" pareados viram "Casal de padrinhos" — daminha/pajem (ou papéis
+// livres fora dessa lista) continuam mostrando "Entra com {nome}", que é mais claro
+// pro caso deles (não é uma tradição chamar de "casal").
+function isPadrinhoOuMadrinha(role: string): boolean {
+  const normalized = role.trim().toLowerCase()
+  return normalized === 'padrinho' || normalized === 'madrinha'
+}
+
+function pairBadgeLabel(entry: WeddingPartyEntryWithGuest, pair: WeddingPartyEntryWithGuest): string {
+  if (isPadrinhoOuMadrinha(entry.role) && isPadrinhoOuMadrinha(pair.role)) {
+    return 'Casal de padrinhos'
+  }
+  return `Entra com ${pair.guest_name}`
+}
 
 export default function WeddingPartyManager({ weddingId, initialEntries, confirmedGuests, entryLimit }: WeddingPartyManagerProps) {
   const [entries, setEntries]           = useState<WeddingPartyEntryWithGuest[]>(initialEntries)
@@ -99,7 +114,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
   const [saving, setSaving]             = useState(false)
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [editingEntry, setEditingEntry] = useState<WeddingPartyEntryWithGuest | null>(null)
-  const [editForm, setEditForm]         = useState({ role: '', carries_rings: false, paired_with_entry_id: '' })
+  const [editForm, setEditForm]         = useState({ role: '', carries_rings: false, hasPair: false, paired_with_entry_id: '' })
   const [editSaving, setEditSaving]     = useState(false)
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const showSaveSpinner                 = useDelayedLoading(saving)
@@ -115,6 +130,28 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
     return `${entry.role} — ${entry.guest_name}`
   }
 
+  // paired_with_entry_id é guardado só de um lado, mas o par tem que aparecer nos
+  // DOIS registros — sem essa busca reversa, quem foi escolhido como par nunca via
+  // sua própria linha refletindo o emparelhamento.
+  function pairFor(entry: WeddingPartyEntryWithGuest): WeddingPartyEntryWithGuest | undefined {
+    if (entry.paired_with_entry_id) {
+      const direct = entries.find((e) => e.id === entry.paired_with_entry_id)
+      if (direct) return direct
+    }
+    return entries.find((e) => e.paired_with_entry_id === entry.id)
+  }
+
+  // Alguém que já está pareado com outra pessoa (nos dois sentidos) não pode ser
+  // escolhido de novo — cortejo é par 1 a 1, sem trio. `excludeId` é a própria
+  // entrada sendo editada, que continua podendo manter o par que já tinha.
+  function pairableEntries(excludeId?: string): WeddingPartyEntryWithGuest[] {
+    return entries.filter((entry) => {
+      if (entry.id === excludeId) return false
+      const currentPair = pairFor(entry)
+      return !currentPair || currentPair.id === excludeId
+    })
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     if (saving || !form.guest_id) return
@@ -127,7 +164,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
         guest_id:              form.guest_id,
         role:                  form.role.trim(),
         carries_rings:         form.carries_rings,
-        paired_with_entry_id:  form.paired_with_entry_id || null,
+        paired_with_entry_id:  form.hasPair ? (form.paired_with_entry_id || null) : null,
       }),
     })
 
@@ -149,6 +186,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
     setEditForm({
       role:                  entry.role,
       carries_rings:         entry.carries_rings,
+      hasPair:               Boolean(entry.paired_with_entry_id),
       paired_with_entry_id:  entry.paired_with_entry_id ?? '',
     })
     setEditingEntry(entry)
@@ -165,7 +203,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
       body: JSON.stringify({
         role:                 editForm.role.trim(),
         carries_rings:        editForm.carries_rings,
-        paired_with_entry_id: editForm.paired_with_entry_id || null,
+        paired_with_entry_id: editForm.hasPair ? (editForm.paired_with_entry_id || null) : null,
       }),
     })
 
@@ -336,9 +374,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
         </div>
 
         {entries.map((entry, idx) => {
-          const pair = entry.paired_with_entry_id
-            ? entries.find((e) => e.id === entry.paired_with_entry_id)
-            : undefined
+          const pair = pairFor(entry)
           return (
             <div
               key={entry.id}
@@ -378,7 +414,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
                         borderRadius: '99px', background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
                       }}
                     >
-                      Entra com {pair.guest_name}
+                      {pairBadgeLabel(entry, pair)}
                     </span>
                   )}
                 </div>
@@ -499,20 +535,30 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
             />
             Leva as alianças
           </label>
-          <div>
-            <label htmlFor="party-pair" style={labelStyle}>Entra com (opcional)</label>
-            <select
-              id="party-pair"
-              value={form.paired_with_entry_id}
-              onChange={(e) => setForm((f) => ({ ...f, paired_with_entry_id: e.target.value }))}
-              style={inputStyle}
-            >
-              <option value="">Nenhum par</option>
-              {entries.map((entry) => (
-                <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>
-              ))}
-            </select>
-          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--fg)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.hasPair}
+              onChange={(e) => setForm((f) => ({ ...f, hasPair: e.target.checked, paired_with_entry_id: e.target.checked ? f.paired_with_entry_id : '' }))}
+            />
+            Vai entrar com alguém?
+          </label>
+          {form.hasPair && (
+            <div>
+              <label htmlFor="party-pair" style={labelStyle}>Entra com</label>
+              <select
+                id="party-pair"
+                value={form.paired_with_entry_id}
+                onChange={(e) => setForm((f) => ({ ...f, paired_with_entry_id: e.target.value }))}
+                style={inputStyle}
+              >
+                <option value="">Selecione quem já confirmou…</option>
+                {pairableEntries().map((entry) => (
+                  <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
@@ -566,22 +612,30 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
             />
             Leva as alianças
           </label>
-          <div>
-            <label htmlFor="edit-party-pair" style={labelStyle}>Entra com (opcional)</label>
-            <select
-              id="edit-party-pair"
-              value={editForm.paired_with_entry_id}
-              onChange={(e) => setEditForm((f) => ({ ...f, paired_with_entry_id: e.target.value }))}
-              style={inputStyle}
-            >
-              <option value="">Nenhum par</option>
-              {entries
-                .filter((entry) => entry.id !== editingEntry?.id)
-                .map((entry) => (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--fg)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={editForm.hasPair}
+              onChange={(e) => setEditForm((f) => ({ ...f, hasPair: e.target.checked, paired_with_entry_id: e.target.checked ? f.paired_with_entry_id : '' }))}
+            />
+            Vai entrar com alguém?
+          </label>
+          {editForm.hasPair && (
+            <div>
+              <label htmlFor="edit-party-pair" style={labelStyle}>Entra com</label>
+              <select
+                id="edit-party-pair"
+                value={editForm.paired_with_entry_id}
+                onChange={(e) => setEditForm((f) => ({ ...f, paired_with_entry_id: e.target.value }))}
+                style={inputStyle}
+              >
+                <option value="">Selecione quem já confirmou…</option>
+                {pairableEntries(editingEntry?.id).map((entry) => (
                   <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>
                 ))}
-            </select>
-          </div>
+              </select>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button

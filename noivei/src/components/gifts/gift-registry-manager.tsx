@@ -7,7 +7,7 @@ import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError } from '@/store/toast.store'
-import type { GiftRegistryItem } from '@/types/database'
+import type { GiftRegistryItem, GiftRegistryType } from '@/types/database'
 
 interface GiftRegistryManagerProps {
   weddingId:    string
@@ -22,11 +22,12 @@ interface ItemForm {
   name:        string
   description: string
   price_cents: number | null
+  gift_type:   GiftRegistryType
   store_url:   string
   image_url:   string
 }
 
-const EMPTY_FORM: ItemForm = { name: '', description: '', price_cents: null, store_url: '', image_url: '' }
+const EMPTY_FORM: ItemForm = { name: '', description: '', price_cents: null, gift_type: 'link', store_url: '', image_url: '' }
 
 const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -129,6 +130,7 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
       name:        item.name,
       description: item.description ?? '',
       price_cents: item.price_cents,
+      gift_type:   item.gift_type,
       store_url:   item.store_url ?? '',
       image_url:   item.image_url ?? '',
     })
@@ -144,7 +146,9 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
       name:        form.name.trim(),
       description: form.description.trim() || null,
       price_cents: form.price_cents,
-      store_url:   form.store_url.trim() || null,
+      gift_type:   form.gift_type,
+      // Campo escondido para app_payment, mas não confiamos em estado de uma edição anterior
+      store_url:   form.gift_type === 'app_payment' ? null : form.store_url.trim() || null,
       image_url:   form.image_url.trim() || null,
     }
 
@@ -297,7 +301,7 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
                 {fmtPrice(item.price_cents)}
                 {item.description ? ` · ${item.description}` : ''}
               </div>
-              {item.store_url && (
+              {item.store_url && item.gift_type === 'link' && (
                 <a
                   href={item.store_url}
                   target="_blank"
@@ -311,6 +315,16 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
                 </a>
               )}
             </div>
+
+            <span
+              style={{
+                fontSize: '12px', fontWeight: 600, padding: '5px 12px',
+                borderRadius: '99px', flexShrink: 0,
+                background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
+              }}
+            >
+              {item.gift_type === 'app_payment' ? 'Via app' : 'Via link'}
+            </span>
 
             <span
               style={{
@@ -408,17 +422,47 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
             />
           </div>
           <div>
-            <label htmlFor="gift-store-url" style={labelStyle}>Link da loja</label>
-            <input
-              id="gift-store-url"
-              type="url"
-              maxLength={2048}
-              value={form.store_url}
-              onChange={(e) => setForm((f) => ({ ...f, store_url: e.target.value }))}
-              placeholder="https://www.amazon.com.br/..."
-              style={inputStyle}
-            />
+            <label style={labelStyle}>Como o convidado vai presentear?</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--fg)', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="gift-type"
+                  checked={form.gift_type === 'link'}
+                  onChange={() => setForm((f) => ({ ...f, gift_type: 'link' }))}
+                />
+                Link de uma loja
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--fg)', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="gift-type"
+                  checked={form.gift_type === 'app_payment'}
+                  onChange={() => setForm((f) => ({ ...f, gift_type: 'app_payment' }))}
+                />
+                Pelo app · dinheiro cai na conta de vocês
+              </label>
+            </div>
+            {form.gift_type === 'app_payment' && (
+              <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '6px' }}>
+                Presente simbólico — em breve os convidados vão poder pagar direto pelo app. Por enquanto, defina nome, preço e foto normalmente.
+              </p>
+            )}
           </div>
+          {form.gift_type === 'link' && (
+            <div>
+              <label htmlFor="gift-store-url" style={labelStyle}>Link da loja</label>
+              <input
+                id="gift-store-url"
+                type="url"
+                maxLength={2048}
+                value={form.store_url}
+                onChange={(e) => setForm((f) => ({ ...f, store_url: e.target.value }))}
+                placeholder="https://www.amazon.com.br/..."
+                style={inputStyle}
+              />
+            </div>
+          )}
           <div>
             <label htmlFor="gift-image-url" style={labelStyle}>Link da imagem</label>
             <input

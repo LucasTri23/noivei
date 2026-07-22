@@ -407,7 +407,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                       >
                         {gift.is_purchased ? 'Já foi dado' : 'Disponível'}
                       </span>
-                      {gift.store_url && !gift.is_purchased && (
+                      {!gift.is_purchased && gift.gift_type === 'link' && gift.store_url && (
                         <a
                           href={gift.store_url}
                           target="_blank"
@@ -416,6 +416,13 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                         >
                           Ver na loja
                         </a>
+                      )}
+                      {/* Pagamento pelo app ainda não existe de fato — só sinaliza a intenção,
+                          sem processar nada (ver migration 20260722000003). */}
+                      {!gift.is_purchased && gift.gift_type === 'app_payment' && (
+                        <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--muted-fg)' }}>
+                          Presentear pelo app · em breve
+                        </span>
                       )}
                     </div>
                   </div>

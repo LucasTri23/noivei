@@ -3,7 +3,7 @@ import ModuleAccessGate from '@/components/billing/module-access-gate'
 import { checkFinancialEntryLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
-import type { FinancialEntry, FinancialInstallment, FinancialQuote } from '@/types/database'
+import type { FinancialCategoryBudget, FinancialEntry, FinancialInstallment, FinancialQuote } from '@/types/database'
 
 async function FinanceiroContent() {
   const supabase = await createSupabaseServer()
@@ -58,6 +58,17 @@ async function FinanceiroContent() {
       ).data
     : null
 
+  // Meta de gastos por categoria também é recurso Premium+ — mesma lógica de quotes acima.
+  const categoryBudgets = isPaidPlan(planId as PlanId)
+    ? (
+        await supabase
+          .from('financial_category_budgets')
+          .select('*')
+          .eq('wedding_id', wedding.id)
+          .order('created_at', { ascending: true })
+      ).data
+    : null
+
   return (
     <FinancialManager
       weddingId={wedding.id as string}
@@ -65,6 +76,7 @@ async function FinanceiroContent() {
       initialEntries={(entries ?? []) as FinancialEntry[]}
       initialQuotes={(quotes ?? []) as FinancialQuote[]}
       initialInstallments={(installments ?? []) as FinancialInstallment[]}
+      initialCategoryBudgets={(categoryBudgets ?? []) as FinancialCategoryBudget[]}
       planId={planId as PlanId}
       entryLimit={limitCheck.limit}
     />
