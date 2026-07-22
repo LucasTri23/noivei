@@ -168,6 +168,54 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
     ]
   }
 
+  // paired_with_entry_id não influencia sort_order sozinho — sem isso, duas pessoas
+  // emparelhadas podiam aparecer com o badge de par mas longe uma da outra na lista,
+  // se tivessem sido cadastradas em momentos diferentes com outras entradas no meio.
+  // Sempre reposiciona `moveId` logo depois de `anchorId`, renumerando sort_order de
+  // todo mundo pra não deixar buraco/duplicata.
+  function buildAdjacentOrder(
+    baseEntries: WeddingPartyEntryWithGuest[],
+    anchorId:    string,
+    moveId:      string,
+  ): WeddingPartyEntryWithGuest[] {
+    const moveEntry = baseEntries.find((e) => e.id === moveId)
+    if (!moveEntry) return baseEntries
+
+    const withoutMoved = baseEntries.filter((e) => e.id !== moveId)
+    const anchorIdx = withoutMoved.findIndex((e) => e.id === anchorId)
+    if (anchorIdx === -1) return baseEntries
+
+    const reordered = [
+      ...withoutMoved.slice(0, anchorIdx + 1),
+      moveEntry,
+      ...withoutMoved.slice(anchorIdx + 1),
+    ]
+
+    return reordered.map((entry, idx) => ({ ...entry, sort_order: idx }))
+  }
+
+  async function persistSortOrder(
+    reordered: WeddingPartyEntryWithGuest[],
+    previous:  WeddingPartyEntryWithGuest[],
+  ): Promise<boolean> {
+    const changed = reordered.filter((entry) => {
+      const before = previous.find((e) => e.id === entry.id)
+      return before && before.sort_order !== entry.sort_order
+    })
+    if (changed.length === 0) return true
+
+    const results = await Promise.all(
+      changed.map((entry) =>
+        fetch(`${apiBase}/${entry.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ sort_order: entry.sort_order }),
+        }),
+      ),
+    )
+    return results.every((r) => r.ok)
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     if (saving || !form.guest_id) return
@@ -235,6 +283,14 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
       const { data: pairData } = (await pairRes.json()) as { data: WeddingPartyEntry }
       const pairGuest = confirmedGuests.find((g) => g.id === pairData.guest_id)
       setEntries((prev) => [...prev, primaryWithGuest, { ...pairData, guest_name: pairGuest?.name ?? '' }])
+    } else if (pairEntryId) {
+      // Par já cadastrado, possivelmente longe na lista — reposiciona a entrada nova
+      // logo ao lado dele.
+      const nextEntries = [...entries, primaryWithGuest]
+      const reordered = buildAdjacentOrder(nextEntries, pairEntryId, primaryWithGuest.id)
+      setEntries(reordered)
+      const ok = await persistSortOrder(reordered, nextEntries)
+      if (!ok) toastError('Entrada adicionada, mas não foi possível reordenar o cortejo — arraste manualmente se precisar.')
     } else {
       setEntries((prev) => [...prev, primaryWithGuest])
     }
@@ -326,10 +382,23 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
 
       const { data: pairData } = (await pairRes.json()) as { data: WeddingPartyEntry }
       const pairGuest = confirmedGuests.find((g) => g.id === pairData.guest_id)
-      setEntries((prev) => [
-        ...prev.map((entry) => (entry.id === updatedEntry.id ? updatedEntry : entry)),
-        { ...pairData, guest_name: pairGuest?.name ?? '' },
-      ])
+      const pairEntryWithGuest = { ...pairData, guest_name: pairGuest?.name ?? '' }
+      const nextEntries = [
+        ...entries.map((entry) => (entry.id === updatedEntry.id ? updatedEntry : entry)),
+        pairEntryWithGuest,
+      ]
+      const reordered = buildAdjacentOrder(nextEntries, updatedEntry.id, pairEntryWithGuest.id)
+      setEntries(reordered)
+      const ok = await persistSortOrder(reordered, nextEntries)
+      if (!ok) toastError('Par adicionado, mas não foi possível reordenar o cortejo — arraste manualmente se precisar.')
+    } else if (pairEntryId) {
+      // Par já cadastrado, possivelmente longe na lista — reposiciona esta entrada
+      // logo ao lado dele.
+      const nextEntries = entries.map((entry) => (entry.id === updatedEntry.id ? updatedEntry : entry))
+      const reordered = buildAdjacentOrder(nextEntries, pairEntryId, updatedEntry.id)
+      setEntries(reordered)
+      const ok = await persistSortOrder(reordered, nextEntries)
+      if (!ok) toastError('Entrada atualizada, mas não foi possível reordenar o cortejo — arraste manualmente se precisar.')
     } else {
       setEntries((prev) => prev.map((entry) => (entry.id === updatedEntry.id ? updatedEntry : entry)))
     }
