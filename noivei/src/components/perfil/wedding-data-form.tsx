@@ -12,6 +12,7 @@ import Spinner from '@/components/ui/spinner'
 import DatePicker from '@/components/ui/date-picker'
 import CurrencyInput from '@/components/ui/currency-input'
 import { DEFAULT_RSVP_MESSAGE_TEMPLATE, fillRsvpMessageTemplate } from '@/lib/rsvp/build-whatsapp-link'
+import { recalculateChecklistDueDates } from '@/lib/checklist/generate'
 import type { WeddingStyle } from '@/types/database'
 
 const STYLE_OPTIONS: { value: WeddingStyle; label: string }[] = [
@@ -109,11 +110,26 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
       })
       .eq('id', weddingId)
 
-    setLoading(false)
     if (error) {
+      setLoading(false)
       toastError('Não foi possível salvar. Tente novamente.')
       return
     }
+
+    // Data mudou: recalcula due_date das tarefas do catálogo (Checklist/Timeline
+    // ficavam com os prazos antigos, já que due_date só era calculado na geração
+    // inicial). Best-effort — o salvamento acima já teve sucesso, uma falha aqui não
+    // deve ser reportada como erro do formulário.
+    const newDate = data.wedding_date || null
+    if (newDate !== (initial.wedding_date || null)) {
+      try {
+        await recalculateChecklistDueDates(supabase, weddingId, newDate)
+      } catch {
+        // silencioso — checklist/timeline só ficam com prazo desatualizado, não é crítico
+      }
+    }
+
+    setLoading(false)
     toastSuccess('Dados do casamento salvos com sucesso. O orçamento já aparece na aba Financeiro.')
     router.refresh()
   }

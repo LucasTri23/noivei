@@ -3,9 +3,9 @@
 // Regras de re-execução (§2/§8 do doc): tarefa concluída nunca some, só arquiva.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database'
+import type { Database, Json } from '@/types/database'
 import { CHECKLIST_CATALOG, resolveOffsetDays, resolvePhase, type CatalogTask } from './catalog'
-import type { WeddingFacts } from './facts'
+import { deriveFacts, parseAnswers, type WeddingFacts } from './facts'
 
 interface ExistingItem {
   id: string
@@ -129,4 +129,54 @@ export async function generateChecklistItems(
   weddingDate: string | null,
 ): Promise<void> {
   await syncCatalogItems(supabase, weddingId, facts, weddingDate, (task) => task.condition(facts))
+}
+
+/**
+ * Recalcula due_date das tarefas do catálogo (catalog_key não nulo) quando a data do
+ * casamento muda. Sem isso, alterar a data em Perfil > Dados do casamento não
+ * atualizava os prazos já gerados — Checklist e Timeline continuavam com as datas
+ * antigas, já que due_date só era calculado uma vez, na geração inicial.
+ *
+ * Tarefas avulsas (catalog_key null) não são tocadas — a data delas foi definida
+ * manualmente pelo casal, é independente da data do casamento.
+ */
+export async function recalculateChecklistDueDates(
+  supabase: SupabaseClient<Database>,
+  weddingId: string,
+  newWeddingDate: string | null,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('checklist_items')
+    .select('id, catalog_key')
+    .eq('wedding_id', weddingId)
+    .not('catalog_key', 'is', null)
+
+  if (error) throw error
+
+  const items = (data ?? []) as { id: string; catalog_key: string }[]
+  if (items.length === 0) return
+
+  // Sem wedding_preferences (plano Gratuito, checklist fixa): recalcula com os fatos
+  // default, mesmo padrão de generate-free.ts — tarefas incondicionais não dependem
+  // de resposta nenhuma, só precisam da nova data.
+  const { data: preferences } = await supabase
+    .from('wedding_preferences')
+    .select('answers')
+    .eq('wedding_id', weddingId)
+    .maybeSingle()
+
+  const answers = parseAnswers(
+    (preferences?.answers as Record<string, Json | undefined> | null | undefined) ?? null,
+  )
+  const facts = deriveFacts(answers, newWeddingDate)
+  const catalogByKey = new Map(CHECKLIST_CATALOG.map((task) => [task.key, task]))
+
+  await Promise.all(
+    items.map((item) => {
+      const task = catalogByKey.get(item.catalog_key)
+      if (!task) return Promise.resolve()
+      const due_date = calcDueDate(newWeddingDate, resolveOffsetDays(task, facts))
+      return supabase.from('checklist_items').update({ due_date }).eq('id', item.id)
+    }),
+  )
 }
