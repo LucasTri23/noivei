@@ -93,19 +93,12 @@ const labelStyle: React.CSSProperties = {
 
 const EMPTY_FORM = { guest_id: '', role: '', carries_rings: false, hasPair: false, pairSelection: '', pairRole: '' }
 
-// "Padrinho"/"Madrinha" pareados viram "Casal de padrinhos" — daminha/pajem (ou papéis
-// livres fora dessa lista) continuam mostrando "Entra com {nome}", que é mais claro
-// pro caso deles (não é uma tradição chamar de "casal").
+// "Padrinho"/"Madrinha" pareados ganham a tag "Casal de padrinhos" na linha — daminha/
+// pajem (ou papéis livres fora dessa lista) só aparecem juntos na mesma linha, sem essa
+// tag (não é uma tradição chamar de "casal" nesse caso).
 function isPadrinhoOuMadrinha(role: string): boolean {
   const normalized = role.trim().toLowerCase()
   return normalized === 'padrinho' || normalized === 'madrinha'
-}
-
-function pairBadgeLabel(entry: WeddingPartyEntryWithGuest, pair: WeddingPartyEntryWithGuest): string {
-  if (isPadrinhoOuMadrinha(entry.role) && isPadrinhoOuMadrinha(pair.role)) {
-    return 'Casal de padrinhos'
-  }
-  return `Entra com ${pair.guest_name}`
 }
 
 export default function WeddingPartyManager({ weddingId, initialEntries, confirmedGuests, entryLimit }: WeddingPartyManagerProps) {
@@ -214,6 +207,56 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
       ),
     )
     return results.every((r) => r.ok)
+  }
+
+  interface CortejoRow {
+    primary: WeddingPartyEntryWithGuest
+    partner?: WeddingPartyEntryWithGuest
+  }
+
+  // Um casal de padrinhos ocupa UMA linha só na lista (as duas pessoas juntas), não
+  // duas linhas separadas — mesmo já estando adjacentes em sort_order (ver
+  // buildAdjacentOrder). Percorre `entries` na ordem e "consome" o par assim que
+  // encontra o primeiro dos dois, pra não desenhar a mesma dupla duas vezes.
+  function buildRows(): CortejoRow[] {
+    const consumed = new Set<string>()
+    const rows: CortejoRow[] = []
+    for (const entry of entries) {
+      if (consumed.has(entry.id)) continue
+      const partner = pairFor(entry)
+      consumed.add(entry.id)
+      if (partner) consumed.add(partner.id)
+      rows.push({ primary: entry, partner })
+    }
+    return rows
+  }
+
+  // Move a linha inteira (1 ou 2 entradas) pra cima/baixo, trocando de lugar com a
+  // linha vizinha — reaproveita o mesmo mecanismo de sort_order sequencial de
+  // buildAdjacentOrder/persistSortOrder, só que baseado em linhas, não em entradas soltas.
+  async function handleMoveRow(rowIdx: number, direction: 'up' | 'down') {
+    const rows = buildRows()
+    const targetIdx = direction === 'up' ? rowIdx - 1 : rowIdx + 1
+    if (targetIdx < 0 || targetIdx >= rows.length) return
+
+    const current = rows[rowIdx]
+    const target  = rows[targetIdx]
+    if (!current || !target) return
+
+    const reorderedRows = [...rows]
+    reorderedRows[rowIdx]    = target
+    reorderedRows[targetIdx] = current
+
+    const flatEntries = reorderedRows.flatMap((row) => (row.partner ? [row.primary, row.partner] : [row.primary]))
+    const withNewSortOrders = flatEntries.map((entry, idx) => ({ ...entry, sort_order: idx }))
+
+    const previous = entries
+    setEntries(withNewSortOrders)
+    const ok = await persistSortOrder(withNewSortOrders, previous)
+    if (!ok) {
+      setEntries(previous)
+      toastError('Não foi possível reordenar o cortejo.')
+    }
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -429,40 +472,63 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
     toastSuccess('Entrada removida do cortejo.')
   }
 
-  async function handleMove(entry: WeddingPartyEntryWithGuest, direction: 'up' | 'down') {
-    const idx = entries.findIndex((e) => e.id === entry.id)
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (idx < 0 || swapIdx < 0 || swapIdx >= entries.length) return
-
-    const other = entries[swapIdx]
-    if (!other) return
-
-    const previous = entries
-    const entrySortOrder = entry.sort_order
-    const otherSortOrder = other.sort_order
-
-    // Swap array positions and cross-assign sort_order so the list stays sorted by it
-    const reordered = [...entries]
-    reordered[idx] = { ...other, sort_order: entrySortOrder }
-    reordered[swapIdx] = { ...entry, sort_order: otherSortOrder }
-    setEntries(reordered)
-
-    const [res1, res2] = await Promise.all([
-      fetch(`${apiBase}/${entry.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sort_order: otherSortOrder }),
-      }),
-      fetch(`${apiBase}/${other.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sort_order: entrySortOrder }),
-      }),
-    ])
-
-    if (!res1.ok || !res2.ok) {
-      setEntries(previous)
-      toastError('Não foi possível reordenar o cortejo.')
-    }
+  // Uma pessoa dentro de uma linha do cortejo (sozinha ou parte de um casal de
+  // padrinhos) — edição/exclusão continuam por pessoa, só o mover pra cima/baixo é da
+  // linha inteira (ver handleMoveRow).
+  function renderPersonLine(entry: WeddingPartyEntryWithGuest, isLast: boolean) {
+    return (
+      <div className="flex items-center gap-3" style={{ marginBottom: isLast ? 0 : '6px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
+            {entry.role} <span style={{ fontWeight: 400, color: 'var(--muted-fg)' }}>· {entry.guest_name}</span>
+          </span>
+          {entry.carries_rings && (
+            <span
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '8px',
+                fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+                borderRadius: '99px', background: '#E9EFE6', color: '#5E8B6A',
+              }}
+            >
+              <RingsIcon /> Leva as alianças
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => openEditModal(entry)}
+          aria-label={`Editar entrada de ${entry.guest_name}`}
+          title="Editar entrada"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '24px', height: '24px', borderRadius: '8px', flexShrink: 0,
+            border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+            cursor: 'pointer', padding: 0,
+          }}
+        >
+          <EditIcon />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDelete(entry)}
+          disabled={deletingId === entry.id}
+          aria-label={`Remover ${entry.guest_name} do cortejo`}
+          title="Remover do cortejo"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '24px', height: '24px', borderRadius: '8px', flexShrink: 0,
+            border: 'none', background: 'transparent', color: '#C0553F',
+            cursor: deletingId === entry.id ? 'wait' : 'pointer',
+            opacity: deletingId === entry.id ? 0.5 : 1, padding: 0,
+          }}
+        >
+          <TrashIcon />
+        </button>
+      </div>
+    )
   }
+
+  const cortejoRows = buildRows()
 
   return (
     <div>
@@ -556,58 +622,47 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
           </div>
         </div>
 
-        {entries.map((entry, idx) => {
-          const pair = pairFor(entry)
+        {cortejoRows.map((row, idx) => {
+          const showCasalTag = Boolean(
+            row.partner && isPadrinhoOuMadrinha(row.primary.role) && isPadrinhoOuMadrinha(row.partner.role),
+          )
           return (
             <div
-              key={entry.id}
+              key={row.primary.id}
               className="flex flex-wrap items-center gap-4 px-5 py-4"
-              style={{ borderBottom: idx < entries.length - 1 ? '1px solid #F8F3EE' : 'none' }}
+              style={{ borderBottom: idx < cortejoRows.length - 1 ? '1px solid #F8F3EE' : 'none' }}
             >
               <div
                 style={{
                   width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
                   background: 'color-mix(in srgb, var(--wedding-color) 14%, transparent)', color: 'var(--wedding-color)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontSize: '13px',
+                  fontWeight: 700, fontSize: '13px', alignSelf: 'flex-start',
                 }}
               >
                 {idx + 2}
               </div>
               <div style={{ flex: 1, minWidth: '200px' }}>
-                <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
-                  {entry.role} <span style={{ fontWeight: 400, color: 'var(--muted-fg)' }}>· {entry.guest_name}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: '4px' }}>
-                  {entry.carries_rings && (
-                    <span
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '4px',
-                        fontSize: '11.5px', fontWeight: 600, padding: '3px 9px',
-                        borderRadius: '99px', background: '#E9EFE6', color: '#5E8B6A',
-                      }}
-                    >
-                      <RingsIcon /> Leva as alianças
-                    </span>
-                  )}
-                  {pair && (
-                    <span
-                      style={{
-                        fontSize: '11.5px', fontWeight: 600, padding: '3px 9px',
-                        borderRadius: '99px', background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
-                      }}
-                    >
-                      {pairBadgeLabel(entry, pair)}
-                    </span>
-                  )}
-                </div>
+                {renderPersonLine(row.primary, !row.partner)}
+                {row.partner && renderPersonLine(row.partner, true)}
+                {showCasalTag && (
+                  <span
+                    style={{
+                      display: 'inline-flex', marginTop: '6px',
+                      fontSize: '11.5px', fontWeight: 600, padding: '3px 9px',
+                      borderRadius: '99px', background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
+                    }}
+                  >
+                    Casal de padrinhos
+                  </span>
+                )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0, alignSelf: 'flex-start' }}>
                 <button
                   type="button"
-                  onClick={() => handleMove(entry, 'up')}
+                  onClick={() => handleMoveRow(idx, 'up')}
                   disabled={idx === 0}
-                  aria-label={`Mover ${entry.guest_name} para cima`}
+                  aria-label="Mover para cima"
                   title="Mover para cima"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -620,55 +675,25 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleMove(entry, 'down')}
-                  disabled={idx === entries.length - 1}
-                  aria-label={`Mover ${entry.guest_name} para baixo`}
+                  onClick={() => handleMoveRow(idx, 'down')}
+                  disabled={idx === cortejoRows.length - 1}
+                  aria-label="Mover para baixo"
                   title="Mover para baixo"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: '26px', height: '26px', borderRadius: '8px',
                     border: 'none', background: 'transparent', color: 'var(--muted-fg)',
-                    cursor: idx === entries.length - 1 ? 'not-allowed' : 'pointer',
-                    opacity: idx === entries.length - 1 ? 0.35 : 1, padding: 0,
+                    cursor: idx === cortejoRows.length - 1 ? 'not-allowed' : 'pointer',
+                    opacity: idx === cortejoRows.length - 1 ? 0.35 : 1, padding: 0,
                   }}
                 >
                   <ArrowDownIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openEditModal(entry)}
-                  aria-label={`Editar entrada de ${entry.guest_name}`}
-                  title="Editar entrada"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: '26px', height: '26px', borderRadius: '8px',
-                    border: 'none', background: 'transparent', color: 'var(--muted-fg)',
-                    cursor: 'pointer', padding: 0,
-                  }}
-                >
-                  <EditIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(entry)}
-                  disabled={deletingId === entry.id}
-                  aria-label={`Remover ${entry.guest_name} do cortejo`}
-                  title="Remover do cortejo"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: '26px', height: '26px', borderRadius: '8px',
-                    border: 'none', background: 'transparent', color: '#C0553F',
-                    cursor: deletingId === entry.id ? 'wait' : 'pointer',
-                    opacity: deletingId === entry.id ? 0.5 : 1, padding: 0,
-                  }}
-                >
-                  <TrashIcon />
                 </button>
               </div>
             </div>
           )
         })}
-        {entries.length === 0 && (
+        {cortejoRows.length === 0 && (
           <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
             Nenhuma outra entrada adicionada ainda.
           </div>
