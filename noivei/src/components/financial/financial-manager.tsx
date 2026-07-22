@@ -719,7 +719,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       {/* Hero card */}
       <div
         className="relative mb-6 overflow-hidden rounded-3xl p-8"
-        style={{ background: 'linear-gradient(150deg, #2A1E10, #3A2A18)', color: '#FAF0E6' }}
+        style={{ background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))', color: '#FAF0E6' }}
       >
         <div
           className="pointer-events-none absolute inset-0"
@@ -811,7 +811,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
         ) : (
           <div
             className="relative overflow-hidden rounded-2xl p-6"
-            style={{ background: 'linear-gradient(150deg, #2A1E10, #3A2A18)', color: '#FAF0E6' }}
+            style={{ background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))', color: '#FAF0E6' }}
           >
             <div
               className="pointer-events-none absolute inset-0"

@@ -83,3 +83,38 @@ export function deriveWeddingColorScale(hex: string): WeddingColorScale {
     subtle: hslToHex({ h, s: clamp(s + 0.2, 0, 0.85), l: 0.93 }),
   }
 }
+
+export interface BrandDarkGradient {
+  from: string
+  to:   string
+}
+
+// Luminosidade dos dois stops do gradiente marrom padrão (#2A1E10 → #3A2A18),
+// medida a partir desses mesmos hex — preservada ao derivar a versão com a cor
+// secundária do casal, para que o painel continue lendo como "superfície escura"
+// (sidebar, cards de destaque, gates) e não vire um bloco de cor média/clara.
+const DARK_GRADIENT_FROM_LIGHTNESS = 0.114
+const DARK_GRADIENT_TO_LIGHTNESS   = 0.161
+
+/**
+ * Deriva o gradiente escuro fixo usado em painéis sempre-escuros (sidebar
+ * inteira, cards de destaque, painel de auth, gates de acesso) a partir da cor
+ * SECUNDÁRIA do casal — matiz e saturação vêm da cor escolhida, mas a
+ * luminosidade é travada na mesma faixa do marrom padrão. Isso evita reusar
+ * `WeddingColorScale.dark`/`.subtle` diretamente: esses tons são calibrados
+ * para outro uso (acentos/hover e fundos claros) e ficariam claros demais aqui.
+ * Retorna o gradiente marrom padrão se o hex for inválido.
+ */
+export function deriveBrandDarkGradient(hex: string): BrandDarkGradient {
+  const hsl = hexToHsl(hex)
+  if (!hsl) {
+    return { from: '#2A1E10', to: '#3A2A18' }
+  }
+
+  const { h, s } = hsl
+
+  return {
+    from: hslToHex({ h, s, l: DARK_GRADIENT_FROM_LIGHTNESS }),
+    to:   hslToHex({ h, s, l: DARK_GRADIENT_TO_LIGHTNESS }),
+  }
+}

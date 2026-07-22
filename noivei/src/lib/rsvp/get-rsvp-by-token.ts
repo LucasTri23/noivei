@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
+import { isPaidPlan } from '@/constants/plans'
 import type { GuestStatus } from '@/types/database'
 
 // Dados mínimos expostos publicamente no fluxo de RSVP — nunca vazar e-mail/telefone
@@ -19,6 +21,9 @@ export interface RsvpInfo {
     wedding_date: string | null
     venue:        string | null
     city:         string | null
+    // Só preenchido no plano pago — personalização de cor é recurso Premium, o
+    // Gratuito nunca deve ver o painel de destaque saindo do marrom padrão.
+    wedding_color_secondary: string | null
   }
 }
 
@@ -35,12 +40,17 @@ export async function getRsvpByToken(
 
   if (error || !guest) return null
 
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('couple_names, wedding_date, venue, city')
-    .eq('id', guest.wedding_id as string)
-    .is('deleted_at', null)
-    .maybeSingle()
+  const weddingId = guest.wedding_id as string
+
+  const [{ data: wedding }, planId] = await Promise.all([
+    supabase
+      .from('weddings')
+      .select('couple_names, wedding_date, venue, city, wedding_color_secondary')
+      .eq('id', weddingId)
+      .is('deleted_at', null)
+      .maybeSingle(),
+    resolveWeddingPlanId(supabase, weddingId),
+  ])
 
   if (!wedding) return null
 
@@ -54,6 +64,9 @@ export async function getRsvpByToken(
       wedding_date: (wedding.wedding_date as string | null) ?? null,
       venue:        (wedding.venue as string | null) ?? null,
       city:         (wedding.city as string | null) ?? null,
+      wedding_color_secondary: isPaidPlan(planId)
+        ? (wedding.wedding_color_secondary as string | null)
+        : null,
     },
   }
 }

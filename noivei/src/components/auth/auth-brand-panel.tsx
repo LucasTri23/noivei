@@ -4,7 +4,7 @@ export default function AuthBrandPanel() {
       className="relative hidden flex-col justify-between overflow-hidden p-10 text-[#FAF0E6] md:flex"
       style={{
         flex: '1 1 380px',
-        background: 'linear-gradient(160deg, #2A1E10 0%, #3A2A18 60%, #4A3420 100%)',
+        background: 'linear-gradient(160deg, var(--brand-dark-gradient-from) 0%, var(--brand-dark-gradient-to) 60%, #4A3420 100%)',
       }}
     >
       {/* Dot grid */}

@@ -4,6 +4,7 @@ import RsvpForm from '@/components/rsvp/rsvp-form'
 import { RsvpTokenSchema } from '@/lib/api/validation/rsvp.schema'
 import { getRsvpByToken, type RsvpInfo } from '@/lib/rsvp/get-rsvp-by-token'
 import { createSupabaseService } from '@/lib/supabase/service'
+import { deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 
 export const metadata: Metadata = {
   title:  'Confirme sua presença',
@@ -79,14 +80,27 @@ export default async function RsvpPage({ params }: RsvpPageProps) {
   const weddingDate = formatWeddingDate(rsvp.wedding.wedding_date)
   const place = [rsvp.wedding.venue, rsvp.wedding.city].filter(Boolean).join(' · ')
 
+  // Plano Gratuito nunca sobrescreve o marrom padrão — só aplica quando a API já
+  // devolveu a cor secundária (isso só acontece no plano pago, ver getRsvpByToken).
+  const brandDarkGradient = rsvp.wedding.wedding_color_secondary
+    ? deriveBrandDarkGradient(rsvp.wedding.wedding_color_secondary)
+    : null
+  const brandDarkGradientVars = brandDarkGradient
+    ? ({
+        '--brand-dark-gradient-from': brandDarkGradient.from,
+        '--brand-dark-gradient-to':   brandDarkGradient.to,
+      } as React.CSSProperties)
+    : undefined
+
   return (
     <RsvpShell>
       {/* Cabeçalho decorativo */}
       <div
         className="relative overflow-hidden"
         style={{
-          background: 'linear-gradient(150deg, #2A1E10, #3A2A18)',
+          background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
           color: '#FAF0E6', padding: '38px 36px', textAlign: 'center',
+          ...brandDarkGradientVars,
         }}
       >
         <div

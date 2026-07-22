@@ -154,7 +154,7 @@ export default async function PerfilPage() {
           {/* Plan card */}
           <div
             className="relative overflow-hidden rounded-2xl p-6"
-            style={{ background: 'linear-gradient(150deg, #2A1E10, #3A2A18)', color: '#FAF0E6' }}
+            style={{ background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))', color: '#FAF0E6' }}
           >
             <div
               className="pointer-events-none absolute inset-0"

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
+import { isPaidPlan } from '@/constants/plans'
 import type { WeddingInviteStatus } from '@/types/database'
 
 // Dados mínimos expostos publicamente pelo link de convite — nunca vazar o id
@@ -9,6 +11,9 @@ export interface InviteInfo {
   weddingCoupleNames: string
   status:             WeddingInviteStatus
   expired:            boolean
+  // Só preenchido no plano pago — personalização de cor é recurso Premium, o
+  // Gratuito nunca deve ver o painel de destaque saindo do marrom padrão.
+  weddingColorSecondary: string | null
 }
 
 /** Busca o convite pelo token (requer client service role — RLS não cobre acesso anônimo). */
@@ -24,12 +29,17 @@ export async function getInviteByToken(
 
   if (error || !invite) return null
 
-  const { data: wedding } = await supabase
-    .from('weddings')
-    .select('couple_names')
-    .eq('id', invite.wedding_id as string)
-    .is('deleted_at', null)
-    .maybeSingle()
+  const weddingId = invite.wedding_id as string
+
+  const [{ data: wedding }, planId] = await Promise.all([
+    supabase
+      .from('weddings')
+      .select('couple_names, wedding_color_secondary')
+      .eq('id', weddingId)
+      .is('deleted_at', null)
+      .maybeSingle(),
+    resolveWeddingPlanId(supabase, weddingId),
+  ])
 
   if (!wedding) return null
 
@@ -37,5 +47,8 @@ export async function getInviteByToken(
     weddingCoupleNames: wedding.couple_names as string,
     status:             invite.status as WeddingInviteStatus,
     expired:            new Date(invite.expires_at as string).getTime() < Date.now(),
+    weddingColorSecondary: isPaidPlan(planId)
+      ? (wedding.wedding_color_secondary as string | null)
+      : null,
   }
 }

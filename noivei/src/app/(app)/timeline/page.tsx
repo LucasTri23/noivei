@@ -70,7 +70,7 @@ async function TimelineContent() {
       {budgetSummary && (
         <div
           className="mb-8 rounded-2xl p-6"
-          style={{ background: 'linear-gradient(150deg, #2A1E10, #3A2A18)', color: '#FAF0E6' }}
+          style={{ background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))', color: '#FAF0E6' }}
         >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>

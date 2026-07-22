@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
-import { deriveWeddingColorScale } from '@/lib/theme/wedding-color'
+import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 import { getUserWedding, hasModuleAccess } from '@/lib/weddings/get-user-wedding'
 import Sidebar from '@/components/layout/sidebar'
 import MobileTopBar from '@/components/layout/mobile-top-bar'
@@ -71,6 +71,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       } as React.CSSProperties)
     : undefined
 
+  // Painéis sempre-escuros (sidebar, cards de destaque, gates) usam o marrom fixo
+  // por padrão — só planos pagos trocam pela cor secundária do casal, nunca o Gratuito.
+  const brandDarkGradient =
+    isPaidPlan(planId) && wedding?.wedding_color_secondary
+      ? deriveBrandDarkGradient(wedding.wedding_color_secondary)
+      : null
+
+  const brandDarkGradientVars = brandDarkGradient
+    ? ({
+        '--brand-dark-gradient-from': brandDarkGradient.from,
+        '--brand-dark-gradient-to':   brandDarkGradient.to,
+      } as React.CSSProperties)
+    : undefined
+
   return (
     <div
       className="flex min-h-screen"
@@ -80,6 +94,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         color: 'var(--fg)',
         ...weddingColorVars,
         ...weddingColorSecondaryVars,
+        ...brandDarkGradientVars,
       }}
     >
       <Sidebar

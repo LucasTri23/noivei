@@ -41,7 +41,7 @@ export default function Sidebar({ coupleNames, plan, initial, isFreePlan, visibl
         position: 'sticky',
         top: 0,
         height: '100vh',
-        background: 'linear-gradient(180deg, #2A1E10, #3A2A18)',
+        background: 'linear-gradient(180deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
         color: '#FAF0E6',
         padding: '26px 18px',
       }}

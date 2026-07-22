@@ -44,7 +44,7 @@ export default async function ModuleAccessGate({ module, children }: ModuleAcces
         className="relative w-full overflow-hidden rounded-2xl p-8 text-center sm:p-10"
         style={{
           maxWidth: '520px',
-          background: 'linear-gradient(150deg, #2A1E10, #3A2A18)',
+          background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
           color: '#FAF0E6',
           boxShadow: '0 16px 40px rgba(60,40,24,0.18)',
         }}

@@ -6,6 +6,7 @@ import { InviteTokenSchema } from '@/lib/api/validation/invite.schema'
 import { getInviteByToken, type InviteInfo } from '@/lib/invites/get-invite-by-token'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createSupabaseService } from '@/lib/supabase/service'
+import { deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 
 export const metadata: Metadata = {
   title:  'Convite de casamento',
@@ -74,14 +75,27 @@ export default async function InvitePage({ params }: InvitePageProps) {
 
   const inviteHref = `/convite/${encodeURIComponent(parsedToken.data)}`
 
+  // Plano Gratuito nunca sobrescreve o marrom padrão — só aplica quando a API já
+  // devolveu a cor secundária (isso só acontece no plano pago, ver getInviteByToken).
+  const brandDarkGradient = invite.weddingColorSecondary
+    ? deriveBrandDarkGradient(invite.weddingColorSecondary)
+    : null
+  const brandDarkGradientVars = brandDarkGradient
+    ? ({
+        '--brand-dark-gradient-from': brandDarkGradient.from,
+        '--brand-dark-gradient-to':   brandDarkGradient.to,
+      } as React.CSSProperties)
+    : undefined
+
   return (
     <InviteShell>
       {/* Cabeçalho decorativo */}
       <div
         className="relative overflow-hidden"
         style={{
-          background: 'linear-gradient(150deg, #2A1E10, #3A2A18)',
+          background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
           color: '#FAF0E6', padding: '38px 36px', textAlign: 'center',
+          ...brandDarkGradientVars,
         }}
       >
         <div

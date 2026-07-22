@@ -93,6 +93,14 @@
   --wedding-color-secondary-light:  #DDB09A;
   --wedding-color-secondary-dark:   #A87050;
   --wedding-color-secondary-subtle: #FBEEE6;
+
+  /* Gradiente marrom sempre-escuro (sidebar, cards de destaque, painel de auth,
+   * gates de acesso) — recurso de personalização é só do plano pago, então o
+   * padrão aqui é IDÊNTICO ao marrom fixo de sempre e nunca muda para quem é
+   * Gratuito. Planos pagos sobrescrevem estas duas vars (ver deriveBrandDarkGradient)
+   * condicionalmente em (app)/layout.tsx e nas páginas públicas equivalentes. */
+  --brand-dark-gradient-from: #2A1E10;
+  --brand-dark-gradient-to:   #3A2A18;
 }
 
 /* ── MODO ESCURO ──────────────────────────────────────────────── */

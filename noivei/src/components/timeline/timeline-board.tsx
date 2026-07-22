@@ -181,7 +181,7 @@ export default function TimelineBoard({ items: initialItems }: TimelineBoardProp
                       padding: '14px 18px',
                       borderRadius: '16px',
                       background: item.highlight
-                        ? 'linear-gradient(150deg, #2A1E10, #3A2A18)'
+                        ? 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))'
                         : '#FFFFFF',
                       border: item.highlight ? 'none' : '1px solid #F0E8DE',
                       boxShadow: item.highlight
