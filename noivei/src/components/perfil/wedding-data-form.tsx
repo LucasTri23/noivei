@@ -121,18 +121,24 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
     // inicial). Best-effort — o salvamento acima já teve sucesso, uma falha aqui não
     // deve ser reportada como erro do formulário.
     const newDate = data.wedding_date || null
+    let recalcMessage = ''
     if (newDate !== (initial.wedding_date || null)) {
       try {
-        await recalculateChecklistDueDates(supabase, weddingId, newDate)
+        const result = await recalculateChecklistDueDates(supabase, weddingId, newDate)
+        recalcMessage =
+          result.total === 0
+            ? ' Nenhuma tarefa do catálogo para atualizar.'
+            : ` ${result.updated} de ${result.total} prazo(s) do checklist recalculado(s).`
       } catch (recalcError) {
         // Não é crítico pro formulário (já salvou), mas precisa ficar visível pra debugar —
         // silenciar por completo escondeu a causa real na primeira rodada dessa correção.
         console.error('[wedding-data-form] falha ao recalcular prazos do checklist:', recalcError)
+        recalcMessage = ' Não foi possível recalcular os prazos do checklist — veja o console.'
       }
     }
 
     setLoading(false)
-    toastSuccess('Dados do casamento salvos com sucesso. O orçamento já aparece na aba Financeiro.')
+    toastSuccess(`Dados do casamento salvos com sucesso. O orçamento já aparece na aba Financeiro.${recalcMessage}`)
     router.refresh()
   }
 

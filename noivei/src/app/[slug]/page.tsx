@@ -167,11 +167,16 @@ function buildTimelineWavePath(blockCount: number): string {
 
 // Foto em moldura "polaroid" — fundo creme simulando a borda física, sombra suave, leve
 // rotação por índice e um pin decorativo em forma de coração no topo.
-function PolaroidPhoto({ photo, index, alt }: { photo: PublicGalleryPhoto; index: number; alt: string }) {
+function PolaroidPhoto({ photo, index, alt, align }: { photo: PublicGalleryPhoto; index: number; alt: string; align?: 'left' | 'right' }) {
   const rotation = TIMELINE_PHOTO_ROTATIONS[index % TIMELINE_PHOTO_ROTATIONS.length]
+  // Centralizado no mobile (coluna única); a partir de `md` encosta na borda externa da
+  // sua coluna (em vez de ficar centralizado dentro da metade), reforçando a sensação de
+  // "foto na lateral" agora que o contêiner da seção é mais largo (1040px).
+  const alignClassName =
+    align === 'left' ? 'mx-auto md:ml-0 md:mr-auto' : align === 'right' ? 'mx-auto md:ml-auto md:mr-0' : 'mx-auto'
 
   return (
-    <div style={{ position: 'relative', maxWidth: '320px', width: '100%', margin: '0 auto', transform: `rotate(${rotation}deg)` }}>
+    <div className={alignClassName} style={{ position: 'relative', maxWidth: '320px', width: '100%', transform: `rotate(${rotation}deg)` }}>
       <div
         aria-hidden
         style={{
@@ -305,7 +310,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       {/* Divisor com as duas cores do casal */}
       <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
-      <div style={{ maxWidth: '760px', margin: '0 auto', padding: '56px 24px 80px' }}>
+      <div style={{ maxWidth: '1040px', margin: '0 auto', padding: '56px 24px 80px' }}>
         {/* Nossa história — linha do tempo com fotos em moldura polaroid alternando de
             lado, ligadas por um fio dourado orgânico/curvo (só aparece em telas médias+,
             onde há duas colunas de fato; no mobile os blocos empilham e o fio some). */}
@@ -379,7 +384,12 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                           {body}
                         </div>
                         <div className={photoFirst ? 'md:order-1' : 'md:order-2'}>
-                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" />
+                          <PolaroidPhoto
+                            photo={entry.photo}
+                            index={index}
+                            alt="Foto do casal"
+                            align={photoFirst ? 'left' : 'right'}
+                          />
                         </div>
                       </div>
                     ) : (

@@ -140,11 +140,18 @@ export async function generateChecklistItems(
  * Tarefas avulsas (catalog_key null) não são tocadas — a data delas foi definida
  * manualmente pelo casal, é independente da data do casamento.
  */
+export interface RecalculateResult {
+  /** Quantas tarefas do catálogo existiam para esse casamento antes do recálculo. */
+  total: number
+  /** Quantas due_date foram efetivamente gravadas com sucesso. */
+  updated: number
+}
+
 export async function recalculateChecklistDueDates(
   supabase: SupabaseClient<Database>,
   weddingId: string,
   newWeddingDate: string | null,
-): Promise<void> {
+): Promise<RecalculateResult> {
   const { data, error } = await supabase
     .from('checklist_items')
     .select('id, catalog_key')
@@ -154,7 +161,7 @@ export async function recalculateChecklistDueDates(
   if (error) throw error
 
   const items = (data ?? []) as { id: string; catalog_key: string }[]
-  if (items.length === 0) return
+  if (items.length === 0) return { total: 0, updated: 0 }
 
   // Sem wedding_preferences (plano Gratuito, checklist fixa): recalcula com os fatos
   // default, mesmo padrão de generate-free.ts — tarefas incondicionais não dependem
@@ -205,4 +212,7 @@ export async function recalculateChecklistDueDates(
       failed.map((result) => result.error),
     )
   }
+
+  const attempted = items.length - orphanKeys.length
+  return { total: items.length, updated: attempted - failed.length }
 }
