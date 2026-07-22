@@ -171,12 +171,38 @@ export async function recalculateChecklistDueDates(
   const facts = deriveFacts(answers, newWeddingDate)
   const catalogByKey = new Map(CHECKLIST_CATALOG.map((task) => [task.key, task]))
 
-  await Promise.all(
+  // catalog_key de item existente sem correspondência no catálogo atual (chave renomeada/
+  // removida entre uma geração e outra) — não há como recalcular esse item, mas isso não
+  // pode ficar mudo: sem log, parece que a recalculação rodou certo quando na prática
+  // pulou silenciosamente linhas inteiras.
+  const orphanKeys = items
+    .map((item) => item.catalog_key)
+    .filter((key) => !catalogByKey.has(key))
+  if (orphanKeys.length > 0) {
+    console.warn(
+      `[recalculateChecklistDueDates] ${orphanKeys.length} tarefa(s) com catalog_key sem correspondência no catálogo atual, due_date não recalculada:`,
+      orphanKeys,
+    )
+  }
+
+  const results = await Promise.all(
     items.map((item) => {
       const task = catalogByKey.get(item.catalog_key)
-      if (!task) return Promise.resolve()
+      if (!task) return null
       const due_date = calcDueDate(newWeddingDate, resolveOffsetDays(task, facts))
       return supabase.from('checklist_items').update({ due_date }).eq('id', item.id)
     }),
   )
+
+  // .update() do Supabase não lança erro se a RLS simplesmente não afetar nenhuma linha —
+  // sem checar `.error` aqui, uma falha (de permissão ou de rede) passava despercebida.
+  const failed = results.filter(
+    (result): result is NonNullable<typeof result> => result !== null && result.error !== null,
+  )
+  if (failed.length > 0) {
+    console.error(
+      `[recalculateChecklistDueDates] ${failed.length} atualização(ões) de due_date falharam:`,
+      failed.map((result) => result.error),
+    )
+  }
 }

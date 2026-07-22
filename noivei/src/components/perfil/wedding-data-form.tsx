@@ -124,8 +124,10 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
     if (newDate !== (initial.wedding_date || null)) {
       try {
         await recalculateChecklistDueDates(supabase, weddingId, newDate)
-      } catch {
-        // silencioso — checklist/timeline só ficam com prazo desatualizado, não é crítico
+      } catch (recalcError) {
+        // Não é crítico pro formulário (já salvou), mas precisa ficar visível pra debugar —
+        // silenciar por completo escondeu a causa real na primeira rodada dessa correção.
+        console.error('[wedding-data-form] falha ao recalcular prazos do checklist:', recalcError)
       }
     }
 
