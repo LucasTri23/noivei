@@ -13,11 +13,21 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .maybeSingle()
+
+  // Log temporário de diagnóstico (aparece nos Function Logs da Vercel) — sem isso,
+  // uma falha na consulta (RLS, erro de rede etc.) e "não é admin de verdade" davam
+  // exatamente o mesmo 404, sem jeito de distinguir os dois casos à distância.
+  console.log('[admin-layout] checagem de acesso:', {
+    userId: user.id,
+    email:  user.email,
+    role:   profile?.role ?? null,
+    error:  profileError?.message ?? null,
+  })
 
   if (profile?.role !== 'admin') notFound()
 
