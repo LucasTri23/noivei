@@ -17,7 +17,7 @@ export interface TableWithGuests extends TableConfig {
 interface TablesBoardProps {
   weddingId:     string
   initialTables: TableWithGuests[]
-  allGuests:     TableGuest[]
+  confirmedGuests:     TableGuest[]
 }
 
 interface ApiErrorBody {
@@ -159,7 +159,7 @@ const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)', marginBottom: '6px', display: 'block',
 }
 
-export default function TablesBoard({ weddingId, initialTables, allGuests }: TablesBoardProps) {
+export default function TablesBoard({ weddingId, initialTables, confirmedGuests }: TablesBoardProps) {
   const [tables, setTables]             = useState<TableWithGuests[]>(initialTables)
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
@@ -175,7 +175,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
   const apiBase = `/api/v1/weddings/${weddingId}/tables`
 
   const assignedIds = new Set(tables.flatMap((t) => t.guests.map((g) => g.id)))
-  const unassigned  = allGuests.filter((g) => !assignedIds.has(g.id))
+  const unassigned  = confirmedGuests.filter((g) => !assignedIds.has(g.id))
   const destinations: MoveDestination[] = tables.map((t) => ({
     id: t.id, label: t.label, count: t.guests.length, capacity: t.capacity,
   }))
@@ -204,7 +204,7 @@ export default function TablesBoard({ weddingId, initialTables, allGuests }: Tab
   async function moveGuest(guestId: string, source: string, target: string) {
     if (source === target) return
 
-    const guest = allGuests.find((g) => g.id === guestId)
+    const guest = confirmedGuests.find((g) => g.id === guestId)
     if (!guest) return
 
     // Evita chamada desnecessária quando já sabemos que a mesa de destino está cheia

@@ -40,10 +40,14 @@ async function MesasContent() {
       )
       .eq('wedding_id', weddingId)
       .order('created_at', { ascending: true }),
+    // Mesma lógica do cortejo (Padrinhos & Entradas): só convidado confirmado entra na
+    // organização das mesas — sentar alguém que ainda nem confirmou presença não faz
+    // sentido, e alguém que recusou não vai estar lá.
     supabase
       .from('guests')
       .select('id, name, group_name')
       .eq('wedding_id', weddingId)
+      .eq('status', 'confirmado')
       .order('name', { ascending: true }),
   ])
 
@@ -60,7 +64,7 @@ async function MesasContent() {
     <TablesBoard
       weddingId={weddingId}
       initialTables={tables}
-      allGuests={(guestsData ?? []) as TableGuest[]}
+      confirmedGuests={(guestsData ?? []) as TableGuest[]}
     />
   )
 }

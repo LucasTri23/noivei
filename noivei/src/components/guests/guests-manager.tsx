@@ -42,6 +42,48 @@ const FILTER_OPTS: { key: Filter; label: string }[] = [
   { key: 'recusado',   label: 'Recusados' },
 ]
 
+// Os 5 grupos padrão do casamento — sugeridos na hora de cadastrar (datalist,
+// continua aceitando texto livre) e usados como filtro. group_name continua sendo
+// texto livre no banco de propósito: o acompanhante de RSVP herda o grupo do
+// convidado principal com "(nome do convidado principal)" no final (ver PATCH
+// /api/v1/rsvp/[token]), e isso não bate com um enum fixo.
+type GuestGroupCategory = 'amigos_comum' | 'amigos_noiva' | 'amigos_noivo' | 'familia_noiva' | 'familia_noivo'
+
+const GROUP_CATEGORY_LABELS: Record<GuestGroupCategory, string> = {
+  amigos_comum:  'Amigos em comum',
+  amigos_noiva:  'Amigos da noiva',
+  amigos_noivo:  'Amigos do noivo',
+  familia_noiva: 'Família da noiva',
+  familia_noivo: 'Família do noivo',
+}
+
+const GROUP_SUGGESTIONS = Object.values(GROUP_CATEGORY_LABELS)
+
+const GROUP_FILTER_OPTS: { key: GuestGroupCategory | 'todos'; label: string }[] = [
+  { key: 'todos', label: 'Todos os grupos' },
+  ...(Object.entries(GROUP_CATEGORY_LABELS) as [GuestGroupCategory, string][]).map(([key, label]) => ({ key, label })),
+]
+
+// Casa "Família da Noiva", "familia da noiva", "Familia Noiva (Robert)" etc. com a
+// categoria certa — sem acento e sem diferenciar maiúsculas, porque convidado já
+// cadastrado antes deste filtro existir tem group_name digitado à mão, de todo jeito.
+// group_name que não bate com nenhum padrão (ex.: "Amigos do trabalho") fica de fora
+// de todo filtro específico, só aparece em "Todos os grupos".
+function matchGroupCategory(groupName: string | null): GuestGroupCategory | null {
+  if (!groupName) return null
+  const normalized = groupName
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+
+  if (normalized.includes('comum')) return 'amigos_comum'
+  if (normalized.includes('famil') && normalized.includes('noiva')) return 'familia_noiva'
+  if (normalized.includes('famil') && normalized.includes('noivo')) return 'familia_noivo'
+  if (normalized.includes('amig') && normalized.includes('noiva')) return 'amigos_noiva'
+  if (normalized.includes('amig') && normalized.includes('noivo')) return 'amigos_noivo'
+  return null
+}
+
 function PlusIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -137,6 +179,7 @@ function downloadImportTemplate() {
 export default function GuestsManager({ weddingId, initialGuests, guestLimit, rsvpMessageTemplate }: GuestsManagerProps) {
   const [guests, setGuests]             = useState<Guest[]>(initialGuests)
   const [filter, setFilter]             = useState<Filter>('todos')
+  const [groupFilter, setGroupFilter]   = useState<GuestGroupCategory | 'todos'>('todos')
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
   const [importing, setImporting]       = useState(false)
@@ -158,7 +201,11 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
     recusado:   guests.filter((g) => g.status === 'recusado').length,
   }
 
-  const visible = guests.filter((g) => filter === 'todos' || g.status === filter)
+  const visible = guests.filter(
+    (g) =>
+      (filter === 'todos' || g.status === filter) &&
+      (groupFilter === 'todos' || matchGroupCategory(g.group_name) === groupFilter),
+  )
 
   const previewRows: PreviewRow[] = previewResult
     ? [
@@ -404,7 +451,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
       </div>
 
       {/* Filter */}
-      <div className="mb-5 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         {FILTER_OPTS.map((f) => (
           <button
             key={f.key}
@@ -418,6 +465,26 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             }}
           >
             {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filtro por grupo */}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {GROUP_FILTER_OPTS.map((g) => (
+          <button
+            key={g.key}
+            onClick={() => setGroupFilter(g.key)}
+            style={{
+              padding: '6px 14px', borderRadius: '99px', fontSize: '12.5px',
+              fontWeight: 600, cursor: 'pointer',
+              border: `1px solid ${groupFilter === g.key ? 'var(--wedding-color)' : '#EBDDD0'}`,
+              background: groupFilter === g.key ? 'var(--wedding-color-subtle)' : 'transparent',
+              color: groupFilter === g.key ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+              transition: 'all 0.18s',
+            }}
+          >
+            {g.label}
           </button>
         ))}
       </div>
@@ -586,11 +653,15 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
               id="guest-group"
               type="text"
               maxLength={80}
+              list="guest-group-suggestions"
               value={form.group_name}
               onChange={(e) => setForm((f) => ({ ...f, group_name: e.target.value }))}
               placeholder="Família da noiva, Amigos do trabalho…"
               style={inputStyle}
             />
+            <datalist id="guest-group-suggestions">
+              {GROUP_SUGGESTIONS.map((g) => <option key={g} value={g} />)}
+            </datalist>
           </div>
           <div>
             <label htmlFor="guest-party-size" style={labelStyle}>Quantidade de pessoas</label>
