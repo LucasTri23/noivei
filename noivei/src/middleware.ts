@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createSupabaseMiddleware }       from '@/lib/supabase/middleware'
-import { PUBLIC_ROUTES, ADMIN_ROUTES }    from '@/constants/routes'
+import { PUBLIC_ROUTES, APP_ROUTE_PREFIXES } from '@/constants/routes'
 
+// Checagem de role admin não acontece aqui de propósito — vive só em
+// src/app/(admin)/admin/layout.tsx (profiles.role, com notFound() em vez de 403 pra
+// não revelar a existência do painel a quem não é admin). Duplicar a checagem aqui
+// com uma resposta diferente (403 JSON) quebraria essa escolha de privacidade.
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const { supabase, response } = createSupabaseMiddleware(request)
@@ -9,14 +13,23 @@ export async function middleware(request: NextRequest) {
   // Atualiza sessão — obrigatório para manter tokens frescos
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Rotas de API sempre passam — cada uma já faz sua própria checagem de auth
+  // (requireAuth/requireAdmin) e responde com JSON de erro; redirecionar uma
+  // chamada fetch() para uma página HTML de login não faz sentido.
+  if (pathname.startsWith('/api/')) return response
+
   // Rota pública — deixa passar
   const isPublic = PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   )
   if (isPublic) return response
 
-  // Rota de site público /[slug] — deixa passar
-  if (isPublicSitePath(pathname)) return response
+  // Não é uma rota conhecida do app (autenticada) nem pública — é /[slug], o site
+  // público do casal (rota dinâmica na raiz, impossível de listar) — deixa passar.
+  const isAppRoute = APP_ROUTE_PREFIXES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  )
+  if (!isAppRoute) return response
 
   // Não autenticado tentando acessar rota privada → /login
   if (!user) {
@@ -26,32 +39,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Rota admin — verificar role
-  const isAdmin = ADMIN_ROUTES.some((route) => pathname.startsWith(route))
-  if (isAdmin) {
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .maybeSingle()
-
-    if (!roleData) {
-      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
-    }
-  }
-
   return response
-}
-
-function isPublicSitePath(pathname: string): boolean {
-  // /[slug] rotas de site de casamento são públicas
-  // Exclui rotas de app conhecidas
-  const appPaths = [
-    '/dashboard', '/onboarding', '/admin', '/api',
-    '/login', '/cadastro', '/planos', '/rsvp',
-  ]
-  return !appPaths.some((p) => pathname.startsWith(p)) && pathname !== '/'
 }
 
 export const config = {

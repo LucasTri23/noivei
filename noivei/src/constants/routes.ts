@@ -1,54 +1,24 @@
-export const ROUTES = {
-  // Públicas
-  HOME:           '/',
-  LOGIN:          '/login',
-  CADASTRO:       '/cadastro',
-  VERIFICAR_EMAIL:'/verificar-email',
-  ESQUECI_SENHA:  '/esqueci-senha',
-  PLANOS:         '/planos',
-
-  // App (autenticadas)
-  ONBOARDING:     '/onboarding',
-  DASHBOARD:      '/dashboard',
-  CHECKLIST:      '/dashboard/checklist',
-  TIMELINE:       '/dashboard/timeline',
-  CONVIDADOS:     '/dashboard/convidados',
-  FINANCEIRO:     '/dashboard/financeiro',
-  FORNECEDORES:   '/dashboard/fornecedores',
-  MESAS:          '/dashboard/mesas',
-  SITE:           '/dashboard/site',
-  ARQUIVOS:       '/dashboard/arquivos',
-  CONFIGURACOES:  '/dashboard/configuracoes',
-
-  // Admin
-  ADMIN:          '/admin',
-  ADMIN_USERS:    '/admin/usuarios',
-
-  // API
-  API: {
-    HEALTH:     '/api/v1/health',
-    WEDDINGS:   '/api/v1/weddings',
-    BILLING:    '/api/v1/billing',
-    WEBHOOKS:   '/api/v1/webhooks',
-  },
-} as const
-
-// Rotas que não exigem autenticação
+// Rotas que não exigem autenticação — checadas por prefixo (`/rsvp/xyz` etc.) no
+// middleware. Mantido em sincronia manual com a estrutura real de src/app; não é
+// importado por mais nada além do middleware, então não afeta nenhuma outra tela se
+// ficar desatualizado — só o comportamento de redirecionamento do middleware.
 export const PUBLIC_ROUTES = [
-  ROUTES.HOME,
-  ROUTES.LOGIN,
-  ROUTES.CADASTRO,
-  ROUTES.VERIFICAR_EMAIL,
-  ROUTES.ESQUECI_SENHA,
-  ROUTES.PLANOS,
+  '/',
+  '/login',
+  '/signup',
+  '/verify',
+  '/forgot-password',
   '/rsvp',
   '/convite',
-  '/api/v1/health',
-  '/api/v1/rsvp',
-  '/api/v1/invites',
-  '/api/v1/webhooks',
-  '/api/v1/billing/plans',
+  '/auth/callback',
 ] as const
 
-// Rotas que exigem role admin
-export const ADMIN_ROUTES = ['/admin'] as const
+// Prefixos de primeiro nível que são de fato rotas do app (autenticadas) — usado só
+// pra diferenciar de /[slug], o site público do casal, que também vive na raiz e não
+// dá pra listar (é dinâmico). Qualquer pathname que não bata com PUBLIC_ROUTES nem
+// com esta lista é tratado como /[slug] e deixado passar sem exigir login.
+export const APP_ROUTE_PREFIXES = [
+  '/dashboard', '/checklist', '/timeline', '/convidados', '/financeiro',
+  '/mesas', '/site', '/arquivos', '/presentes', '/padrinhos', '/perfil',
+  '/onboarding', '/admin',
+] as const

@@ -1,43 +1,28 @@
 'use client'
 
-import { Suspense, useRef, useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
+// Campo único (em vez de N caixas separadas, uma por dígito) de propósito: o
+// tamanho do código de confirmação é definido pelo próprio Supabase (painel do
+// projeto), não é fixo em 6 dígitos — travar a UI num número exato de caixas quebra
+// assim que o projeto usa um tamanho diferente. Um input só aceita qualquer tamanho.
 function VerifyForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const email        = searchParams.get('email') ?? ''
-  const [inputs, setInputs]   = useState(['', '', '', '', '', ''])
+  const [code, setCode]       = useState('')
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
-  const refs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ]
-
-  function handleChange(idx: number, val: string) {
-    const digit = val.replace(/\D/g, '').slice(-1)
-    const next  = [...inputs]
-    next[idx]   = digit
-    setInputs(next)
-    if (digit && idx < 5) refs[idx + 1]?.current?.focus()
-  }
-
-  function handleKeyDown(idx: number, e: React.KeyboardEvent) {
-    if (e.key === 'Backspace' && !inputs[idx] && idx > 0) {
-      refs[idx - 1]?.current?.focus()
-    }
+  function handleChange(val: string) {
+    setCode(val.replace(/\D/g, '').slice(0, 12))
   }
 
   async function handleConfirm() {
-    const token = inputs.join('')
-    if (token.length < 6) { setError('Digite o código completo de 6 dígitos.'); return }
+    const token = code
+    if (token.length < 6) { setError('Digite o código recebido por e-mail.'); return }
     setLoading(true)
     setError('')
     const supabase = createSupabaseBrowser()
@@ -51,6 +36,8 @@ function VerifyForm() {
   }
 
   async function handleResend() {
+    setCode('')
+    setError('')
     const supabase = createSupabaseBrowser()
     await supabase.auth.resend({ type: 'signup', email })
   }
@@ -76,30 +63,27 @@ function VerifyForm() {
         Verifique seu e-mail
       </h1>
       <p style={{ fontSize: '14.5px', color: '#9A7A60', margin: '0 0 26px', lineHeight: 1.6 }}>
-        Enviamos um código de 6 dígitos para{' '}
+        Enviamos um código de confirmação para{' '}
         <strong style={{ color: '#3C2818' }}>{email || 'seu e-mail'}</strong>.
       </p>
 
-      <div style={{ display: 'flex', gap: '9px', marginBottom: '24px' }}>
-        {inputs.map((val, idx) => (
-          <input
-            key={idx}
-            ref={refs[idx]}
-            value={val}
-            maxLength={1}
-            onChange={(e) => handleChange(idx, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(idx, e)}
-            style={{
-              width: '100%', aspectRatio: '1', textAlign: 'center',
-              fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: 600,
-              color: '#3C2818',
-              border: `1.5px solid ${val ? '#C6943A' : '#EBDDD0'}`,
-              borderRadius: '12px', outline: 'none', background: 'transparent',
-              transition: 'border-color 0.18s',
-            }}
-          />
-        ))}
-      </div>
+      <input
+        value={code}
+        onChange={(e) => handleChange(e.target.value)}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        placeholder="Código"
+        aria-label="Código de confirmação"
+        style={{
+          width: '100%', textAlign: 'center', marginBottom: '24px',
+          fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: 600,
+          letterSpacing: '0.3em', padding: '14px 10px',
+          color: '#3C2818',
+          border: `1.5px solid ${code ? '#C6943A' : '#EBDDD0'}`,
+          borderRadius: '12px', outline: 'none', background: 'transparent',
+          transition: 'border-color 0.18s',
+        }}
+      />
 
       {error && (
         <p style={{ fontSize: '13.5px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px', marginBottom: '14px' }}>

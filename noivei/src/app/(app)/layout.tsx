@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
+import { isPaidPlan, PLAN_NAMES } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 import { getUserWedding, hasModuleAccess } from '@/lib/weddings/get-user-wedding'
@@ -21,22 +21,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const userWedding = await getUserWedding(supabase, user.id)
 
+  // Sem casamento nenhum (onboarding nunca concluído — por exemplo, se a sessão foi
+  // estabelecida por um caminho que não passou pelo redirecionamento próprio de
+  // /auth/callback, como login direto por e-mail/senha) — manda pro onboarding em vez
+  // de deixar a pessoa presa no app com todo módulo aparecendo "acesso restrito".
+  if (!userWedding) redirect('/onboarding')
+
   // As duas consultas abaixo só dependem de userWedding.id, não uma da outra —
   // rodar em paralelo poupa um round-trip no caminho crítico que toda página
   // autenticada passa (este layout envolve todo o grupo (app)).
-  const [{ data: wedding }, planId] = userWedding
-    ? await Promise.all([
-        supabase
-          .from('weddings')
-          .select('couple_names, wedding_color, wedding_color_secondary')
-          .eq('id', userWedding.id)
-          .maybeSingle(),
-        resolveWeddingPlanId(supabase, userWedding.id),
-      ])
-    : [{ data: null }, 'free' as PlanId]
+  const [{ data: wedding }, planId] = await Promise.all([
+    supabase
+      .from('weddings')
+      .select('couple_names, wedding_color, wedding_color_secondary')
+      .eq('id', userWedding.id)
+      .maybeSingle(),
+    resolveWeddingPlanId(supabase, userWedding.id),
+  ])
 
   const visibleModules = Object.fromEntries(
-    MODULE_KEYS.map((module) => [module, userWedding ? hasModuleAccess(userWedding, module) : false]),
+    MODULE_KEYS.map((module) => [module, hasModuleAccess(userWedding, module)]),
   ) as Record<WeddingModuleKey, boolean>
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
