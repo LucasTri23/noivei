@@ -8,8 +8,8 @@ import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { useOrigin } from '@/hooks/use-origin'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
-import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
-import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
+import { SiteSlugSchema, StoryChaptersSchema } from '@/lib/api/validation/site.schema'
+import { parseSiteContent, type SiteContent, type StoryChapter } from '@/lib/site/site-content'
 import type { SiteConfig } from '@/types/database'
 
 // Marcador do endpoint público do bucket "wedding-photos" — presente numa URL indica que
@@ -115,6 +115,12 @@ function TrashIcon() {
 }
 function CropIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+}
+function ArrowUpIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+}
+function ArrowDownIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
 }
 
 const SECTIONS: Section[] = [
@@ -388,25 +394,89 @@ function CapaSection({
   )
 }
 
+// Rascunho de um capítulo em edição — `date` é sempre string (nunca undefined) pra manter os
+// inputs controlados; vira `date?: string` de volta (omitido se vazio) na hora de validar/salvar.
+interface ChapterDraft {
+  id:    string
+  title: string
+  body:  string
+  date:  string
+}
+
+function toChapterDraft(chapter: StoryChapter): ChapterDraft {
+  return { id: chapter.id, title: chapter.title, body: chapter.body, date: chapter.date ?? '' }
+}
+
 interface HistoriaSectionProps {
+  storyChapters: StoryChapter[]
   ourStory:      string
   customMessage: string
   saving:        boolean
   siteExists:    boolean
-  onSave:        (values: { our_story: string; custom_message: string }) => Promise<PatchResult>
+  onSave:        (values: { story_chapters: StoryChapter[]; custom_message: string }) => Promise<PatchResult>
   onGoToCapa:    () => void
 }
 
-function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, onGoToCapa }: HistoriaSectionProps) {
-  const [storyDraft, setStoryDraft]     = useState(ourStory)
+function HistoriaSection({
+  storyChapters, ourStory, customMessage, saving, siteExists, onSave, onGoToCapa,
+}: HistoriaSectionProps) {
+  // Migração amigável: casamento antigo que só tinha o texto único `our_story` (sem nenhum
+  // capítulo cadastrado) começa aqui com 1 capítulo pré-preenchido em vez de uma lista vazia —
+  // o casal enxerga o texto que já tinha, podendo apenas salvar de novo ou dividir em capítulos.
+  const [chapters, setChapters] = useState<ChapterDraft[]>(() =>
+    storyChapters.length > 0
+      ? storyChapters.map(toChapterDraft)
+      : ourStory
+        ? [{ id: crypto.randomUUID(), title: 'Nossa história', body: ourStory, date: '' }]
+        : [],
+  )
   const [messageDraft, setMessageDraft] = useState(customMessage)
   const showSpinner = useDelayedLoading(saving)
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
 
+  function addChapter() {
+    setChapters((prev) => [...prev, { id: crypto.randomUUID(), title: '', body: '', date: '' }])
+  }
+
+  function updateChapter(id: string, patch: Partial<Omit<ChapterDraft, 'id'>>) {
+    setChapters((prev) => prev.map((chapter) => (chapter.id === id ? { ...chapter, ...patch } : chapter)))
+  }
+
+  function removeChapter(id: string) {
+    setChapters((prev) => prev.filter((chapter) => chapter.id !== id))
+  }
+
+  function moveChapter(index: number, direction: -1 | 1) {
+    setChapters((prev) => {
+      const targetIndex = index + direction
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev
+
+      const next = [...prev]
+      const [moved] = next.splice(index, 1)
+      if (!moved) return prev
+      next.splice(targetIndex, 0, moved)
+      return next
+    })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = await onSave({ our_story: storyDraft.trim(), custom_message: messageDraft.trim() })
+
+    // Capítulo em branco (título e texto vazios) é descartado silenciosamente — só chega a
+    // ser um erro de validação se o casal preencheu um dos dois campos e deixou o outro vazio.
+    const candidates = chapters
+      .map((chapter) => ({ id: chapter.id, title: chapter.title.trim(), body: chapter.body.trim(), date: chapter.date.trim() }))
+      .filter((chapter) => chapter.title || chapter.body)
+      .map((chapter) => ({ id: chapter.id, title: chapter.title, body: chapter.body, ...(chapter.date ? { date: chapter.date } : {}) }))
+
+    const parsed = StoryChaptersSchema.safeParse(candidates)
+    if (!parsed.success) {
+      toastError(parsed.error.issues[0]?.message ?? 'Revise os capítulos preenchidos.')
+      return
+    }
+
+    const result = await onSave({ story_chapters: parsed.data, custom_message: messageDraft.trim() })
     if (!result.ok) {
       toastError(result.message)
       return
@@ -417,17 +487,115 @@ function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
-        <label htmlFor="site-our-story" style={labelStyle}>Nossa história</label>
-        <textarea
-          id="site-our-story"
-          rows={8}
-          maxLength={4000}
-          value={storyDraft}
-          onChange={(e) => setStoryDraft(e.target.value)}
-          placeholder="Como vocês se conheceram, o pedido, curiosidades sobre o casal…"
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
-        />
+        <label style={labelStyle}>Capítulos da história</label>
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '-2px', marginBottom: '10px' }}>
+          Cada capítulo vira um bloco na linha do tempo do site — ex.: &ldquo;Onde tudo começou&rdquo;,
+          &ldquo;O primeiro &lsquo;te amo&rsquo;&rdquo;, &ldquo;O pedido de namoro&rdquo;.
+        </p>
+
+        {chapters.length === 0 ? (
+          <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: '0 0 10px' }}>
+            Nenhum capítulo adicionado ainda.
+          </p>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {chapters.map((chapter, index) => (
+              <li
+                key={chapter.id}
+                style={{ borderRadius: '14px', border: '1px solid #EBDDD0', padding: '14px', background: '#FBF7F2' }}
+              >
+                <div className="flex items-center justify-between" style={{ marginBottom: '10px', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--wedding-color-dark)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Capítulo {index + 1}
+                  </span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => moveChapter(index, -1)}
+                      disabled={index === 0}
+                      aria-label="Mover capítulo para cima"
+                      style={{
+                        border: 'none', background: 'transparent', padding: '4px',
+                        color: index === 0 ? '#D8CCC0' : 'var(--wedding-color-dark)',
+                        cursor: index === 0 ? 'default' : 'pointer',
+                      }}
+                    >
+                      <ArrowUpIcon />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveChapter(index, 1)}
+                      disabled={index === chapters.length - 1}
+                      aria-label="Mover capítulo para baixo"
+                      style={{
+                        border: 'none', background: 'transparent', padding: '4px',
+                        color: index === chapters.length - 1 ? '#D8CCC0' : 'var(--wedding-color-dark)',
+                        cursor: index === chapters.length - 1 ? 'default' : 'pointer',
+                      }}
+                    >
+                      <ArrowDownIcon />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeChapter(chapter.id)}
+                      aria-label="Excluir capítulo"
+                      style={{ border: 'none', background: 'transparent', color: '#C0553F', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <div className="grid gap-3 grid-cols-1 md:grid-cols-[1fr_160px]">
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={chapter.title}
+                      onChange={(e) => updateChapter(chapter.id, { title: e.target.value })}
+                      placeholder="Título curto (ex.: Onde tudo começou)"
+                      aria-label={`Título do capítulo ${index + 1}`}
+                      style={inputStyle}
+                    />
+                    <input
+                      type="text"
+                      maxLength={60}
+                      value={chapter.date}
+                      onChange={(e) => updateChapter(chapter.id, { date: e.target.value })}
+                      placeholder="Data (opcional)"
+                      aria-label={`Data do capítulo ${index + 1}`}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <textarea
+                    rows={4}
+                    maxLength={2000}
+                    value={chapter.body}
+                    onChange={(e) => updateChapter(chapter.id, { body: e.target.value })}
+                    placeholder="Conte esse pedacinho da história…"
+                    aria-label={`Texto do capítulo ${index + 1}`}
+                    style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <button
+          type="button"
+          onClick={addChapter}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
+            borderRadius: '12px', padding: '10px 16px',
+            fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+          }}
+        >
+          <PlusIcon /> Adicionar capítulo
+        </button>
       </div>
+
       <div>
         <label htmlFor="site-custom-message" style={labelStyle}>Mensagem para os convidados</label>
         <textarea
@@ -1020,6 +1188,11 @@ export default function SiteBuilder({
       else delete nextContent.gallery_urls
     }
 
+    if ('story_chapters' in patch) {
+      if (patch.story_chapters && patch.story_chapters.length > 0) nextContent.story_chapters = patch.story_chapters
+      else delete nextContent.story_chapters
+    }
+
     return patchSite({ content: nextContent })
   }
 
@@ -1146,6 +1319,7 @@ export default function SiteBuilder({
             )}
             {active === 'historia' && (
               <HistoriaSection
+                storyChapters={content.story_chapters ?? []}
                 ourStory={content.our_story ?? ''}
                 customMessage={content.custom_message ?? ''}
                 saving={saving}

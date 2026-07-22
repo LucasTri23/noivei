@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { getPublicSiteBySlug, type PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
+import type { SiteContent } from '@/lib/site/site-content'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 
@@ -96,28 +97,54 @@ const TIMELINE_MAX_PHOTOS = 8
 interface TimelineEntry {
   key:   string
   label: string
+  date?: string
   body:  string
   photo: PublicGalleryPhoto | null
 }
 
-// Cada bloco de texto existente (história/cerimônia/festa) vira uma "parada" na linha do
+// Fonte dos blocos de "Nossa história": um por capítulo cadastrado em `content.story_chapters`
+// (na ordem em que o casal os cadastrou), cada um com seu próprio título/data. Retrocompatibilidade:
+// casamentos antigos que só preencheram o texto único `our_story` (sem nenhum capítulo) ganham um
+// único bloco genérico "Nossa história" com esse texto — o site publicado antes desta feature não
+// muda de aparência. Quando há capítulos cadastrados, eles mandam e `our_story` é ignorado (o valor
+// antigo continua salvo no banco, só não é mais renderizado, evitando duplicar o mesmo texto).
+function buildStoryEntries(
+  content: Pick<SiteContent, 'our_story' | 'story_chapters'>,
+): { key: string; label: string; date?: string; body: string | undefined }[] {
+  if (content.story_chapters && content.story_chapters.length > 0) {
+    return content.story_chapters.map((chapter) => ({
+      key:   `capitulo-${chapter.id}`,
+      label: chapter.title,
+      date:  chapter.date,
+      body:  chapter.body,
+    }))
+  }
+
+  if (content.our_story) {
+    return [{ key: 'historia', label: 'Nossa história', body: content.our_story }]
+  }
+
+  return []
+}
+
+// Cada bloco de texto (capítulos da história + cerimônia/festa) vira uma "parada" na linha do
 // tempo e consome uma foto da galeria, na ordem em que ambas aparecem. Decisão de design:
 // o número de blocos segue o texto disponível (não as fotos) — um bloco sem foto ainda
 // aparece, só que centralizado, sem quebrar o zigue-zague dos vizinhos. Só as primeiras
 // TIMELINE_MAX_PHOTOS fotos entram aqui; o restante (inclusive as que sobram depois de
 // preencher os blocos) fecha o site numa seção de galeria tradicional.
 function buildTimelineEntries(
-  content:      { our_story?: string; ceremony_info?: string; reception_info?: string },
+  content:       Pick<SiteContent, 'our_story' | 'story_chapters' | 'ceremony_info' | 'reception_info'>,
   galleryPhotos: PublicGalleryPhoto[],
 ): TimelineEntry[] {
-  const source: { key: string; label: string; body: string | undefined }[] = [
-    { key: 'historia',  label: 'Nossa história', body: content.our_story },
-    { key: 'cerimonia', label: 'Cerimônia',       body: content.ceremony_info },
-    { key: 'festa',     label: 'Festa',           body: content.reception_info },
+  const source: { key: string; label: string; date?: string; body: string | undefined }[] = [
+    ...buildStoryEntries(content),
+    { key: 'cerimonia', label: 'Cerimônia', body: content.ceremony_info },
+    { key: 'festa',     label: 'Festa',     body: content.reception_info },
   ]
 
   return source
-    .filter((entry): entry is { key: string; label: string; body: string } => Boolean(entry.body))
+    .filter((entry): entry is { key: string; label: string; date?: string; body: string } => Boolean(entry.body))
     .map((entry, index) => ({
       ...entry,
       photo: index < TIMELINE_MAX_PHOTOS ? (galleryPhotos[index] ?? null) : null,
@@ -233,7 +260,8 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   // site numa seção de galeria tradicional.
   const galleryPhotos     = site.galleryPhotos
   const timelineEntries   = buildTimelineEntries(site.content, galleryPhotos)
-  const timelineTitle     = site.content.our_story ? 'Nossa história' : 'Cerimônia & festa'
+  const hasStory          = (site.content.story_chapters?.length ?? 0) > 0 || Boolean(site.content.our_story)
+  const timelineTitle     = hasStory ? 'Nossa história' : 'Cerimônia & festa'
   const consumedPhotos    = Math.min(timelineEntries.length, TIMELINE_MAX_PHOTOS)
   const remainingPhotos   = galleryPhotos.slice(consumedPhotos)
 
@@ -321,6 +349,11 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                 const photoFirst = index % 2 === 1
                 const NodeIcon   = TIMELINE_NODE_ICONS[index % TIMELINE_NODE_ICONS.length] ?? TimelineHeartIcon
 
+                const dateLabel = entry.date && (
+                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--wedding-color-secondary-dark)', marginBottom: '4px' }}>
+                    {entry.date}
+                  </div>
+                )
                 const label = (
                   <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
                     {entry.label}
@@ -354,6 +387,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                     {entry.photo ? (
                       <div className="grid gap-6 md:grid-cols-2 md:items-center">
                         <div className={photoFirst ? 'md:order-2' : 'md:order-1'}>
+                          {dateLabel}
                           {label}
                           {body}
                         </div>
@@ -365,6 +399,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                       // Bloco sem foto disponível: fica centralizado em vez de quebrar o
                       // zigue-zague dos vizinhos (acontece quando há mais texto que fotos).
                       <div style={{ maxWidth: '520px', margin: '0 auto', textAlign: 'center' }}>
+                        {dateLabel}
                         {label}
                         {body}
                       </div>
