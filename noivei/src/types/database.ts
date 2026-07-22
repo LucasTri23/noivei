@@ -261,6 +261,11 @@ export interface WeddingGalleryPhoto {
   size_bytes:   number
   mime_type:    string | null
   uploaded_by:  string
+  // Ajuste de recorte por foto (mesmo conceito de cover_photo_position em site_config):
+  // position_y desloca o enquadramento vertical quando exibida com object-fit: cover;
+  // fit_contain troca pra object-fit: contain (mostra a foto inteira, sem cortar).
+  position_y:   number
+  fit_contain:  boolean
   created_at:   string
 }
 

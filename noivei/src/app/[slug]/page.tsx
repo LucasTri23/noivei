@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-import { getPublicSiteBySlug } from '@/lib/site/get-public-site-by-slug'
+import { getPublicSiteBySlug, type PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
 import { createSupabaseService } from '@/lib/supabase/service'
-import { deriveWeddingColorScale } from '@/lib/theme/wedding-color'
+import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 
 // Sites de casal ainda não entraram no roadmap de SEO/indexação do produto
 export const metadata: Metadata = {
@@ -53,19 +53,63 @@ function MapPinIcon() {
   )
 }
 
+// Ícones pequenos e decorativos que ciclam por posição do bloco da timeline (não há dado
+// estruturado de "categoria" por bloco de texto) — coração, alianças, recado, estrela.
+function TimelineHeartIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  )
+}
+function TimelineRingIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="15" r="5" /><circle cx="16" cy="9" r="5" />
+    </svg>
+  )
+}
+function TimelineChatIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  )
+}
+function TimelineStarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  )
+}
+const TIMELINE_NODE_ICONS = [TimelineHeartIcon, TimelineRingIcon, TimelineChatIcon, TimelineStarIcon]
+
+// Rotação leve e determinística por índice (não muda a cada render, mas varia foto a
+// foto) — simula o efeito de polaroids coladas levemente tortas.
+const TIMELINE_PHOTO_ROTATIONS = [-3, 2.5, -2, 3, -1.5, 2, -2.5, 1.5]
+
+// Só as 8 primeiras fotos entram no layout intercalado da timeline — a partir da 9ª (ou
+// se sobrar foto além dos blocos de texto disponíveis), tudo cai na Galeria tradicional.
+const TIMELINE_MAX_PHOTOS = 8
+
 interface TimelineEntry {
   key:   string
   label: string
   body:  string
-  photo: string | null
+  photo: PublicGalleryPhoto | null
 }
 
 // Cada bloco de texto existente (história/cerimônia/festa) vira uma "parada" na linha do
 // tempo e consome uma foto da galeria, na ordem em que ambas aparecem. Decisão de design:
 // o número de blocos segue o texto disponível (não as fotos) — um bloco sem foto ainda
-// aparece, só que centralizado, sem quebrar o zigue-zague dos vizinhos. As fotos que sobram
-// depois de preencher os blocos fecham o site numa seção de galeria tradicional.
-function buildTimelineEntries(content: { our_story?: string; ceremony_info?: string; reception_info?: string }, galleryUrls: string[]): TimelineEntry[] {
+// aparece, só que centralizado, sem quebrar o zigue-zague dos vizinhos. Só as primeiras
+// TIMELINE_MAX_PHOTOS fotos entram aqui; o restante (inclusive as que sobram depois de
+// preencher os blocos) fecha o site numa seção de galeria tradicional.
+function buildTimelineEntries(
+  content:      { our_story?: string; ceremony_info?: string; reception_info?: string },
+  galleryPhotos: PublicGalleryPhoto[],
+): TimelineEntry[] {
   const source: { key: string; label: string; body: string | undefined }[] = [
     { key: 'historia',  label: 'Nossa história', body: content.our_story },
     { key: 'cerimonia', label: 'Cerimônia',       body: content.ceremony_info },
@@ -74,7 +118,73 @@ function buildTimelineEntries(content: { our_story?: string; ceremony_info?: str
 
   return source
     .filter((entry): entry is { key: string; label: string; body: string } => Boolean(entry.body))
-    .map((entry, index) => ({ ...entry, photo: galleryUrls[index] ?? null }))
+    .map((entry, index) => ({
+      ...entry,
+      photo: index < TIMELINE_MAX_PHOTOS ? (galleryPhotos[index] ?? null) : null,
+    }))
+}
+
+// Gera um path SVG em "S" contínuo (um monte por bloco, alternando o lado) que serve de fio
+// orgânico ligando os blocos da timeline. Usa preserveAspectRatio="none" no <svg> pai pra
+// esticar em qualquer altura de container sem precisar calcular a altura real em pixels
+// no servidor — não é pixel-perfeito, mas fica visualmente ondulado em vez de uma reta.
+function buildTimelineWavePath(blockCount: number): string {
+  const width     = 40
+  const segment    = 100
+  const midX       = width / 2
+  const amplitude  = 13
+
+  let d = `M ${midX} 0`
+  for (let i = 0; i < blockCount; i++) {
+    const yStart = i * segment
+    const yEnd   = yStart + segment
+    const yMid   = yStart + segment / 2
+    const dir    = i % 2 === 0 ? 1 : -1
+    const cx     = midX + dir * amplitude
+    d += ` Q ${cx} ${yMid} ${midX} ${yEnd}`
+  }
+  return d
+}
+
+// Foto em moldura "polaroid" — fundo creme simulando a borda física, sombra suave, leve
+// rotação por índice e um pin decorativo em forma de coração no topo.
+function PolaroidPhoto({ photo, index, alt }: { photo: PublicGalleryPhoto; index: number; alt: string }) {
+  const rotation = TIMELINE_PHOTO_ROTATIONS[index % TIMELINE_PHOTO_ROTATIONS.length]
+
+  return (
+    <div style={{ position: 'relative', maxWidth: '320px', width: '100%', margin: '0 auto', transform: `rotate(${rotation}deg)` }}>
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute', top: '-13px', left: '50%', width: '28px', height: '28px',
+          transform: 'translateX(-50%) rotate(-8deg)', borderRadius: '50%',
+          background: 'var(--wedding-color-secondary)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 3px 8px rgba(60,40,24,0.28)', zIndex: 2,
+        }}
+      >
+        <TimelineHeartIcon />
+      </div>
+      <div
+        style={{
+          background: '#FFFCF6', padding: '10px 10px 30px', borderRadius: '3px',
+          boxShadow: '0 16px 32px rgba(60,40,24,0.18), 0 3px 8px rgba(60,40,24,0.12)',
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage/externa, sem domínio fixo para configurar no next/image */}
+        <img
+          src={photo.url}
+          alt={alt}
+          style={{
+            width: '100%', height: '250px', display: 'block', borderRadius: '2px',
+            objectFit:     photo.fit_contain ? 'contain' : 'cover',
+            objectPosition: `center ${photo.position_y}%`,
+            background:    photo.fit_contain ? '#F1E9DD' : undefined,
+          }}
+        />
+      </div>
+    </div>
+  )
 }
 
 export default async function PublicSitePage({ params }: PublicSitePageProps) {
@@ -100,6 +210,10 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   // usada no app autenticado, aplicada aqui via CSS vars para todo o site público.
   const colorScale          = deriveWeddingColorScale(site.wedding.wedding_color)
   const colorScaleSecondary = deriveWeddingColorScale(site.wedding.wedding_color_secondary)
+  // Site do casal é recurso Premium (ver PaywallGate em (app)/site) — só chega a existir
+  // publicado para um plano pago, então a cor (e o gradiente escuro derivado dela) já
+  // pode ser aplicada sem checagem extra de plano aqui, igual ao restante desta página.
+  const brandDarkGradient = deriveBrandDarkGradient(site.wedding.wedding_color_secondary)
   const weddingColorVars = {
     '--wedding-color':                  colorScale.color,
     '--wedding-color-light':            colorScale.light,
@@ -109,21 +223,25 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
     '--wedding-color-secondary-light':  colorScaleSecondary.light,
     '--wedding-color-secondary-dark':   colorScaleSecondary.dark,
     '--wedding-color-secondary-subtle': colorScaleSecondary.subtle,
+    '--brand-dark-gradient-from':       brandDarkGradient.from,
+    '--brand-dark-gradient-to':         brandDarkGradient.to,
   } as React.CSSProperties
 
   // Fotos da galeria espalhadas pelo site em vez de só num bloco isolado: acompanham os
-  // blocos da linha do tempo "Nossa história" (ver buildTimelineEntries); o restante (se
-  // sobrarem muitas) fecha o site numa seção de galeria tradicional.
-  const galleryUrls     = site.content.gallery_urls ?? []
-  const timelineEntries = buildTimelineEntries(site.content, galleryUrls)
-  const timelineTitle   = site.content.our_story ? 'Nossa história' : 'Cerimônia & festa'
-  const remainingPhotos = galleryUrls.slice(timelineEntries.length)
+  // blocos da linha do tempo "Nossa história" (ver buildTimelineEntries), até o teto de
+  // TIMELINE_MAX_PHOTOS; o restante (as que sobram dos blocos + tudo após a 8ª) fecha o
+  // site numa seção de galeria tradicional.
+  const galleryPhotos     = site.galleryPhotos
+  const timelineEntries   = buildTimelineEntries(site.content, galleryPhotos)
+  const timelineTitle     = site.content.our_story ? 'Nossa história' : 'Cerimônia & festa'
+  const consumedPhotos    = Math.min(timelineEntries.length, TIMELINE_MAX_PHOTOS)
+  const remainingPhotos   = galleryPhotos.slice(consumedPhotos)
 
   // Sem foto de capa, mantém o gradiente escuro atual; com foto, aplica um overlay
   // escuro semi-transparente por cima pra manter o texto legível.
   const coverBackground = site.cover_photo_url
     ? `linear-gradient(rgba(20,12,4,0.6), rgba(20,12,4,0.6)), url(${site.cover_photo_url})`
-    : 'linear-gradient(150deg, #2A1E10, #3A2A18)'
+    : 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))'
   // Posição vertical ajustável pelo casal no editor (0=topo, 50=centro, 100=base) —
   // evita que o "cover" corte o casal fora do quadro em fotos com composição diferente.
   const coverBackgroundPositionY = site.cover_photo_position
@@ -169,28 +287,39 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
       <div style={{ maxWidth: '760px', margin: '0 auto', padding: '56px 24px 80px' }}>
-        {/* Nossa história — linha do tempo com fotos alternando de lado, ligadas por um
-            fio vertical na cor secundária (só aparece em telas médias+, onde há duas
-            colunas de fato; no mobile os blocos empilham e o fio some). */}
+        {/* Nossa história — linha do tempo com fotos em moldura polaroid alternando de
+            lado, ligadas por um fio dourado orgânico/curvo (só aparece em telas médias+,
+            onde há duas colunas de fato; no mobile os blocos empilham e o fio some). */}
         {timelineEntries.length > 0 && (
           <section style={{ marginBottom: '56px', position: 'relative' }}>
             <SectionTitle>{timelineTitle}</SectionTitle>
 
-            <div
+            <svg
               aria-hidden
               className="hidden md:block"
+              viewBox={`0 0 40 ${timelineEntries.length * 100}`}
+              preserveAspectRatio="none"
               style={{
-                position: 'absolute', top: '8px', bottom: '8px', left: '50%', width: '2px',
-                background: 'linear-gradient(180deg, transparent, var(--wedding-color-secondary) 6%, var(--wedding-color-secondary) 94%, transparent)',
-                transform: 'translateX(-50%)', zIndex: 0,
+                position: 'absolute', top: '8px', left: '50%', width: '40px',
+                height: 'calc(100% - 16px)', transform: 'translateX(-50%)', zIndex: 0,
               }}
-            />
+            >
+              <path
+                d={buildTimelineWavePath(timelineEntries.length)}
+                fill="none"
+                stroke="var(--wedding-color-secondary)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                opacity="0.55"
+              />
+            </svg>
 
             <div className="flex flex-col gap-14" style={{ position: 'relative', zIndex: 1 }}>
               {timelineEntries.map((entry, index) => {
                 // Blocos ímpares invertem os lados (foto à esquerda, texto à direita) —
                 // é o que produz o zigue-zague conforme a página desce.
                 const photoFirst = index % 2 === 1
+                const NodeIcon   = TIMELINE_NODE_ICONS[index % TIMELINE_NODE_ICONS.length] ?? TimelineHeartIcon
 
                 const label = (
                   <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
@@ -205,16 +334,22 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
 
                 return (
                   <div key={entry.key} style={{ position: 'relative' }}>
-                    {/* Nó da linha do tempo, centralizado no meio vertical do bloco */}
+                    {/* Ícone circular sobre o fio, centralizado no meio vertical do bloco —
+                        cicla entre coração/alianças/recado/estrela por posição do bloco. */}
                     <div
                       aria-hidden
-                      className="hidden md:block"
+                      className="hidden md:flex"
                       style={{
-                        position: 'absolute', top: '50%', left: '50%', width: '14px', height: '14px',
-                        borderRadius: '50%', background: 'var(--wedding-color-secondary)',
-                        border: '3px solid var(--bg)', transform: 'translate(-50%,-50%)', zIndex: 2,
+                        position: 'absolute', top: '50%', left: '50%', width: '34px', height: '34px',
+                        alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
+                        background: 'var(--surface)', color: 'var(--wedding-color-secondary-dark)',
+                        border: '2px solid var(--wedding-color-secondary)',
+                        transform: 'translate(-50%,-50%)', zIndex: 2,
+                        boxShadow: '0 4px 10px rgba(60,40,24,0.14)',
                       }}
-                    />
+                    >
+                      <NodeIcon />
+                    </div>
 
                     {entry.photo ? (
                       <div className="grid gap-6 md:grid-cols-2 md:items-center">
@@ -223,13 +358,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                           {body}
                         </div>
                         <div className={photoFirst ? 'md:order-1' : 'md:order-2'}>
-                          {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
-                          <img
-                            src={entry.photo}
-                            alt="Foto do casal"
-                            className="rounded-2xl"
-                            style={{ width: '100%', height: '260px', objectFit: 'cover', display: 'block' }}
-                          />
+                          <PolaroidPhoto photo={entry.photo} index={index} alt="Foto do casal" />
                         </div>
                       </div>
                     ) : (
@@ -333,14 +462,19 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           <section style={{ marginBottom: '56px' }}>
             <SectionTitle>Galeria</SectionTitle>
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px,1fr))' }}>
-              {remainingPhotos.map((url, index) => (
+              {remainingPhotos.map((photo, index) => (
                 // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
                 <img
-                  key={`${url}-${index}`}
-                  src={url}
-                  alt={`Foto ${timelineEntries.length + index + 1} do casal`}
+                  key={`${photo.url}-${index}`}
+                  src={photo.url}
+                  alt={`Foto ${consumedPhotos + index + 1} do casal`}
                   className="rounded-2xl"
-                  style={{ width: '100%', height: '160px', objectFit: 'cover' }}
+                  style={{
+                    width: '100%', height: '160px',
+                    objectFit:      photo.fit_contain ? 'contain' : 'cover',
+                    objectPosition: `center ${photo.position_y}%`,
+                    background:     photo.fit_contain ? 'var(--surface)' : undefined,
+                  }}
                 />
               ))}
             </div>

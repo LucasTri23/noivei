@@ -18,9 +18,22 @@ import type { SiteConfig } from '@/types/database'
 const GALLERY_BUCKET_URL_MARKER = '/storage/v1/object/public/wedding-photos/'
 
 interface GalleryPhotoRecord {
+  id:           string
   storage_path: string
   size_bytes:   number
+  position_y:   number
+  fit_contain:  boolean
   public_url:   string
+}
+
+// Metadados de ajuste de recorte por foto, indexados pela URL pública (mesma chave usada
+// em `content.gallery_urls`) — só existem pra fotos enviadas do computador (registradas em
+// wedding_gallery_photos); URLs externas coladas manualmente não têm registro e não
+// ganham o controle de ajuste.
+interface GalleryPhotoMeta {
+  id:          string
+  position_y:  number
+  fit_contain: boolean
 }
 
 // Mesma sanitização/formatação usadas em FileArchiveManager (Central de arquivos) —
@@ -99,6 +112,9 @@ function PlusIcon() {
 }
 function TrashIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+}
+function CropIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
 }
 
 const SECTIONS: Section[] = [
@@ -528,24 +544,30 @@ function PresentesSection() {
 
 interface GaleriaSectionProps {
   galleryUrls:       string[]
+  photoMeta:         Record<string, GalleryPhotoMeta>
   saving:            boolean
   siteExists:        boolean
   storageLimitBytes: number
   usedBytes:         number
   onUploadPhoto:     (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto:     (url: string) => Promise<boolean>
+  onUpdatePhotoMeta: (url: string, patch: { position_y?: number; fit_contain?: boolean }) => void
   onSave:            (values: { gallery_urls: string[] }) => Promise<PatchResult>
   onGoToCapa:        () => void
 }
 
 function GaleriaSection({
-  galleryUrls, saving, siteExists, storageLimitBytes, usedBytes, onUploadPhoto, onDeletePhoto, onSave, onGoToCapa,
+  galleryUrls, photoMeta, saving, siteExists, storageLimitBytes, usedBytes,
+  onUploadPhoto, onDeletePhoto, onUpdatePhotoMeta, onSave, onGoToCapa,
 }: GaleriaSectionProps) {
   const [urls, setUrls]           = useState<string[]>(galleryUrls)
   const [newUrl, setNewUrl]       = useState('')
   const [uploading, setUploading] = useState(false)
   // Progresso do lote de upload (múltiplos arquivos selecionados de uma vez) — null fora de um upload
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
+  // Qual item da lista tem o painel de ajuste (posição/recorte) aberto — só um por vez, pra
+  // não poluir a grade toda de miniaturas com sliders sempre visíveis.
+  const [expandedUrl, setExpandedUrl] = useState<string | null>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
   const showSpinner  = useDelayedLoading(saving)
   const showUploadSpinner = useDelayedLoading(uploading)
@@ -608,6 +630,7 @@ function GaleriaSection({
   async function removeUrl(index: number) {
     const url = urls[index]
     setUrls((prev) => prev.filter((_, i) => i !== index))
+    setExpandedUrl((prev) => (prev === url ? null : prev))
     if (url === undefined) return
 
     // Best-effort: a foto já saiu da lista visível independente do resultado da chamada —
@@ -699,27 +722,86 @@ function GaleriaSection({
         <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0 }}>Nenhuma imagem adicionada ainda.</p>
       ) : (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {urls.map((url, index) => (
-            <li
-              key={`${url}-${index}`}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '8px 10px', borderRadius: '10px', border: '1px solid #EBDDD0',
-              }}
-            >
-              <span style={{ flex: 1, fontSize: '13px', color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {url}
-              </span>
-              <button
-                type="button"
-                onClick={() => removeUrl(index)}
-                aria-label="Remover imagem"
-                style={{ border: 'none', background: 'transparent', color: '#C0553F', cursor: 'pointer', padding: '4px' }}
-              >
-                <TrashIcon />
-              </button>
-            </li>
-          ))}
+          {urls.map((url, index) => {
+            const meta       = photoMeta[url]
+            const isExpanded = expandedUrl === url
+
+            return (
+              <li key={`${url}-${index}`} style={{ borderRadius: '10px', border: '1px solid #EBDDD0', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage ou externa, sem domínio fixo para configurar no next/image */}
+                  <img
+                    src={url}
+                    alt=""
+                    style={{
+                      width: '44px', height: '44px', borderRadius: '8px', flexShrink: 0,
+                      objectFit:      meta?.fit_contain ? 'contain' : 'cover',
+                      objectPosition: `center ${meta?.position_y ?? 50}%`,
+                      background: '#F1E9DD',
+                    }}
+                  />
+                  <span style={{ flex: 1, fontSize: '13px', color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {url}
+                  </span>
+                  {meta && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedUrl(isExpanded ? null : url)}
+                      aria-label="Ajustar posição e recorte da foto"
+                      aria-expanded={isExpanded}
+                      style={{
+                        display: 'flex', border: 'none', cursor: 'pointer', padding: '6px', borderRadius: '8px',
+                        background: isExpanded ? 'var(--wedding-color-subtle)' : 'transparent',
+                        color: 'var(--wedding-color-dark)',
+                      }}
+                    >
+                      <CropIcon />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeUrl(index)}
+                    aria-label="Remover imagem"
+                    style={{ border: 'none', background: 'transparent', color: '#C0553F', cursor: 'pointer', padding: '4px' }}
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+
+                {isExpanded && meta && (
+                  <div style={{ padding: '4px 14px 14px', borderTop: '1px solid #EBDDD0', background: '#FBF7F2' }}>
+                    <label htmlFor={`gallery-position-${meta.id}`} style={{ ...labelStyle, fontSize: '12px', marginTop: '10px', marginBottom: '4px' }}>
+                      Posição vertical
+                    </label>
+                    <input
+                      id={`gallery-position-${meta.id}`}
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={meta.position_y}
+                      disabled={meta.fit_contain}
+                      onChange={(e) => onUpdatePhotoMeta(url, { position_y: Number(e.target.value) })}
+                      style={{ width: '100%', accentColor: 'var(--wedding-color)', opacity: meta.fit_contain ? 0.5 : 1 }}
+                    />
+                    <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '2px 0 10px' }}>
+                      {meta.fit_contain
+                        ? 'Desative "ajustar sem cortar" para usar a posição.'
+                        : meta.position_y === 0 ? 'Topo' : meta.position_y === 100 ? 'Base' : meta.position_y === 50 ? 'Centro' : `${meta.position_y}%`}
+                    </p>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--fg)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={meta.fit_contain}
+                        onChange={(e) => onUpdatePhotoMeta(url, { fit_contain: e.target.checked })}
+                      />
+                      Ajustar sem cortar (mostra a foto inteira, sem recorte)
+                    </label>
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -747,6 +829,11 @@ export default function SiteBuilder({
   // entre a foto de capa e a galeria — ambas usam o mesmo endpoint de registro de metadados.
   const [usedBytes, setUsedBytes]   = useState(storageUsedBytes)
   const [photoSizes, setPhotoSizes] = useState<Record<string, number>>({})
+  // Ajuste de posição/recorte por foto, indexado pela URL pública — só existe pra fotos
+  // enviadas do computador (ver GalleryPhotoMeta). Debounce de PATCH por foto, pra não
+  // disparar uma requisição a cada tick do slider de posição.
+  const [photoMeta, setPhotoMeta]   = useState<Record<string, GalleryPhotoMeta>>({})
+  const photoMetaPatchTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -758,6 +845,13 @@ export default function SiteBuilder({
         setPhotoSizes((prev) => {
           const next = { ...prev }
           for (const photo of body.data) next[photo.public_url] = photo.size_bytes
+          return next
+        })
+        setPhotoMeta((prev) => {
+          const next = { ...prev }
+          for (const photo of body.data) {
+            next[photo.public_url] = { id: photo.id, position_y: photo.position_y, fit_contain: photo.fit_contain }
+          }
           return next
         })
       })
@@ -804,6 +898,7 @@ export default function SiteBuilder({
 
     const { data } = (await res.json()) as { data: GalleryPhotoRecord }
     setPhotoSizes((prev) => ({ ...prev, [data.public_url]: data.size_bytes }))
+    setPhotoMeta((prev) => ({ ...prev, [data.public_url]: { id: data.id, position_y: data.position_y, fit_contain: data.fit_contain } }))
     setUsedBytes((prev) => prev + data.size_bytes)
     return data
   }
@@ -831,8 +926,39 @@ export default function SiteBuilder({
       delete next[url]
       return next
     })
+    setPhotoMeta((prev) => {
+      const next = { ...prev }
+      delete next[url]
+      return next
+    })
     setUsedBytes((prev) => Math.max(0, prev - removedSize))
     return true
+  }
+
+  // Atualiza local imediatamente (prévia ao vivo do slider/toggle) e debounça o PATCH de
+  // rede em 400ms — evita disparar uma requisição a cada tick do slider durante o arrasto.
+  function updateGalleryPhotoMeta(url: string, patch: { position_y?: number; fit_contain?: boolean }): void {
+    const meta = photoMeta[url]
+    if (!meta) return
+
+    const next = { ...meta, ...patch }
+    setPhotoMeta((prev) => ({ ...prev, [url]: next }))
+
+    const existingTimer = photoMetaPatchTimers.current[url]
+    if (existingTimer) clearTimeout(existingTimer)
+
+    photoMetaPatchTimers.current[url] = setTimeout(() => {
+      void (async () => {
+        const res = await fetch(`/api/v1/weddings/${weddingId}/gallery-photos/${next.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ position_y: next.position_y, fit_contain: next.fit_contain }),
+        })
+        if (!res.ok) {
+          toastError(await readApiError(res, 'Não foi possível salvar o ajuste da foto.'))
+        }
+      })()
+    }, 400)
   }
 
   async function patchSite(
@@ -1043,12 +1169,14 @@ export default function SiteBuilder({
             {active === 'galeria' && (
               <GaleriaSection
                 galleryUrls={content.gallery_urls ?? []}
+                photoMeta={photoMeta}
                 saving={saving}
                 siteExists={siteExists}
                 storageLimitBytes={storageLimitBytes}
                 usedBytes={usedBytes}
                 onUploadPhoto={uploadPhoto}
                 onDeletePhoto={deletePhoto}
+                onUpdatePhotoMeta={updateGalleryPhotoMeta}
                 onSave={saveContentPatch}
                 onGoToCapa={() => setActive('capa')}
               />
