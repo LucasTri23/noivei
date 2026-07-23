@@ -23,6 +23,8 @@ interface CouponForm {
   discount_type:      CouponDiscountType
   discount_value:     number | null
   applies_to_plan_id: string
+  // Só usado quando discount_type = 'free_days'.
+  benefit_days:       number | null
   max_redemptions:    number | null
   valid_from:         string
   valid_until:        string
@@ -31,7 +33,7 @@ interface CouponForm {
 
 const EMPTY_FORM: CouponForm = {
   code: '', discount_type: 'percent', discount_value: null, applies_to_plan_id: '',
-  max_redemptions: null, valid_from: '', valid_until: '', is_active: true,
+  benefit_days: null, max_redemptions: null, valid_from: '', valid_until: '', is_active: true,
 }
 
 const PLAN_OPTIONS: { value: PlanId; label: string }[] = [
@@ -44,9 +46,10 @@ const PLAN_OPTIONS: { value: PlanId; label: string }[] = [
 const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 function fmtDiscount(coupon: Coupon): string {
+  if (coupon.discount_type === 'free_days') return `${coupon.benefit_days} dia(s) grátis`
   return coupon.discount_type === 'percent'
     ? `${coupon.discount_value}%`
-    : currencyFmt.format(coupon.discount_value / 100)
+    : currencyFmt.format((coupon.discount_value ?? 0) / 100)
 }
 
 function fmtPlan(planId: string | null): string {
@@ -82,6 +85,7 @@ function draftFromCoupon(coupon: Coupon): CouponForm {
     discount_type:      coupon.discount_type,
     discount_value:     coupon.discount_value,
     applies_to_plan_id: coupon.applies_to_plan_id ?? '',
+    benefit_days:       coupon.benefit_days,
     max_redemptions:    coupon.max_redemptions,
     valid_from:         isoToDateInput(coupon.valid_from),
     valid_until:        isoToDateInput(coupon.valid_until),
@@ -157,27 +161,51 @@ export default function AdminCouponsManager({ initialCoupons }: AdminCouponsMana
       toastError('Informe um código para o cupom.')
       return
     }
-    if (!form.discount_value || form.discount_value < 1) {
-      toastError('Informe um valor de desconto válido.')
-      return
-    }
-    if (form.discount_type === 'percent' && form.discount_value > 100) {
-      toastError('Desconto percentual não pode passar de 100.')
-      return
+
+    if (form.discount_type === 'free_days') {
+      if (!form.applies_to_plan_id) {
+        toastError('Escolha o plano que o cupom concede.')
+        return
+      }
+      if (!form.benefit_days || form.benefit_days < 1) {
+        toastError('Informe quantos dias o cupom concede.')
+        return
+      }
+    } else {
+      if (!form.discount_value || form.discount_value < 1) {
+        toastError('Informe um valor de desconto válido.')
+        return
+      }
+      if (form.discount_type === 'percent' && form.discount_value > 100) {
+        toastError('Desconto percentual não pode passar de 100.')
+        return
+      }
     }
 
     setSaving(true)
 
-    const payload = {
-      code:               form.code.trim(),
-      discount_type:      form.discount_type,
-      discount_value:     form.discount_value,
-      applies_to_plan_id: form.applies_to_plan_id || null,
-      max_redemptions:    form.max_redemptions,
-      valid_from:         dateInputToIso(form.valid_from),
-      valid_until:        dateInputToIso(form.valid_until),
-      is_active:          form.is_active,
-    }
+    const payload =
+      form.discount_type === 'free_days'
+        ? {
+            code:               form.code.trim(),
+            discount_type:      form.discount_type,
+            applies_to_plan_id: form.applies_to_plan_id,
+            benefit_days:       form.benefit_days,
+            max_redemptions:    form.max_redemptions,
+            valid_from:         dateInputToIso(form.valid_from),
+            valid_until:        dateInputToIso(form.valid_until),
+            is_active:          form.is_active,
+          }
+        : {
+            code:               form.code.trim(),
+            discount_type:      form.discount_type,
+            discount_value:     form.discount_value,
+            applies_to_plan_id: form.applies_to_plan_id || null,
+            max_redemptions:    form.max_redemptions,
+            valid_from:         dateInputToIso(form.valid_from),
+            valid_until:        dateInputToIso(form.valid_until),
+            is_active:          form.is_active,
+          }
 
     const res = editing
       ? await fetch(`/api/v1/admin/coupons/${editing.id}`, {
@@ -249,9 +277,10 @@ export default function AdminCouponsManager({ initialCoupons }: AdminCouponsMana
         className="mb-6 rounded-2xl p-4"
         style={{ background: '#F4EFE7', border: '1px solid #E5D8C4', fontSize: '13.5px', color: '#8A7560', lineHeight: 1.6 }}
       >
-        Ainda não existe fluxo de aplicar cupom no checkout — o seletor de planos do casal não aceita código
-        de desconto (ver TODO Fase 2 em <code>plan-selector.tsx</code>), pois não há gateway de pagamento real
-        integrado. Os cupons criados aqui ficam prontos como dado para quando esse fluxo existir.
+Cupons de <strong>dias grátis</strong> já podem ser resgatados pelo casal em /perfil/planos (concedem o plano
+        na hora, sem cobrança). Cupons de <strong>desconto percentual/fixo</strong> ficam só cadastrados —
+        aplicá-los de fato depende de um gateway de pagamento real (ver TODO Fase 2 em{' '}
+        <code>plan-selector.tsx</code>), que ainda não existe.
       </div>
 
       <div className="overflow-hidden rounded-2xl" style={{ background: '#FFFFFF', boxShadow: '0 6px 18px rgba(60,40,24,0.07)' }}>
@@ -360,47 +389,97 @@ export default function AdminCouponsManager({ initialCoupons }: AdminCouponsMana
                 />
                 Valor fixo
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#2A1E10', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="coupon-discount-type"
+                  checked={form.discount_type === 'free_days'}
+                  onChange={() => setForm((f) => ({ ...f, discount_type: 'free_days' }))}
+                />
+                Dias grátis de um plano
+              </label>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="coupon-discount-value" style={labelStyle}>
-              {form.discount_type === 'percent' ? 'Desconto (%)' : 'Desconto (R$)'} *
-            </label>
-            {form.discount_type === 'percent' ? (
-              <input
-                id="coupon-discount-value"
-                type="number"
-                required
-                min={1}
-                max={100}
-                value={form.discount_value ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, discount_value: e.target.value === '' ? null : Number(e.target.value) }))}
-                style={inputStyle}
-              />
-            ) : (
-              <CurrencyInput
-                id="coupon-discount-value"
-                value={form.discount_value}
-                onChange={(cents) => setForm((f) => ({ ...f, discount_value: cents }))}
-              />
-            )}
-          </div>
+          {form.discount_type === 'free_days' ? (
+            <>
+              <div
+                className="rounded-2xl p-3"
+                style={{ background: '#F4EFE7', border: '1px solid #E5D8C4', fontSize: '12.5px', color: '#8A7560', lineHeight: 1.5 }}
+              >
+                Funciona de verdade, sem depender de gateway de pagamento: ao resgatar, o usuário ganha acesso
+                ao plano escolhido pelos dias informados.
+              </div>
+              <div>
+                <label htmlFor="coupon-plan" style={labelStyle}>Plano concedido *</label>
+                <select
+                  id="coupon-plan"
+                  required
+                  value={form.applies_to_plan_id}
+                  onChange={(e) => setForm((f) => ({ ...f, applies_to_plan_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">Selecione um plano</option>
+                  {PLAN_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="coupon-benefit-days" style={labelStyle}>Dias de acesso *</label>
+                <input
+                  id="coupon-benefit-days"
+                  type="number"
+                  required
+                  min={1}
+                  value={form.benefit_days ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, benefit_days: e.target.value === '' ? null : Number(e.target.value) }))}
+                  style={inputStyle}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="coupon-discount-value" style={labelStyle}>
+                  {form.discount_type === 'percent' ? 'Desconto (%)' : 'Desconto (R$)'} *
+                </label>
+                {form.discount_type === 'percent' ? (
+                  <input
+                    id="coupon-discount-value"
+                    type="number"
+                    required
+                    min={1}
+                    max={100}
+                    value={form.discount_value ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, discount_value: e.target.value === '' ? null : Number(e.target.value) }))}
+                    style={inputStyle}
+                  />
+                ) : (
+                  <CurrencyInput
+                    id="coupon-discount-value"
+                    value={form.discount_value}
+                    onChange={(cents) => setForm((f) => ({ ...f, discount_value: cents }))}
+                  />
+                )}
+              </div>
 
-          <div>
-            <label htmlFor="coupon-plan" style={labelStyle}>Aplica-se a</label>
-            <select
-              id="coupon-plan"
-              value={form.applies_to_plan_id}
-              onChange={(e) => setForm((f) => ({ ...f, applies_to_plan_id: e.target.value }))}
-              style={inputStyle}
-            >
-              <option value="">Qualquer plano pago</option>
-              {PLAN_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label htmlFor="coupon-plan" style={labelStyle}>Aplica-se a</label>
+                <select
+                  id="coupon-plan"
+                  value={form.applies_to_plan_id}
+                  onChange={(e) => setForm((f) => ({ ...f, applies_to_plan_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">Qualquer plano pago</option>
+                  {PLAN_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label htmlFor="coupon-max-redemptions" style={labelStyle}>Limite de usos</label>

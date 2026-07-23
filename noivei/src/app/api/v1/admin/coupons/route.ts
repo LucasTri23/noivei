@@ -36,9 +36,13 @@ export async function POST(req: Request) {
       return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsed.error.flatten())
     }
 
+    // parsed.data vem de uma union discriminada (um shape por benefit_type) — o
+    // overload de .insert() do supabase-js tenta casar contra um branch específico
+    // da union e barra os outros com "excess properties"; já validado pelo Zod acima,
+    // então o cast é só pra contornar essa checagem de overload, não perda de tipagem real.
     const { data, error } = await supabase
       .from('coupons')
-      .insert(parsed.data)
+      .insert(parsed.data as Record<string, unknown>)
       .select()
       .single()
 

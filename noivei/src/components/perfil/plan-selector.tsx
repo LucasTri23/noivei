@@ -7,6 +7,7 @@ import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 import { PLAN_IDS, type PlanId } from '@/constants/plans'
+import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
 type PremiumBilling = 'monthly' | 'once'
 
@@ -16,6 +17,11 @@ interface PlanSelectorProps {
   subscriptionId: string | null
   // Preços em centavos, vindos da tabela `plans` — nunca hardcoded no componente
   prices:         Partial<Record<PlanId, number>>
+  // Tabela de comparação (categorias/linhas/valores) vem do banco — editável em
+  // /admin/planos/features, nunca hardcoded aqui.
+  categories: PlanFeatureCategory[]
+  features:   PlanFeature[]
+  values:     PlanFeatureValue[]
 }
 
 function formatBrl(cents: number | undefined): string {
@@ -23,69 +29,13 @@ function formatBrl(cents: number | undefined): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)
 }
 
-interface ComparisonRow {
-  feature: string
-  free:    string
-  premium: string
-  plus:    string
-}
-
-interface ComparisonCategory {
-  title: string
-  rows:  ComparisonRow[]
-}
-
-// Sem a linha "Casamentos": o login aqui é do casal (noivo/noiva), sempre 1 casamento por conta.
-// Múltiplos casamentos por conta (cerimonialista) é escopo de uma versão futura do produto.
-const CATEGORIES: ComparisonCategory[] = [
-  {
-    title: 'Limites',
-    rows: [
-      { feature: 'Usuários',            free: '1',                    premium: 'Até 5',             plus: 'Até 10' },
-      { feature: 'Convidados',           free: 'Até 50',               premium: 'Até 250',           plus: 'Ilimitados' },
-      { feature: 'Upload de contratos',  free: '100 MB',               premium: '5 GB',              plus: '20 GB' },
-    ],
-  },
-  {
-    title: 'Planejamento',
-    rows: [
-      { feature: 'Checklist',      free: '✅',     premium: '✅ Inteligente', plus: '✅ IA personalizada' },
-      { feature: 'Timeline',       free: '✅',     premium: '✅',             plus: '✅' },
-      { feature: 'Dashboard',      free: 'Básico', premium: 'Completo',      plus: 'Completo + Insights' },
-      { feature: 'Wedding Score',  free: '❌',     premium: '✅',             plus: '✅ IA' },
-      { feature: 'Financeiro',     free: 'Básico', premium: 'Completo',      plus: 'Completo + relatórios avançados' },
-    ],
-  },
-  {
-    title: 'Convidados & site',
-    rows: [
-      { feature: 'RSVP',                     free: 'Até 50 confirmações', premium: 'Ilimitado', plus: 'Ilimitado' },
-      { feature: 'Site do casal',             free: '❌', premium: '✅', plus: '✅ Domínio próprio (futuro)' },
-      { feature: 'Lista de presentes',        free: '❌', premium: '✅', plus: '✅' },
-      { feature: 'Organização de mesas',      free: '❌', premium: '✅', plus: '✅ Distribuição automática' },
-    ],
-  },
-  {
-    title: 'Suporte & personalização',
-    rows: [
-      { feature: 'Notificações',                free: 'Básicas', premium: 'Email + Push',      plus: 'Inteligentes' },
-      { feature: 'IA',                           free: '❌',      premium: 'Sugestões básicas', plus: 'Assistente completo' },
-      { feature: 'Suporte',                      free: 'FAQ',     premium: 'Email',             plus: 'Prioritário' },
-      { feature: 'Exportação PDF/Excel',         free: '❌',      premium: '✅',                plus: '✅' },
-      { feature: 'Personalização',               free: 'Básica',  premium: 'Média',             plus: 'Completa' },
-      { feature: 'Remover "Feito com Wednest"',  free: '❌',      premium: '✅',                plus: '✅' },
-      { feature: 'Backup',                       free: '❌',      premium: 'Automático',        plus: 'Avançado' },
-    ],
-  },
-]
-
 function featureLine(label: string, value: string): { text: string; included: boolean } {
   if (value === '❌') return { text: label, included: false }
   if (value === '✅') return { text: label, included: true }
   return { text: `${label}: ${value.replace(/^✅\s*/, '')}`, included: true }
 }
 
-export default function PlanSelector({ userId, currentPlanId, subscriptionId, prices }: PlanSelectorProps) {
+export default function PlanSelector({ userId, currentPlanId, subscriptionId, prices, categories, features, values }: PlanSelectorProps) {
   const router = useRouter()
   const [premiumBilling, setPremiumBilling] = useState<PremiumBilling>(
     currentPlanId === PLAN_IDS.PREMIUM_ONCE ? 'once' : 'monthly',
@@ -93,7 +43,38 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
   const [switching, setSwitching] = useState<PlanId | null>(null)
   const showSpinner = useDelayedLoading(switching !== null)
 
+  const [couponCode, setCouponCode] = useState('')
+  const [redeeming, setRedeeming] = useState(false)
+
   const premiumTarget: PlanId = premiumBilling === 'monthly' ? PLAN_IDS.PREMIUM_MONTHLY : PLAN_IDS.PREMIUM_ONCE
+
+  const valueByFeatureAndGroup = new Map(values.map((v) => [`${v.feature_id}:${v.group_key}`, v.value]))
+  const featuresByCategory = new Map<string, PlanFeature[]>()
+  features.forEach((feature) => {
+    const list = featuresByCategory.get(feature.category_id) ?? []
+    list.push(feature)
+    featuresByCategory.set(feature.category_id, list)
+  })
+
+  async function redeemCoupon() {
+    if (!couponCode.trim()) return
+    setRedeeming(true)
+    const res = await fetch('/api/v1/coupons/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: couponCode.trim() }),
+    })
+    const body = await res.json().catch(() => null)
+    setRedeeming(false)
+
+    if (!res.ok) {
+      toastError(body?.error?.message ?? 'Não foi possível aplicar esse cupom.')
+      return
+    }
+    toastSuccess(body?.data?.message ?? 'Cupom aplicado!')
+    setCouponCode('')
+    router.refresh()
+  }
 
   async function selectPlan(planId: PlanId) {
     setSwitching(planId)
@@ -246,36 +227,41 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
               </p>
 
               <div style={{ flex: 1, marginBottom: '20px' }}>
-                {CATEGORIES.map((category) => (
-                  <div key={category.title} style={{ marginBottom: '16px' }}>
-                    <div style={{
-                      fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-                      color: 'var(--muted-fg)', marginBottom: '8px',
-                    }}>
-                      {category.title}
+                {categories.map((category) => {
+                  const rows = featuresByCategory.get(category.id) ?? []
+                  if (rows.length === 0) return null
+                  return (
+                    <div key={category.id} style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                        color: 'var(--muted-fg)', marginBottom: '8px',
+                      }}>
+                        {category.title}
+                      </div>
+                      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                        {rows.map((feature) => {
+                          const rawValue = valueByFeatureAndGroup.get(`${feature.id}:${card.key}`) ?? '❌'
+                          const { text, included } = featureLine(feature.label, rawValue)
+                          return (
+                            <li
+                              key={feature.id}
+                              style={{
+                                display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px',
+                                color: included ? 'var(--fg)' : 'var(--muted-fg)',
+                                opacity: included ? 1 : 0.6,
+                              }}
+                            >
+                              <span style={{ color: included ? 'var(--wedding-color)' : 'var(--muted-fg)', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}>
+                                {included ? '✓' : '✕'}
+                              </span>
+                              <span>{text}</span>
+                            </li>
+                          )
+                        })}
+                      </ul>
                     </div>
-                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                      {category.rows.map((row) => {
-                        const { text, included } = featureLine(row.feature, row[card.key])
-                        return (
-                          <li
-                            key={row.feature}
-                            style={{
-                              display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px',
-                              color: included ? 'var(--fg)' : 'var(--muted-fg)',
-                              opacity: included ? 1 : 0.6,
-                            }}
-                          >
-                            <span style={{ color: included ? 'var(--wedding-color)' : 'var(--muted-fg)', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}>
-                              {included ? '✓' : '✕'}
-                            </span>
-                            <span>{text}</span>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               <button
@@ -299,6 +285,37 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
             </div>
           )
         })}
+      </div>
+
+      {/* Cupom */}
+      <div className="rounded-2xl bg-[var(--surface)] p-5" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: '200px' }}>
+          <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)', display: 'block', marginBottom: '6px' }}>
+            Tenho um cupom
+          </label>
+          <input
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+            placeholder="Ex: BEMVINDO10"
+            style={{
+              border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '11px 14px',
+              fontSize: '14px', color: 'var(--fg)', background: 'var(--bg)', outline: 'none', width: '100%',
+            }}
+          />
+        </div>
+        <button
+          type="button"
+          disabled={redeeming || !couponCode.trim()}
+          onClick={redeemCoupon}
+          style={{
+            border: 'none', borderRadius: '12px', padding: '12px 20px', fontWeight: 700, fontSize: '14px',
+            background: 'var(--wedding-color)', color: '#fff',
+            cursor: redeeming || !couponCode.trim() ? 'not-allowed' : 'pointer',
+            opacity: redeeming || !couponCode.trim() ? 0.6 : 1,
+          }}
+        >
+          {redeeming ? 'Aplicando…' : 'Aplicar cupom'}
+        </button>
       </div>
     </div>
   )

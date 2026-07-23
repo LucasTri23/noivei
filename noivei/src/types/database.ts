@@ -348,14 +348,17 @@ export interface WeddingPartyEntry {
   created_at:           string
 }
 
-export type CouponDiscountType = 'percent' | 'fixed'
+export type CouponDiscountType = 'percent' | 'fixed' | 'free_days'
 
 export interface Coupon {
   id:                 string
   code:               string
   discount_type:      CouponDiscountType
-  discount_value:     number
+  discount_value:     number | null
   applies_to_plan_id: string | null
+  // Só usado quando discount_type = 'free_days': dias de acesso concedidos a
+  // applies_to_plan_id (que nesse caso é obrigatório, ver CHECK no banco).
+  benefit_days:       number | null
   max_redemptions:    number | null
   redemption_count:   number
   valid_from:         string | null
@@ -363,6 +366,35 @@ export interface Coupon {
   is_active:          boolean
   created_at:         string
   updated_at:         string
+}
+
+export interface CouponRedemption {
+  id:          string
+  coupon_id:   string
+  user_id:     string
+  redeemed_at: string
+}
+
+export type PlanGroupKey = 'free' | 'premium' | 'plus'
+
+export interface PlanFeatureCategory {
+  id:         string
+  title:      string
+  sort_order: number
+}
+
+export interface PlanFeature {
+  id:          string
+  category_id: string
+  label:       string
+  sort_order:  number
+}
+
+export interface PlanFeatureValue {
+  id:         string
+  feature_id: string
+  group_key:  PlanGroupKey
+  value:      string
 }
 
 export type FinancialQuoteType = 'local' | 'buffet' | 'fotografia' | 'decoracao' | 'musica' | 'outro'

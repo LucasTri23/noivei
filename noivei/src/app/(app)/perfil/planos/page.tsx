@@ -4,6 +4,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { PLAN_IDS, type PlanId } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import PlanSelector from '@/components/perfil/plan-selector'
+import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
 export const metadata = { title: 'Planos' }
 
@@ -61,12 +62,15 @@ export default async function PlanosPage() {
     .limit(1)
     .maybeSingle()
 
-  // Preços vêm do banco (tabela `plans`), nunca hardcoded — assim um painel
-  // administrativo que edite `plans.price_brl` no futuro reflete aqui sem deploy.
-  const { data: plans } = await supabase
-    .from('plans')
-    .select('id, price_brl')
-    .in('id', DISPLAYED_PLAN_IDS)
+  // Preços vêm do banco (tabela `plans`), nunca hardcoded — o painel /admin/planos
+  // edita isso e reflete aqui sem deploy. A tabela de comparação (categorias/linhas/
+  // valores) também vem do banco agora — editável em /admin/planos/features.
+  const [{ data: plans }, { data: categories }, { data: features }, { data: values }] = await Promise.all([
+    supabase.from('plans').select('id, price_brl').in('id', DISPLAYED_PLAN_IDS),
+    supabase.from('plan_feature_categories').select('*').order('sort_order'),
+    supabase.from('plan_features').select('*').order('sort_order'),
+    supabase.from('plan_feature_values').select('*'),
+  ])
 
   const prices = Object.fromEntries(
     (plans ?? []).map((p) => [p.id, p.price_brl as number]),
@@ -94,6 +98,9 @@ export default async function PlanosPage() {
         currentPlanId={currentPlanId}
         subscriptionId={subscription?.id ?? null}
         prices={prices}
+        categories={(categories ?? []) as PlanFeatureCategory[]}
+        features={(features ?? []) as PlanFeature[]}
+        values={(values ?? []) as PlanFeatureValue[]}
       />
     </div>
   )
