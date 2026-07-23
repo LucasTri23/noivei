@@ -11,12 +11,19 @@ import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types
 
 type PremiumBilling = 'monthly' | 'once'
 
+interface PlanInfo {
+  name:        string
+  description: string | null
+  price_brl:   number
+}
+
 interface PlanSelectorProps {
   userId:         string
   currentPlanId:  PlanId
   subscriptionId: string | null
-  // Preços em centavos, vindos da tabela `plans` — nunca hardcoded no componente
-  prices:         Partial<Record<PlanId, number>>
+  // Preço, nome e descrição vêm da tabela `plans` — editáveis em /admin/planos,
+  // nunca hardcoded no componente.
+  plans:          Partial<Record<PlanId, PlanInfo>>
   // Tabela de comparação (categorias/linhas/valores) vem do banco — editável em
   // /admin/planos/features, nunca hardcoded aqui.
   categories: PlanFeatureCategory[]
@@ -35,7 +42,7 @@ function featureLine(label: string, value: string): { text: string; included: bo
   return { text: `${label}: ${value.replace(/^✅\s*/, '')}`, included: true }
 }
 
-export default function PlanSelector({ userId, currentPlanId, subscriptionId, prices, categories, features, values }: PlanSelectorProps) {
+export default function PlanSelector({ userId, currentPlanId, subscriptionId, plans, categories, features, values }: PlanSelectorProps) {
   const router = useRouter()
   const [premiumBilling, setPremiumBilling] = useState<PremiumBilling>(
     currentPlanId === PLAN_IDS.PREMIUM_ONCE ? 'once' : 'monthly',
@@ -109,27 +116,31 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
     priceNode:  React.ReactNode
   }
 
+  const freeInfo    = plans[PLAN_IDS.FREE]
+  const premiumInfo = plans[premiumTarget] ?? plans[PLAN_IDS.PREMIUM_MONTHLY]
+  const plusInfo    = plans[PLAN_IDS.PLUS_ONCE]
+
   const cards: CardConfig[] = [
     {
       key: 'free',
       emoji: '🆓',
-      name: 'Gratuito',
+      name: freeInfo?.name ?? 'Gratuito',
       target: PLAN_IDS.FREE,
       highlight: false,
-      desc: 'Ideal para conhecer a plataforma.',
+      desc: freeInfo?.description ?? 'Ideal para conhecer a plataforma.',
       priceNode: (
         <div>
-          <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(prices[PLAN_IDS.FREE])}</span>
+          <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(freeInfo?.price_brl)}</span>
         </div>
       ),
     },
     {
       key: 'premium',
       emoji: '💎',
-      name: 'Premium',
+      name: premiumInfo?.name ?? 'Premium',
       target: premiumTarget,
       highlight: true,
-      desc: 'Esse é o plano que a maioria dos casais escolhe.',
+      desc: premiumInfo?.description ?? 'Esse é o plano que a maioria dos casais escolhe.',
       priceNode: (
         <div>
           <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
@@ -158,11 +169,11 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
           </div>
           {premiumBilling === 'monthly' ? (
             <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>
-              {formatBrl(prices[PLAN_IDS.PREMIUM_MONTHLY])}<span style={{ fontSize: '15px', color: 'var(--muted-fg)', fontFamily: 'var(--font-body)' }}>/mês</span>
+              {formatBrl(plans[PLAN_IDS.PREMIUM_MONTHLY]?.price_brl)}<span style={{ fontSize: '15px', color: 'var(--muted-fg)', fontFamily: 'var(--font-body)' }}>/mês</span>
             </span>
           ) : (
             <div>
-              <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(prices[PLAN_IDS.PREMIUM_ONCE])}</span>
+              <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(plans[PLAN_IDS.PREMIUM_ONCE]?.price_brl)}</span>
               <div style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>Pagamento único — válido até 1 ano após o casamento</div>
             </div>
           )}
@@ -172,13 +183,13 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pr
     {
       key: 'plus',
       emoji: '👑',
-      name: 'Premium Plus',
+      name: plusInfo?.name ?? 'Premium Plus',
       target: PLAN_IDS.PLUS_ONCE,
       highlight: false,
-      desc: 'Indicado para quem quer tudo liberado, IA completa, mais armazenamento e personalização.',
+      desc: plusInfo?.description ?? 'Indicado para quem quer tudo liberado, IA completa, mais armazenamento e personalização.',
       priceNode: (
         <div>
-          <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(prices[PLAN_IDS.PLUS_ONCE])}</span>
+          <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(plusInfo?.price_brl)}</span>
           <div style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>Pagamento único — válido por um período após o casamento</div>
         </div>
       ),

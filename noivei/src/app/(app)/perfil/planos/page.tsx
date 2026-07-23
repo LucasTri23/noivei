@@ -62,19 +62,23 @@ export default async function PlanosPage() {
     .limit(1)
     .maybeSingle()
 
-  // Preços vêm do banco (tabela `plans`), nunca hardcoded — o painel /admin/planos
-  // edita isso e reflete aqui sem deploy. A tabela de comparação (categorias/linhas/
-  // valores) também vem do banco agora — editável em /admin/planos/features.
-  const [{ data: plans }, { data: categories }, { data: features }, { data: values }] = await Promise.all([
-    supabase.from('plans').select('id, price_brl').in('id', DISPLAYED_PLAN_IDS),
+  // Nome, descrição e preço vêm do banco (tabela `plans`), nunca hardcoded — o painel
+  // /admin/planos edita isso e reflete aqui sem deploy. A tabela de comparação
+  // (categorias/linhas/valores) também vem do banco agora — editável em
+  // /admin/planos/features.
+  const [{ data: plansData }, { data: categories }, { data: features }, { data: values }] = await Promise.all([
+    supabase.from('plans').select('id, name, description, price_brl').in('id', DISPLAYED_PLAN_IDS),
     supabase.from('plan_feature_categories').select('*').order('sort_order'),
     supabase.from('plan_features').select('*').order('sort_order'),
     supabase.from('plan_feature_values').select('*'),
   ])
 
-  const prices = Object.fromEntries(
-    (plans ?? []).map((p) => [p.id, p.price_brl as number]),
-  ) as Record<PlanId, number>
+  const plans = Object.fromEntries(
+    (plansData ?? []).map((p) => [
+      p.id,
+      { name: p.name as string, description: p.description as string | null, price_brl: p.price_brl as number },
+    ]),
+  ) as Partial<Record<PlanId, { name: string; description: string | null; price_brl: number }>>
 
   const currentPlanId = (subscription?.plan_id ?? 'free') as PlanId
 
@@ -97,7 +101,7 @@ export default async function PlanosPage() {
         userId={user.id}
         currentPlanId={currentPlanId}
         subscriptionId={subscription?.id ?? null}
-        prices={prices}
+        plans={plans}
         categories={(categories ?? []) as PlanFeatureCategory[]}
         features={(features ?? []) as PlanFeature[]}
         values={(values ?? []) as PlanFeatureValue[]}
