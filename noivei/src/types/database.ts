@@ -375,8 +375,6 @@ export interface CouponRedemption {
   redeemed_at: string
 }
 
-export type PlanGroupKey = 'free' | 'premium' | 'plus'
-
 export interface PlanFeatureCategory {
   id:         string
   title:      string
@@ -390,10 +388,13 @@ export interface PlanFeature {
   sort_order:  number
 }
 
+// group_key era um union fixo ('free'|'premium'|'plus') — passou a texto livre porque
+// o catálogo de planos é dinâmico agora (ver plans.group_key, src/lib/billing/plan-groups.ts):
+// cada plano (ou grupo de variantes) pode ter um group_key próprio, criado pelo admin.
 export interface PlanFeatureValue {
   id:         string
   feature_id: string
-  group_key:  PlanGroupKey
+  group_key:  string
   value:      string
 }
 

@@ -5,13 +5,16 @@ import { useState } from 'react'
 import CurrencyInput from '@/components/ui/currency-input'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
-import { PLAN_IDS, PLAN_NAMES, type PlanId } from '@/constants/plans'
+import ToggleSwitch from '@/components/ui/toggle-switch'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { Coupon, CouponDiscountType } from '@/types/database'
 
 interface AdminCouponsManagerProps {
   initialCoupons: Coupon[]
+  // Planos pagos ativos, pra escolher o que um cupom "dias grátis" concede — vem do
+  // banco (ver admin/cupons/page.tsx), catálogo não é mais fixo no código.
+  plans: { id: string; name: string }[]
 }
 
 interface ApiErrorBody {
@@ -36,13 +39,6 @@ const EMPTY_FORM: CouponForm = {
   benefit_days: null, max_redemptions: null, valid_from: '', valid_until: '', is_active: true,
 }
 
-const PLAN_OPTIONS: { value: PlanId; label: string }[] = [
-  { value: PLAN_IDS.PREMIUM_MONTHLY, label: `${PLAN_NAMES[PLAN_IDS.PREMIUM_MONTHLY]} (mensal)` },
-  { value: PLAN_IDS.PREMIUM_ONCE,    label: `${PLAN_NAMES[PLAN_IDS.PREMIUM_ONCE]} (parcela única)` },
-  { value: PLAN_IDS.PLUS_MONTHLY,    label: `${PLAN_NAMES[PLAN_IDS.PLUS_MONTHLY]} (mensal)` },
-  { value: PLAN_IDS.PLUS_ONCE,       label: `${PLAN_NAMES[PLAN_IDS.PLUS_ONCE]} (parcela única)` },
-]
-
 const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 function fmtDiscount(coupon: Coupon): string {
@@ -50,11 +46,6 @@ function fmtDiscount(coupon: Coupon): string {
   return coupon.discount_type === 'percent'
     ? `${coupon.discount_value}%`
     : currencyFmt.format((coupon.discount_value ?? 0) / 100)
-}
-
-function fmtPlan(planId: string | null): string {
-  if (!planId) return 'Qualquer plano pago'
-  return PLAN_NAMES[planId as PlanId] ?? planId
 }
 
 // Datas são salvas como meia-noite UTC (ver dateInputToIso) — formatar de volta com
@@ -133,7 +124,10 @@ const labelStyle: React.CSSProperties = {
   fontSize: '12.5px', fontWeight: 600, color: '#2A1E10', marginBottom: '6px', display: 'block',
 }
 
-export default function AdminCouponsManager({ initialCoupons }: AdminCouponsManagerProps) {
+export default function AdminCouponsManager({ initialCoupons, plans }: AdminCouponsManagerProps) {
+  const planNameById = new Map(plans.map((p) => [p.id, p.name]))
+  const fmtPlan = (planId: string | null) => (planId ? (planNameById.get(planId) ?? planId) : 'Qualquer plano pago')
+
   const [coupons, setCoupons]     = useState<Coupon[]>(initialCoupons)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing]     = useState<Coupon | null>(null)
@@ -420,8 +414,8 @@ Cupons de <strong>dias grátis</strong> já podem ser resgatados pelo casal em /
                   style={inputStyle}
                 >
                   <option value="">Selecione um plano</option>
-                  {PLAN_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>{plan.name}</option>
                   ))}
                 </select>
               </div>
@@ -473,8 +467,8 @@ Cupons de <strong>dias grátis</strong> já podem ser resgatados pelo casal em /
                   style={inputStyle}
                 >
                   <option value="">Qualquer plano pago</option>
-                  {PLAN_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>{plan.name}</option>
                   ))}
                 </select>
               </div>
@@ -517,14 +511,7 @@ Cupons de <strong>dias grátis</strong> já podem ser resgatados pelo casal em /
             </div>
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#2A1E10', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={form.is_active}
-              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-            />
-            Ativo
-          </label>
+          <ToggleSwitch checked={form.is_active} onChange={(checked) => setForm((f) => ({ ...f, is_active: checked }))} label="Ativo" />
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button

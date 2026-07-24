@@ -1,16 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { PLAN_IDS, type PlanId } from '@/constants/plans'
+import type { PlanId } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import PlanSelector from '@/components/perfil/plan-selector'
 import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
 export const metadata = { title: 'Planos' }
-
-const DISPLAYED_PLAN_IDS: PlanId[] = [
-  PLAN_IDS.FREE, PLAN_IDS.PREMIUM_MONTHLY, PLAN_IDS.PREMIUM_ONCE, PLAN_IDS.PLUS_ONCE,
-]
 
 export default async function PlanosPage() {
   const supabase = await createSupabaseServer()
@@ -62,23 +58,20 @@ export default async function PlanosPage() {
     .limit(1)
     .maybeSingle()
 
-  // Nome, descrição e preço vêm do banco (tabela `plans`), nunca hardcoded — o painel
-  // /admin/planos edita isso e reflete aqui sem deploy. A tabela de comparação
-  // (categorias/linhas/valores) também vem do banco agora — editável em
-  // /admin/planos/features.
+  // Catálogo inteiro vem do banco (tabela `plans`, só os ativos) — nada de lista fixa
+  // de ids: um plano novo criado em /admin/planos aparece aqui sozinho, sem deploy.
+  // A tabela de comparação (categorias/linhas/valores) também vem do banco, editável
+  // em /admin/planos/features.
   const [{ data: plansData }, { data: categories }, { data: features }, { data: values }] = await Promise.all([
-    supabase.from('plans').select('id, name, description, price_brl').in('id', DISPLAYED_PLAN_IDS),
+    supabase
+      .from('plans')
+      .select('id, name, description, price_brl, group_key, billing_label, billing_note, emoji, highlight')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
     supabase.from('plan_feature_categories').select('*').order('sort_order'),
     supabase.from('plan_features').select('*').order('sort_order'),
     supabase.from('plan_feature_values').select('*'),
   ])
-
-  const plans = Object.fromEntries(
-    (plansData ?? []).map((p) => [
-      p.id,
-      { name: p.name as string, description: p.description as string | null, price_brl: p.price_brl as number },
-    ]),
-  ) as Partial<Record<PlanId, { name: string; description: string | null; price_brl: number }>>
 
   const currentPlanId = (subscription?.plan_id ?? 'free') as PlanId
 
@@ -101,7 +94,7 @@ export default async function PlanosPage() {
         userId={user.id}
         currentPlanId={currentPlanId}
         subscriptionId={subscription?.id ?? null}
-        plans={plans}
+        plans={plansData ?? []}
         categories={(categories ?? []) as PlanFeatureCategory[]}
         features={(features ?? []) as PlanFeature[]}
         values={(values ?? []) as PlanFeatureValue[]}

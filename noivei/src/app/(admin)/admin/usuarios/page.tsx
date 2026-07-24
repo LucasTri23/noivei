@@ -2,7 +2,6 @@ import Link from 'next/link'
 
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createSupabaseService } from '@/lib/supabase/service'
-import { PLAN_IDS, PLAN_NAMES, type PlanId } from '@/constants/plans'
 
 export const metadata = { title: 'Admin · Usuários' }
 
@@ -17,21 +16,6 @@ interface ProfileRow {
 interface UsuariosPageProps {
   searchParams: Promise<{ plan?: string; search?: string; from?: string; to?: string; page?: string }>
 }
-
-// PLAN_NAMES colapsa mensal/avulso no mesmo rótulo ("Premium") — bom pro card de
-// distribuição do dashboard, ruim num filtro exato por plan_id (duas opções
-// idênticas). Aqui cada plan_id ganha um rótulo próprio para diferenciar.
-const PLAN_LABELS: Record<PlanId, string> = {
-  free: PLAN_NAMES.free,
-  premium_monthly: `${PLAN_NAMES.premium_monthly} (mensal)`,
-  premium_once: `${PLAN_NAMES.premium_once} (pagamento único)`,
-  premium_plus_monthly: `${PLAN_NAMES.premium_plus_monthly} (mensal)`,
-  premium_plus_once: `${PLAN_NAMES.premium_plus_once} (pagamento único)`,
-}
-
-const FILTER_PLAN_OPTIONS: { id: PlanId; label: string }[] = [
-  PLAN_IDS.FREE, PLAN_IDS.PREMIUM_MONTHLY, PLAN_IDS.PREMIUM_ONCE, PLAN_IDS.PLUS_MONTHLY, PLAN_IDS.PLUS_ONCE,
-].map((id) => ({ id, label: PLAN_LABELS[id] }))
 
 async function resolveEmails(ids: string[]): Promise<Map<string, string | null>> {
   if (ids.length === 0) return new Map()
@@ -102,6 +86,12 @@ export default async function AdminUsuariosPage({ searchParams }: UsuariosPagePr
   const page = Math.max(1, Number(params.page) || 1)
   const rangeFrom = (page - 1) * PAGE_SIZE
   const rangeTo = rangeFrom + PAGE_SIZE - 1
+
+  // Todos os planos (não só ativos) — um usuário pode estar num plano já desativado
+  // pelo admin, e o filtro/rótulo ainda precisam funcionar pra ele.
+  const { data: plansData } = await supabase.from('plans').select('id, name').order('sort_order')
+  const planOptions = (plansData ?? []) as { id: string; name: string }[]
+  const planNameById = new Map(planOptions.map((p) => [p.id, p.name]))
 
   let matchingUserIds: string[] | null = null
   if (params.plan) {
@@ -183,8 +173,8 @@ export default async function AdminUsuariosPage({ searchParams }: UsuariosPagePr
             style={{ border: '1px solid #EFE7DC', borderRadius: '10px', padding: '8px 10px', fontSize: '13.5px', color: '#2A1E10', minWidth: '190px' }}
           >
             <option value="">Todos os planos</option>
-            {FILTER_PLAN_OPTIONS.map((o) => (
-              <option key={o.id} value={o.id}>{o.label}</option>
+            {planOptions.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
         </label>
@@ -246,8 +236,8 @@ export default async function AdminUsuariosPage({ searchParams }: UsuariosPagePr
               </tr>
             )}
             {profiles.map((p, idx) => {
-              const planId = planByUserId.get(p.id)
-              const planLabel = planId ? (PLAN_LABELS[planId as PlanId] ?? planId) : PLAN_LABELS.free
+              const planId = planByUserId.get(p.id) ?? 'free'
+              const planLabel = planNameById.get(planId) ?? planId
               const coupleNames = weddingByUserId.get(p.id)
 
               return (

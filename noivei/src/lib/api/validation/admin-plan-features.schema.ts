@@ -27,8 +27,10 @@ export const UpdatePlanFeatureSchema = z
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo para atualizar.')
 
+// group_key deixou de ser um enum fixo — o catálogo de planos é dinâmico agora
+// (ver plans.group_key), então qualquer slug que exista entre os planos é válido.
 export const UpsertPlanFeatureValueSchema = z.object({
   feature_id: z.uuid(),
-  group_key:  z.enum(['free', 'premium', 'plus']),
+  group_key:  z.string().trim().min(1).max(50),
   value:      z.string().trim().min(1).max(120),
 })

@@ -7,16 +7,25 @@ export default async function AdminPlanosPage() {
   const supabase = await createSupabaseServer()
 
   const [{ data: plans }, { data: limits }] = await Promise.all([
-    supabase.from('plans').select('id, name, description, price_brl, is_active').order('price_brl', { ascending: true }),
+    supabase
+      .from('plans')
+      .select('id, name, description, price_brl, is_active, group_key, billing_label, billing_note, emoji, highlight, sort_order')
+      .order('sort_order', { ascending: true }),
     supabase.from('plan_limits').select('id, plan_id, feature, value').order('feature', { ascending: true }),
   ])
 
   const initialPlans: AdminPlan[] = (plans ?? []).map((plan) => ({
-    id:          plan.id as string,
-    name:        plan.name as string,
-    description: plan.description as string | null,
-    price_brl:   plan.price_brl as number,
-    is_active:   plan.is_active as boolean,
+    id:            plan.id as string,
+    name:          plan.name as string,
+    description:   plan.description as string | null,
+    price_brl:     plan.price_brl as number,
+    is_active:     plan.is_active as boolean,
+    group_key:     plan.group_key as string | null,
+    billing_label: plan.billing_label as string | null,
+    billing_note:  plan.billing_note as string | null,
+    emoji:         plan.emoji as string,
+    highlight:     plan.highlight as boolean,
+    sort_order:    plan.sort_order as number,
     limits: (limits ?? [])
       .filter((limit) => limit.plan_id === plan.id)
       .map((limit) => ({ id: limit.id as string, feature: limit.feature as string, value: limit.value as number })),

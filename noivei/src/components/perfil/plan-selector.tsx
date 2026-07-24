@@ -6,26 +6,29 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
-import { PLAN_IDS, type PlanId } from '@/constants/plans'
+import { effectiveGroupKey } from '@/lib/billing/plan-groups'
 import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
-type PremiumBilling = 'monthly' | 'once'
-
-interface PlanInfo {
-  name:        string
-  description: string | null
-  price_brl:   number
+export interface Plan {
+  id:            string
+  name:          string
+  description:   string | null
+  price_brl:     number
+  group_key:     string | null
+  billing_label: string | null
+  billing_note:  string | null
+  emoji:         string
+  highlight:     boolean
 }
 
 interface PlanSelectorProps {
   userId:         string
-  currentPlanId:  PlanId
+  currentPlanId:  string
   subscriptionId: string | null
-  // Preço, nome e descrição vêm da tabela `plans` — editáveis em /admin/planos,
-  // nunca hardcoded no componente.
-  plans:          Partial<Record<PlanId, PlanInfo>>
-  // Tabela de comparação (categorias/linhas/valores) vem do banco — editável em
-  // /admin/planos/features, nunca hardcoded aqui.
+  // Catálogo inteiro vem do banco (só planos ativos, ver perfil/planos/page.tsx) —
+  // nenhum card/id fixo no componente. Planos com o mesmo group_key viram variantes
+  // de cobrança (toggle) do mesmo card; ver src/lib/billing/plan-groups.ts.
+  plans:      Plan[]
   categories: PlanFeatureCategory[]
   features:   PlanFeature[]
   values:     PlanFeatureValue[]
@@ -42,18 +45,35 @@ function featureLine(label: string, value: string): { text: string; included: bo
   return { text: `${label}: ${value.replace(/^✅\s*/, '')}`, included: true }
 }
 
+function groupPlans(plans: Plan[]): Map<string, Plan[]> {
+  const groups = new Map<string, Plan[]>()
+  for (const plan of plans) {
+    const key = effectiveGroupKey(plan)
+    const list = groups.get(key) ?? []
+    list.push(plan)
+    groups.set(key, list)
+  }
+  return groups
+}
+
 export default function PlanSelector({ userId, currentPlanId, subscriptionId, plans, categories, features, values }: PlanSelectorProps) {
   const router = useRouter()
-  const [premiumBilling, setPremiumBilling] = useState<PremiumBilling>(
-    currentPlanId === PLAN_IDS.PREMIUM_ONCE ? 'once' : 'monthly',
-  )
-  const [switching, setSwitching] = useState<PlanId | null>(null)
+  const groupedPlans = groupPlans(plans)
+
+  const [selectedVariant, setSelectedVariant] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    for (const [groupKey, variants] of groupedPlans) {
+      const current = variants.find((v) => v.id === currentPlanId)
+      // variants nunca é vazio — groupPlans só cria a entrada ao dar push do 1º item.
+      initial[groupKey] = current?.id ?? variants[0]!.id
+    }
+    return initial
+  })
+  const [switching, setSwitching] = useState<string | null>(null)
   const showSpinner = useDelayedLoading(switching !== null)
 
   const [couponCode, setCouponCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
-
-  const premiumTarget: PlanId = premiumBilling === 'monthly' ? PLAN_IDS.PREMIUM_MONTHLY : PLAN_IDS.PREMIUM_ONCE
 
   const valueByFeatureAndGroup = new Map(values.map((v) => [`${v.feature_id}:${v.group_key}`, v.value]))
   const featuresByCategory = new Map<string, PlanFeature[]>()
@@ -83,7 +103,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
     router.refresh()
   }
 
-  async function selectPlan(planId: PlanId) {
+  async function selectPlan(planId: string) {
     setSwitching(planId)
 
     // TODO Fase 2: integrar gateway de pagamento real (Stripe/Pagar.me) antes de processar cobrança de verdade
@@ -106,118 +126,32 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
     router.refresh()
   }
 
-  interface CardConfig {
-    key:        'free' | 'premium' | 'plus'
-    emoji:      string
-    name:       string
-    target:     PlanId
-    highlight:  boolean
-    desc:       string
-    priceNode:  React.ReactNode
-  }
-
-  const freeInfo    = plans[PLAN_IDS.FREE]
-  const premiumInfo = plans[premiumTarget] ?? plans[PLAN_IDS.PREMIUM_MONTHLY]
-  const plusInfo    = plans[PLAN_IDS.PLUS_ONCE]
-
-  const cards: CardConfig[] = [
-    {
-      key: 'free',
-      emoji: '🆓',
-      name: freeInfo?.name ?? 'Gratuito',
-      target: PLAN_IDS.FREE,
-      highlight: false,
-      desc: freeInfo?.description ?? 'Ideal para conhecer a plataforma.',
-      priceNode: (
-        <div>
-          <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(freeInfo?.price_brl)}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'premium',
-      emoji: '💎',
-      name: premiumInfo?.name ?? 'Premium',
-      target: premiumTarget,
-      highlight: true,
-      desc: premiumInfo?.description ?? 'Esse é o plano que a maioria dos casais escolhe.',
-      priceNode: (
-        <div>
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
-            {([
-              { value: 'monthly', label: 'Mensal' },
-              { value: 'once',    label: 'Pagamento único' },
-            ] as { value: PremiumBilling; label: string }[]).map(({ value, label }) => {
-              const active = premiumBilling === value
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setPremiumBilling(value)}
-                  style={{
-                    flex: 1, padding: '7px 8px', borderRadius: '9px', fontSize: '12px',
-                    border: `1.5px solid ${active ? 'var(--wedding-color)' : '#EBDDD0'}`,
-                    background: active ? 'var(--wedding-color-subtle)' : 'transparent',
-                    color: active ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
-                    fontWeight: active ? 700 : 500, cursor: 'pointer', transition: 'all 0.18s',
-                  }}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-          {premiumBilling === 'monthly' ? (
-            <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>
-              {formatBrl(plans[PLAN_IDS.PREMIUM_MONTHLY]?.price_brl)}<span style={{ fontSize: '15px', color: 'var(--muted-fg)', fontFamily: 'var(--font-body)' }}>/mês</span>
-            </span>
-          ) : (
-            <div>
-              <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(plans[PLAN_IDS.PREMIUM_ONCE]?.price_brl)}</span>
-              <div style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>Pagamento único — válido até 1 ano após o casamento</div>
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'plus',
-      emoji: '👑',
-      name: plusInfo?.name ?? 'Premium Plus',
-      target: PLAN_IDS.PLUS_ONCE,
-      highlight: false,
-      desc: plusInfo?.description ?? 'Indicado para quem quer tudo liberado, IA completa, mais armazenamento e personalização.',
-      priceNode: (
-        <div>
-          <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>{formatBrl(plusInfo?.price_brl)}</span>
-          <div style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>Pagamento único — válido por um período após o casamento</div>
-        </div>
-      ),
-    },
-  ]
-
   return (
     <div>
       {/* Cards */}
       <div className="grid gap-4 mb-8" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px,1fr))', paddingTop: '14px' }}>
-        {cards.map((card) => {
-          const isCurrent = card.target === currentPlanId
-          const isSwitchingThis = switching === card.target
+        {Array.from(groupedPlans.entries()).map(([groupKey, variants]) => {
+          // variants nunca é vazio — mesma garantia de groupPlans.
+          const firstVariant = variants[0]!
+          const activeId = selectedVariant[groupKey] ?? firstVariant.id
+          const activePlan = variants.find((v) => v.id === activeId) ?? firstVariant
+          const isCurrent = activePlan.id === currentPlanId
+          const isSwitchingThis = switching === activePlan.id
 
           return (
             <div
-              key={card.key}
+              key={groupKey}
               className="rounded-2xl bg-[var(--surface)] p-6 flex flex-col"
               style={{
-                boxShadow: card.highlight
+                boxShadow: activePlan.highlight
                   ? '0 16px 36px color-mix(in srgb, var(--wedding-color) 24%, transparent)'
                   : '0 8px 22px rgba(60,40,24,0.06)',
-                border: card.highlight ? '1.5px solid var(--wedding-color)' : '1.5px solid transparent',
+                border: activePlan.highlight ? '1.5px solid var(--wedding-color)' : '1.5px solid transparent',
                 position: 'relative',
-                transform: card.highlight ? 'scale(1.02)' : 'none',
+                transform: activePlan.highlight ? 'scale(1.02)' : 'none',
               }}
             >
-              {card.highlight && (
+              {activePlan.highlight && (
                 <span
                   style={{
                     position: 'absolute', top: '-11px', left: '50%', transform: 'translateX(-50%)',
@@ -230,11 +164,46 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
                 </span>
               )}
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--muted-fg)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '10px' }}>
-                {card.emoji} {card.name}
+                {activePlan.emoji} {activePlan.name}
               </div>
-              <div style={{ marginBottom: '12px' }}>{card.priceNode}</div>
+
+              <div style={{ marginBottom: '12px' }}>
+                {variants.length > 1 && (
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                    {variants.map((variant) => {
+                      const active = variant.id === activeId
+                      return (
+                        <button
+                          key={variant.id}
+                          type="button"
+                          onClick={() => setSelectedVariant((prev) => ({ ...prev, [groupKey]: variant.id }))}
+                          style={{
+                            flex: 1, padding: '7px 8px', borderRadius: '9px', fontSize: '12px', minWidth: '90px',
+                            border: `1.5px solid ${active ? 'var(--wedding-color)' : '#EBDDD0'}`,
+                            background: active ? 'var(--wedding-color-subtle)' : 'transparent',
+                            color: active ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+                            fontWeight: active ? 700 : 500, cursor: 'pointer', transition: 'all 0.18s',
+                          }}
+                        >
+                          {variant.billing_label ?? variant.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>
+                  {formatBrl(activePlan.price_brl)}
+                  {activePlan.billing_note?.startsWith('/') && (
+                    <span style={{ fontSize: '15px', color: 'var(--muted-fg)', fontFamily: 'var(--font-body)' }}>{activePlan.billing_note}</span>
+                  )}
+                </span>
+                {activePlan.billing_note && !activePlan.billing_note.startsWith('/') && (
+                  <div style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>{activePlan.billing_note}</div>
+                )}
+              </div>
+
               <p style={{ fontSize: '13px', color: 'var(--muted-fg)', lineHeight: 1.5, margin: '0 0 14px' }}>
-                {card.desc}
+                {activePlan.description}
               </p>
 
               <div style={{ flex: 1, marginBottom: '20px' }}>
@@ -251,7 +220,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
                       </div>
                       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
                         {rows.map((feature) => {
-                          const rawValue = valueByFeatureAndGroup.get(`${feature.id}:${card.key}`) ?? '❌'
+                          const rawValue = valueByFeatureAndGroup.get(`${feature.id}:${groupKey}`) ?? '❌'
                           const { text, included } = featureLine(feature.label, rawValue)
                           return (
                             <li
@@ -278,7 +247,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
               <button
                 type="button"
                 disabled={isCurrent || switching !== null}
-                onClick={() => selectPlan(card.target)}
+                onClick={() => selectPlan(activePlan.id)}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
                   width: '100%', border: 'none', borderRadius: '12px', padding: '13px',
@@ -291,7 +260,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
                 }}
               >
                 {isSwitchingThis && showSpinner && <Spinner size={15} color={isCurrent ? 'var(--muted-fg)' : '#fff'} />}
-                {isCurrent ? 'Plano atual' : isSwitchingThis ? 'Alterando…' : card.key === 'free' ? 'Usar plano Gratuito' : 'Assinar'}
+                {isCurrent ? 'Plano atual' : isSwitchingThis ? 'Alterando…' : activePlan.price_brl === 0 ? 'Usar plano Gratuito' : 'Assinar'}
               </button>
             </div>
           )

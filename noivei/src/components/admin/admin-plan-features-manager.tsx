@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import { toastError, toastSuccess } from '@/store/toast.store'
-import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue, PlanGroupKey } from '@/types/database'
+import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
 interface AdminPlanFeaturesManagerProps {
+  // Uma coluna por group_key distinto entre os planos ativos (calculado na page.tsx,
+  // ver src/lib/billing/plan-groups.ts) — não mais fixo em free/premium/plus.
+  groups:            { key: string; label: string }[]
   initialCategories: PlanFeatureCategory[]
   initialFeatures:   PlanFeature[]
   initialValues:     PlanFeatureValue[]
@@ -13,12 +16,6 @@ interface AdminPlanFeaturesManagerProps {
 interface ApiErrorBody {
   error?: { code?: string; message?: string }
 }
-
-const GROUPS: { key: PlanGroupKey; label: string }[] = [
-  { key: 'free', label: 'Gratuito' },
-  { key: 'premium', label: 'Premium' },
-  { key: 'plus', label: 'Premium Plus' },
-]
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
   try {
@@ -34,7 +31,7 @@ const inputStyle: React.CSSProperties = {
   fontSize: '13.5px', color: '#2A1E10', background: '#FFFFFF', outline: 'none', width: '100%',
 }
 
-export default function AdminPlanFeaturesManager({ initialCategories, initialFeatures, initialValues }: AdminPlanFeaturesManagerProps) {
+export default function AdminPlanFeaturesManager({ groups, initialCategories, initialFeatures, initialValues }: AdminPlanFeaturesManagerProps) {
   const [categories, setCategories] = useState(initialCategories)
   const [features, setFeatures]     = useState(initialFeatures)
   const [cellValues, setCellValues] = useState<Record<string, string>>(
@@ -43,7 +40,7 @@ export default function AdminPlanFeaturesManager({ initialCategories, initialFea
   const [newFeatureLabel, setNewFeatureLabel] = useState<Record<string, string>>({})
   const [newCategoryTitle, setNewCategoryTitle] = useState('')
 
-  async function saveCell(featureId: string, groupKey: PlanGroupKey, value: string) {
+  async function saveCell(featureId: string, groupKey: string, value: string) {
     const res = await fetch('/api/v1/admin/plan-features/values', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -123,18 +120,18 @@ export default function AdminPlanFeaturesManager({ initialCategories, initialFea
                 </button>
               </div>
 
-              <div className="mb-2 grid gap-2" style={{ gridTemplateColumns: '1.4fr 1fr 1fr 1fr auto' }}>
+              <div className="mb-2 grid gap-2" style={{ gridTemplateColumns: `1.4fr repeat(${groups.length}, 1fr) auto` }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#8A7560', textTransform: 'uppercase' }}>Recurso</span>
-                {GROUPS.map((g) => (
+                {groups.map((g) => (
                   <span key={g.key} style={{ fontSize: '11px', fontWeight: 700, color: '#8A7560', textTransform: 'uppercase' }}>{g.label}</span>
                 ))}
                 <span />
               </div>
 
               {categoryFeatures.map((feature) => (
-                <div key={feature.id} className="mb-2 grid items-center gap-2" style={{ gridTemplateColumns: '1.4fr 1fr 1fr 1fr auto' }}>
+                <div key={feature.id} className="mb-2 grid items-center gap-2" style={{ gridTemplateColumns: `1.4fr repeat(${groups.length}, 1fr) auto` }}>
                   <span style={{ fontSize: '13.5px', color: '#2A1E10' }}>{feature.label}</span>
-                  {GROUPS.map((g) => {
+                  {groups.map((g) => {
                     const key = `${feature.id}:${g.key}`
                     return (
                       <input

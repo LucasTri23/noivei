@@ -1,5 +1,4 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { PLAN_IDS, PLAN_NAMES, type PlanId } from '@/constants/plans'
 
 export const metadata = { title: 'Admin · Dashboard' }
 
@@ -8,18 +7,10 @@ interface ActiveSubscriptionRow {
   plan_id: string
 }
 
-const PLAN_ORDER: PlanId[] = [
-  PLAN_IDS.FREE,
-  PLAN_IDS.PREMIUM_MONTHLY,
-  PLAN_IDS.PREMIUM_ONCE,
-  PLAN_IDS.PLUS_MONTHLY,
-  PLAN_IDS.PLUS_ONCE,
-]
-
-function statCard(label: string, value: number | string, color = '#2A1E10') {
+function statCard(label: string, value: number | string, color = '#2A1E10', reactKey = label) {
   return (
     <div
-      key={label}
+      key={reactKey}
       className="rounded-2xl p-5"
       style={{ background: '#FFFFFF', boxShadow: '0 6px 18px rgba(60,40,24,0.07)', textAlign: 'center' }}
     >
@@ -48,6 +39,7 @@ export default async function AdminDashboardPage() {
     { count: newLast7 },
     { count: newLast30 },
     { data: activeSubsRaw },
+    { data: plansData },
   ] = await Promise.all([
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('weddings').select('*', { count: 'exact', head: true }).is('deleted_at', null),
@@ -58,9 +50,13 @@ export default async function AdminDashboardPage() {
       .select('user_id, plan_id')
       .eq('status', 'active')
       .order('created_at', { ascending: false }),
+    // Todos os planos (não só ativos) — histórico de assinatura pode apontar pra um
+    // plano já desativado, e a distribuição ainda precisa mostrar o nome certo.
+    supabase.from('plans').select('id, name').order('sort_order'),
   ])
 
   const activeSubs = (activeSubsRaw ?? []) as ActiveSubscriptionRow[]
+  const planOrder = (plansData ?? []) as { id: string; name: string }[]
 
   // subscriptions guarda histórico (troca de plano gera nova linha) — a linha "atual"
   // de cada usuário é a mais recente com status='active', por isso a lista já vem
@@ -70,23 +66,17 @@ export default async function AdminDashboardPage() {
     if (!latestPlanByUser.has(sub.user_id)) latestPlanByUser.set(sub.user_id, sub.plan_id)
   }
 
-  const planCounts: Record<PlanId, number> = {
-    free: 0,
-    premium_monthly: 0,
-    premium_once: 0,
-    premium_plus_monthly: 0,
-    premium_plus_once: 0,
-  }
+  const planCounts: Record<string, number> = Object.fromEntries(planOrder.map((p) => [p.id, 0]))
 
   for (const planId of latestPlanByUser.values()) {
-    if (planId in planCounts) planCounts[planId as PlanId] += 1
-    else planCounts.free += 1
+    if (planId in planCounts) planCounts[planId] = (planCounts[planId] ?? 0) + 1
+    else planCounts.free = (planCounts.free ?? 0) + 1
   }
 
   // Usuário sem nenhuma linha de assinatura ativa é, por definição, Gratuito —
   // sem isso a distribuição só contaria quem já passou pelo seletor de planos.
   const usersWithoutActiveSub = Math.max(0, (totalUsers ?? 0) - latestPlanByUser.size)
-  planCounts.free += usersWithoutActiveSub
+  planCounts.free = (planCounts.free ?? 0) + usersWithoutActiveSub
 
   return (
     <div>
@@ -111,7 +101,7 @@ export default async function AdminDashboardPage() {
         Distribuição por plano
       </h2>
       <div className="mb-6 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))' }}>
-        {PLAN_ORDER.map((planId) => statCard(PLAN_NAMES[planId], planCounts[planId]))}
+        {planOrder.map((plan) => statCard(plan.name, planCounts[plan.id] ?? 0, undefined, plan.id))}
       </div>
 
       <p style={{ fontSize: '12.5px', color: '#8A7560', lineHeight: 1.6, maxWidth: '640px' }}>
