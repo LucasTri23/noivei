@@ -1,6 +1,7 @@
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { InviteTokenSchema } from '@/lib/api/validation/invite.schema'
 import { getInviteByToken } from '@/lib/invites/get-invite-by-token'
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 // Rota pública (sem auth): quem está checando um convite ainda não é membro do
@@ -10,7 +11,7 @@ interface RouteContext {
   params: Promise<{ token: string }>
 }
 
-export async function GET(_req: Request, { params }: RouteContext) {
+export async function GET(req: Request, { params }: RouteContext) {
   try {
     const { token } = await params
 
@@ -20,6 +21,12 @@ export async function GET(_req: Request, { params }: RouteContext) {
     }
 
     const supabase = createSupabaseService()
+
+    const tokenLimit = await checkRateLimit(supabase, `invite:token:${parsedToken.data}`, 20, 3600)
+    if (!tokenLimit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+    const ipLimit = await checkRateLimit(supabase, `invite:ip:${getClientIp(req)}`, 60, 3600)
+    if (!ipLimit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+
     const invite = await getInviteByToken(supabase, parsedToken.data)
 
     if (!invite) return err(404, 'INVITE_NOT_FOUND', 'Convite não encontrado.')

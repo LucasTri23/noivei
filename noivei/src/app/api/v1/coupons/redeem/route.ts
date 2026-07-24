@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 const RedeemCouponSchema = z.object({
@@ -29,6 +30,13 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return err(400, 'VALIDATION_ERROR', 'Informe um código de cupom.', parsed.error.flatten())
     }
+
+    // Tentativa de adivinhar código de cupom por força bruta — limita por usuário
+    // e por IP (o mesmo atacante trocando de conta ainda esbarra no IP).
+    const userLimit = await checkRateLimit(supabase, `coupon:user:${user.id}`, 10, 3600)
+    if (!userLimit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+    const ipLimit = await checkRateLimit(supabase, `coupon:ip:${getClientIp(req)}`, 20, 3600)
+    if (!ipLimit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
 
     // Database = any (ver types/database.ts) faz o retorno do rpc() cair em `{}` —
     // o cast reflete o que fn_redeem_coupon() de fato retorna (ver migration).

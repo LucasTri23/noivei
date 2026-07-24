@@ -2,6 +2,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { AcceptInviteBodySchema, AcceptInviteSchema } from '@/lib/api/validation/invite.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkMemberLimit } from '@/lib/billing/check-limit'
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 
@@ -35,6 +36,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
 
     const supabase = createSupabaseService()
+
+    const tokenLimit = await checkRateLimit(supabase, `invite:token:${parsedToken.data.token}`, 20, 3600)
+    if (!tokenLimit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+    const ipLimit = await checkRateLimit(supabase, `invite:ip:${getClientIp(req)}`, 60, 3600)
+    if (!ipLimit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
 
     const { data: invite, error: inviteError } = await supabase
       .from('wedding_invites')

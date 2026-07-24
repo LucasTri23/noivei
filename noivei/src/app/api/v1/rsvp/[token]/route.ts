@@ -7,6 +7,7 @@ import { checkGuestLimit } from '@/lib/billing/check-limit'
 import { getRsvpByToken } from '@/lib/rsvp/get-rsvp-by-token'
 import { phonesMatch } from '@/lib/rsvp/normalize-phone'
 import { notifyRsvpResponse } from '@/lib/rsvp/notify-rsvp-response'
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 // Rota pública (sem auth): o token único do convidado é a credencial.
@@ -52,6 +53,19 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     }
 
     const supabase = createSupabaseService()
+
+    // Força bruta de telefone é o principal risco desta rota (ver PHONE_MISMATCH
+    // abaixo) — limita por token (o mesmo convite não pode ser martelado) e por IP
+    // (mais generoso: várias respostas de convidados diferentes podem vir do mesmo
+    // Wi-Fi de festa/família).
+    const tokenLimit = await checkRateLimit(supabase, `rsvp-patch:token:${parsedToken.data}`, 10, 3600)
+    if (!tokenLimit.allowed) {
+      return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+    }
+    const ipLimit = await checkRateLimit(supabase, `rsvp-patch:ip:${getClientIp(req)}`, 30, 3600)
+    if (!ipLimit.allowed) {
+      return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+    }
 
     // O telefone nunca é devolvido pro client (ver get-rsvp-by-token.ts) — o único
     // jeito de saber se bate é o próprio servidor comparar aqui. Busca o convidado

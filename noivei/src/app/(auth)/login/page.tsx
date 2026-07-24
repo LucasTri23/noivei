@@ -33,6 +33,19 @@ function LoginForm() {
   async function onSubmit(data: LoginFields) {
     setLoading(true)
     setServerError('')
+
+    const limitCheck = await fetch('/api/v1/auth/check-rate-limit', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'login', identifier: data.email }),
+    })
+    if (!limitCheck.ok) {
+      const body = await limitCheck.json().catch(() => null)
+      setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+      setLoading(false)
+      return
+    }
+
     const supabase = createSupabaseBrowser()
     const { error } = await supabase.auth.signInWithPassword({
       email:    data.email,

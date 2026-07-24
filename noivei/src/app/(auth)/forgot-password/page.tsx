@@ -11,8 +11,9 @@ const Schema = z.object({ email: z.string().email('E-mail inválido') })
 type Fields = z.infer<typeof Schema>
 
 export default function ForgotPasswordPage() {
-  const [sent, setSent]       = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [sent, setSent]             = useState(false)
+  const [loading, setLoading]       = useState(false)
+  const [serverError, setServerError] = useState('')
 
   const { register, handleSubmit, formState: { errors } } = useForm<Fields>({
     resolver: zodResolver(Schema),
@@ -20,6 +21,20 @@ export default function ForgotPasswordPage() {
 
   async function onSubmit(data: Fields) {
     setLoading(true)
+    setServerError('')
+
+    const limitCheck = await fetch('/api/v1/auth/check-rate-limit', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'forgot_password', identifier: data.email }),
+    })
+    if (!limitCheck.ok) {
+      const body = await limitCheck.json().catch(() => null)
+      setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+      setLoading(false)
+      return
+    }
+
     const supabase = createSupabaseBrowser()
     await supabase.auth.resetPasswordForEmail(data.email, {
       redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
@@ -69,6 +84,12 @@ export default function ForgotPasswordPage() {
             style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#22304F', width: '100%', background: 'transparent' }} />
         </div>
         {errors.email && <p style={{ fontSize: '12px', color: '#E86A78', marginTop: '-10px' }}>{errors.email.message}</p>}
+
+        {serverError && (
+          <p style={{ fontSize: '13.5px', color: '#E86A78', background: '#FBEEF0', padding: '10px 14px', borderRadius: '10px' }}>
+            {serverError}
+          </p>
+        )}
 
         <button type="submit" disabled={loading}
           style={{ width: '100%', background: '#E86A78', color: '#fff', border: 'none', borderRadius: '12px', padding: '15px', fontWeight: 600, fontSize: '15.5px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, boxShadow: '0 10px 24px rgba(232,106,120,0.3)', marginTop: '8px' }}>
