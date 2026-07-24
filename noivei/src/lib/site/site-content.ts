@@ -9,6 +9,7 @@ export interface SiteContent {
   reception_info?: string
   gallery_urls?:   string[]
   custom_message?: string
+  dress_code?:     string
 }
 
 /** Normaliza o JSON livre de `site_config.content` para o shape tipado — ignora chaves desconhecidas ou malformadas. */
@@ -21,6 +22,7 @@ export function parseSiteContent(raw: Record<string, Json | undefined> | null | 
   if (typeof raw.ceremony_info === 'string') content.ceremony_info = raw.ceremony_info
   if (typeof raw.reception_info === 'string') content.reception_info = raw.reception_info
   if (typeof raw.custom_message === 'string') content.custom_message = raw.custom_message
+  if (typeof raw.dress_code === 'string') content.dress_code = raw.dress_code
   if (Array.isArray(raw.gallery_urls)) {
     content.gallery_urls = raw.gallery_urls.filter((url): url is string => typeof url === 'string')
   }

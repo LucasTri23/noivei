@@ -17,6 +17,7 @@ interface TimelineCard {
   note: string
   done: boolean
   highlight: boolean
+  overdue: boolean
 }
 
 interface TimelineGroup {
@@ -30,6 +31,14 @@ function formatDue(dueDate: string | null): string | null {
   const [y, m, d] = dueDate.split('-').map(Number)
   if (!y || !m || !d) return null
   return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+// Mesma regra do Checklist (src/app/(app)/checklist/page.tsx) — vencida em qualquer
+// plano, comparação de string yyyy-mm-dd sem depender de fuso horário.
+function isOverdue(item: Pick<ChecklistItem, 'due_date' | 'completed'>): boolean {
+  if (item.completed || !item.due_date) return false
+  const today = new Date().toLocaleDateString('sv-SE')
+  return item.due_date < today
 }
 
 export default function TimelineBoard({ items: initialItems }: TimelineBoardProps) {
@@ -54,6 +63,7 @@ export default function TimelineBoard({ items: initialItems }: TimelineBoardProp
         note: [item.category, formatDue(item.due_date)].filter(Boolean).join(' · ') || 'Sem prazo fixo',
         done: item.completed,
         highlight: phase.id === 'o-grande-dia',
+        overdue: isOverdue(item),
       }))
     return { phase: phase.label, window: phase.window, items: phaseItems }
   }).filter((group) => group.items.length > 0), [items])
@@ -193,7 +203,7 @@ export default function TimelineBoard({ items: initialItems }: TimelineBoardProp
                       style={{
                         fontSize: '15px',
                         fontWeight: 600,
-                        color: item.highlight ? 'var(--wedding-color-light)' : '#3C2818',
+                        color: item.highlight ? 'var(--wedding-color-light)' : item.overdue ? '#C0553F' : '#3C2818',
                         textDecoration: item.done ? 'line-through' : 'none',
                       }}
                     >
@@ -201,12 +211,12 @@ export default function TimelineBoard({ items: initialItems }: TimelineBoardProp
                     </div>
                     <div
                       style={{
-                        fontSize: '13px',
-                        color: item.highlight ? 'rgba(250,240,230,0.65)' : '#9A7A60',
+                        fontSize: '13px', fontWeight: item.overdue && !item.highlight ? 700 : 400,
+                        color: item.highlight ? 'rgba(250,240,230,0.65)' : item.overdue ? '#C0553F' : '#9A7A60',
                         marginTop: '3px',
                       }}
                     >
-                      {item.note}
+                      {item.note}{item.overdue ? ' · atrasada' : ''}
                     </div>
                   </div>
                 </div>

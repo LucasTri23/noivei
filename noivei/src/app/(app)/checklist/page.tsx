@@ -97,6 +97,24 @@ function formatDue(dueDate: string | null): string | null {
   return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Vencida em qualquer plano (o e-mail de aviso é que é só pro plano pago, ver
+// src/app/api/cron/notify-overdue/route.ts) — mesma comparação de string yyyy-mm-dd
+// usada lá, sem depender de fuso horário.
+function isOverdue(item: Pick<ChecklistItem, 'due_date' | 'completed'>): boolean {
+  if (item.completed || !item.due_date) return false
+  const today = new Date().toLocaleDateString('sv-SE')
+  return item.due_date < today
+}
+
+function AlertIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
+}
+
 export default function ChecklistPage() {
   const router = useRouter()
   const [filter, setFilter]         = useState<Filter>('todas')
@@ -517,6 +535,7 @@ export default function ChecklistPage() {
                 {visible.map((item, idx) => {
                   const isDone = item.completed
                   const due = formatDue(item.due_date)
+                  const overdue = isOverdue(item)
                   return (
                     <div
                       key={item.id}
@@ -546,7 +565,7 @@ export default function ChecklistPage() {
                       {/* Label */}
                       <span style={{
                         flex: 1, fontSize: '14.5px', fontWeight: 500,
-                        color: isDone ? '#9A7A60' : '#3C2818',
+                        color: isDone ? '#9A7A60' : overdue ? '#C0553F' : '#3C2818',
                         textDecoration: isDone ? 'line-through' : 'none',
                         transition: 'all 0.18s',
                       }}>
@@ -596,9 +615,9 @@ export default function ChecklistPage() {
                       )}
                       {/* Due */}
                       {due && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--muted-fg)', flexShrink: 0 }}>
-                          <ClockIcon />
-                          <span style={{ fontSize: '12.5px' }}>{due}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: overdue ? '#C0553F' : 'var(--muted-fg)', flexShrink: 0 }}>
+                          {overdue ? <AlertIcon /> : <ClockIcon />}
+                          <span style={{ fontSize: '12.5px', fontWeight: overdue ? 700 : 400 }}>{due}{overdue ? ' · atrasada' : ''}</span>
                         </div>
                       )}
                     </div>

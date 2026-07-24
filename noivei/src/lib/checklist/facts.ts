@@ -3,7 +3,7 @@
 // As respostas são persistidas em wedding_preferences.answers (JSONB) no formato de WeddingAnswers.
 
 import { z } from 'zod'
-import type { Json } from '@/types/database'
+import type { Json, WeddingStyle } from '@/types/database'
 
 const NAO_SEI = 'nao_sei' as const
 
@@ -114,13 +114,21 @@ export interface WeddingFacts extends WeddingAnswers {
   ar_livre: boolean
   /** Meses até o casamento (null sem data). Sem tratamento especial para < 12 (§8 item 2). */
   meses_disponiveis: number | null
+  /**
+   * weddings.style — não faz parte do questionário Q3-Q24 (não é
+   * wedding_preferences.answers, vem direto de weddings.style). Só planos pagos
+   * passam um valor real aqui (generate-free.ts nunca lê este fato).
+   */
+  style: WeddingStyle | null
 }
 
 /**
  * Deriva os fatos usados pelas condições do catálogo a partir das respostas
- * do questionário e da data do casamento (weddings.wedding_date, 'YYYY-MM-DD' ou null).
+ * do questionário, da data do casamento (weddings.wedding_date, 'YYYY-MM-DD' ou null)
+ * e do estilo do casamento (weddings.style, opcional — null quando ainda não escolhido
+ * ou quando quem chama não usa esse fato, como o plano Gratuito).
  */
-export function deriveFacts(answers: WeddingAnswers, weddingDate: string | null): WeddingFacts {
+export function deriveFacts(answers: WeddingAnswers, weddingDate: string | null, style: WeddingStyle | null = null): WeddingFacts {
   const date = weddingDate ? new Date(`${weddingDate}T00:00:00`) : null
   const validDate = date && !Number.isNaN(date.getTime()) ? date : null
 
@@ -135,6 +143,7 @@ export function deriveFacts(answers: WeddingAnswers, weddingDate: string | null)
     mini_wedding: answers.convidados !== null && answers.convidados <= 50,
     ar_livre: answers.local === 'campo' || answers.local === 'praia' || answers.local === 'casa',
     meses_disponiveis: meses,
+    style,
   }
 }
 

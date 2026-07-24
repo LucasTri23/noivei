@@ -81,6 +81,13 @@ export interface CatalogTask {
   /** Marcada "(opcional, dispensável)" no §4 do doc. */
   dismissable: boolean
   condition: (facts: WeddingFacts) => boolean
+  /**
+   * Força a tarefa a continuar na checklist fixa do Gratuito mesmo com uma
+   * `condition` real (não `always`) — usado quando a condição depende de um fato que
+   * só o plano pago coleta (ex: `style`, ver deriveFacts). Sem isso, `condition !==
+   * always` tiraria a tarefa do Gratuito também, que nunca lê esse fato.
+   */
+  freeIncluded?: boolean
 }
 
 export function resolvePhase(task: CatalogTask, facts: WeddingFacts): TimelinePhaseId {
@@ -107,7 +114,7 @@ function t(input: TaskInput): CatalogTask {
  * nenhuma resposta do questionário). É a base da checklist fixa do plano Gratuito.
  */
 export function isUnconditionalTask(task: CatalogTask): boolean {
-  return task.condition === always
+  return task.condition === always || task.freeIncluded === true
 }
 
 /** Categoria Recepção & Festa fica inteira oculta se Q11 = "não teremos recepção" (§4.5). */
@@ -128,7 +135,11 @@ const PLANEJAMENTO: CatalogTask[] = [
     phase: 'fundacao', offsetDays: 365, condition: (f) => !f.tem_data }),
   t({ key: 'planejamento.mood-board', category: 'Planejamento & Organização',
     label: 'Definir estilo e visão do casamento (mood board)',
-    phase: 'fundacao', offsetDays: 365 }),
+    phase: 'fundacao', offsetDays: 365,
+    // Some se o casal já escolheu o estilo no onboarding (weddings.style) — pergunta
+    // de novo o que já foi respondido. freeIncluded mantém a tarefa no Gratuito, que
+    // nunca coleta esse fato (facts.style sempre null lá).
+    condition: (f) => !f.style, freeIncluded: true }),
   t({ key: 'planejamento.orcamento-total', category: 'Planejamento & Organização',
     label: 'Definir orçamento total e teto por categoria',
     phase: 'fundacao', offsetDays: 365 }),
@@ -354,7 +365,11 @@ const CERIMONIA: CatalogTask[] = [
 const FESTA: CatalogTask[] = [
   t({ key: 'festa.estilo', category: 'Recepção & Festa',
     label: 'Definir estilo da festa (formal, rústico, pé na areia...)',
-    phase: 'grandes-contratacoes', offsetDays: 330, condition: withReception(always) }),
+    phase: 'grandes-contratacoes', offsetDays: 330,
+    // Some se o estilo já foi escolhido no onboarding — já era condicional a ter
+    // recepção (withReception), então não precisa de freeIncluded (nunca esteve no
+    // Gratuito, ver isUnconditionalTask).
+    condition: withReception((f) => !f.style) }),
   t({ key: 'festa.cardapio-buffet', category: 'Recepção & Festa',
     label: 'Fechar cardápio com o buffet (+ degustação)',
     phase: 'fornecedores-e-trajes', offsetDays: 180,

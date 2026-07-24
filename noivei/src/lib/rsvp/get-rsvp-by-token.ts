@@ -2,7 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { isPaidPlan } from '@/constants/plans'
-import type { GuestStatus } from '@/types/database'
+import { parseSiteContent } from '@/lib/site/site-content'
+import type { GuestStatus, Json } from '@/types/database'
 
 // Dados mínimos expostos publicamente no fluxo de RSVP — nunca vazar e-mail/telefone
 // do convidado nem dados internos do casamento. O telefone NUNCA aparece aqui de
@@ -31,6 +32,9 @@ export interface RsvpInfo {
     // pra lá depois de confirmar presença. null tanto se o casal nunca criou o site
     // quanto se criou mas não publicou; os dois casos são "sem site pra redirecionar".
     site_slug: string | null
+    // Vem do mesmo site_config.content do site público (ver src/lib/site/site-content.ts)
+    // — null se o casal nunca preencheu, independente de o site estar publicado ou não.
+    dress_code: string | null
   }
 }
 
@@ -58,7 +62,7 @@ export async function getRsvpByToken(
       .maybeSingle(),
     supabase
       .from('site_config')
-      .select('slug')
+      .select('slug, content')
       .eq('wedding_id', weddingId)
       .eq('published', true)
       .maybeSingle(),
@@ -82,6 +86,7 @@ export async function getRsvpByToken(
         ? (wedding.wedding_color_secondary as string | null)
         : null,
       site_slug: (site?.slug as string | null) ?? null,
+      dress_code: parseSiteContent(site?.content as Record<string, Json | undefined> | null | undefined).dress_code ?? null,
     },
   }
 }

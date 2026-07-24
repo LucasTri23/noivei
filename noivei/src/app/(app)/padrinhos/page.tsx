@@ -35,12 +35,13 @@ async function PadrinhosContent() {
 
   const weddingId = wedding.id as string
 
+  // Não exige RSVP confirmado pra entrar no cortejo — padrinho é papel de
+  // organização, independente de já ter confirmado presença.
   const [{ data: confirmedGuests }, { data: entriesData }, limitCheck] = await Promise.all([
     supabase
       .from('guests')
-      .select('id, name')
+      .select('id, name, status')
       .eq('wedding_id', weddingId)
-      .eq('status', 'confirmado')
       .order('name', { ascending: true }),
     supabase
       .from('wedding_party_entries')

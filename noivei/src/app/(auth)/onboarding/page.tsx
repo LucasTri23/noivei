@@ -8,6 +8,9 @@ import QuestionnaireWizard, {
   QUESTIONNAIRE_STEPS,
   StepTitle,
   NextButton,
+  ChoiceGroup,
+  ORCAMENTO_OPTS,
+  LOCAL_OPTS,
 } from '@/components/checklist/questionnaire-wizard'
 import { DEFAULT_ANSWERS, deriveFacts, type WeddingAnswers } from '@/lib/checklist/facts'
 import { generateChecklistItems } from '@/lib/checklist/generate'
@@ -15,6 +18,7 @@ import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
 import { isPaidPlan } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import { toastError } from '@/store/toast.store'
+import type { WeddingStyle } from '@/types/database'
 
 interface IbgeMunicipio {
   nome: string
@@ -30,23 +34,54 @@ interface FormData {
   city:       string
   guests:     string
   plan:       PlanChoice
+  style:      WeddingStyle | ''
 }
 
-// Passos fixos: nomes · data e cidade · convidados · plano.
-// Plano Gratuito termina aqui (checklist fixa); planos pagos seguem para as
-// 6 etapas do questionário de personalização (QuestionnaireWizard).
-const BASE_STEPS = 4
+// Passos fixos: nomes · data e cidade · orçamento · estilo · local · convidados ·
+// plano. Orçamento/estilo/local são perguntados pros dois planos (antes de escolher
+// plano) mas são puláveis — cada um tem um link "Pular esta pergunta". Plano Gratuito
+// termina no passo de plano (checklist fixa); planos pagos seguem para as 6 etapas do
+// questionário de personalização (QuestionnaireWizard), que ainda perguntam orçamento/
+// local de novo (pré-preenchido) — assim dá pra revisar a resposta depois em
+// /checklist/personalizar, que reaproveita o mesmo wizard.
+const BASE_STEPS = 7
 const PLAN_STEP  = BASE_STEPS - 1
 
-// Q3 → weddings.budget (centavos), para a aba Financeiro nascer com o orçamento da faixa
-// escolhida (refinável depois em Perfil > Dados do casamento). Faixas fechadas usam o teto
-// ("até 30" → 30 mil) ou o ponto médio; a faixa aberta usa o piso (150 mil).
+// Q3 → weddings.budget (centavos), pra aba Financeiro nascer com o orçamento da faixa
+// escolhida (refinável depois em Perfil > Dados do casamento) — vale pros dois planos
+// agora, já que orçamento é perguntado antes da escolha de plano. Faixas fechadas usam
+// o teto ("até 30" → 30 mil) ou o ponto médio; a faixa aberta usa o piso (150 mil).
 const BUDGET_RANGE_CENTS: Record<WeddingAnswers['orcamento'], number | null> = {
   ate_30:   3_000_000,
   '30_80':  5_500_000,
   '80_150': 11_500_000,
   '150_mais': 15_000_000,
   nao_sei:  null,
+}
+
+const STYLE_OPTS: { val: WeddingStyle; label: string }[] = [
+  { val: 'rustico',     label: 'Rústico' },
+  { val: 'classico',    label: 'Clássico' },
+  { val: 'moderno',     label: 'Moderno' },
+  { val: 'boho',        label: 'Boho' },
+  { val: 'minimalista', label: 'Minimalista' },
+  { val: 'romantico',   label: 'Romântico' },
+  { val: 'outro',       label: 'Outro' },
+]
+
+function SkipLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'block', margin: '10px auto 0', background: 'none', border: 'none',
+        color: '#9A7A60', fontSize: '13px', textDecoration: 'underline', cursor: 'pointer', padding: '4px',
+      }}
+    >
+      Pular esta pergunta
+    </button>
+  )
 }
 
 const PLANS: { id: PlanChoice; name: string; price: string; desc: string; features: string[]; highlight: boolean }[] = [
@@ -135,6 +170,7 @@ export default function OnboardingPage() {
     city:      '',
     guests:    '',
     plan:      'free',
+    style:     '',
   })
   const [answers, setAnswers] = useState<WeddingAnswers>(DEFAULT_ANSWERS)
 
@@ -185,10 +221,11 @@ export default function OnboardingPage() {
     const coupleNames = [data.brideName, data.groomName].filter(Boolean).join(' & ') || 'Meu Casamento'
     const guestsNum   = Number.parseInt(data.guests, 10)
     const convidados  = Number.isFinite(guestsNum) && guestsNum > 0 ? guestsNum : null
-    // Plano Gratuito não passa pelo questionário — respostas ficam no default.
-    const finalAnswers: WeddingAnswers = paidPlan
-      ? { ...answers, convidados }
-      : { ...DEFAULT_ANSWERS, convidados }
+    // orçamento/local já são coletados no passo fixo (antes da escolha de plano) pros
+    // dois planos — `answers` já carrega a resposta real (ou 'nao_sei' se pulou), sem
+    // precisar de DEFAULT_ANSWERS pro Gratuito aqui. O resto das perguntas (Q4 em
+    // diante) só existe pra quem passa pelo questionário completo (plano pago).
+    const finalAnswers: WeddingAnswers = { ...answers, convidados }
     const weddingDate = data.date || null
 
     const { data: wedding, error: weddingError } = await supabase
@@ -200,8 +237,10 @@ export default function OnboardingPage() {
         groom_name:   data.groomName || null,
         wedding_date: weddingDate,
         city:         data.city || null,
-        // Conexões com outras abas: Q3 alimenta o Financeiro (weddings.budget) e
-        // Q2 alimenta Convidados (weddings.guest_limit) — refináveis depois no Perfil.
+        style:        data.style || null,
+        // Conexões com outras abas: orçamento alimenta o Financeiro (weddings.budget) e
+        // convidados alimenta Convidados (weddings.guest_limit) — refináveis depois no
+        // Perfil. Vale pros dois planos, já que orçamento é perguntado antes do plano.
         budget:       BUDGET_RANGE_CENTS[finalAnswers.orcamento],
         ...(convidados !== null ? { guest_limit: convidados } : {}),
       })
@@ -228,7 +267,7 @@ export default function OnboardingPage() {
       })
 
       try {
-        const facts = deriveFacts(finalAnswers, weddingDate)
+        const facts = deriveFacts(finalAnswers, weddingDate, data.style || null)
         await generateChecklistItems(supabase, wedding.id, facts, weddingDate)
       } catch {
         // Checklist pode ser gerado depois em /checklist — não bloqueia a entrada no dashboard
@@ -378,8 +417,62 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      {/* ── STEP 3: Convidados ── */}
+      {/* ── STEP 3: Orçamento (pulável, pros dois planos) ── */}
       {step === 2 && (
+        <div>
+          <StepTitle title="Qual a faixa de orçamento?" subtitle="Ajuda a estimar o financeiro do casamento — pode pular." />
+
+          <div style={{ marginBottom: '24px' }}>
+            <ChoiceGroup
+              options={ORCAMENTO_OPTS}
+              value={answers.orcamento}
+              onChange={(v) => setAnswers((a) => ({ ...a, orcamento: v }))}
+            />
+          </div>
+
+          <NextButton onClick={() => setStep(3)} />
+          <SkipLink onClick={() => setStep(3)} />
+        </div>
+      )}
+
+      {/* ── STEP 4: Estilo do casamento (pulável, pros dois planos) ── */}
+      {step === 3 && (
+        <div>
+          <StepTitle title="Qual o estilo do casamento?" subtitle="Ajuda a personalizar o restante do checklist — pode pular." />
+
+          <div style={{ marginBottom: '24px' }}>
+            <ChoiceGroup
+              options={STYLE_OPTS}
+              value={data.style}
+              onChange={(v) => set('style', v)}
+            />
+          </div>
+
+          <NextButton onClick={() => setStep(4)} />
+          <SkipLink onClick={() => setStep(4)} />
+        </div>
+      )}
+
+      {/* ── STEP 5: Local (pulável, pros dois planos) ── */}
+      {step === 4 && (
+        <div>
+          <StepTitle title="Onde será?" subtitle="Ajuda a saber que tipo de fornecedor buscar — pode pular." />
+
+          <div style={{ marginBottom: '24px' }}>
+            <ChoiceGroup
+              options={LOCAL_OPTS}
+              value={answers.local}
+              onChange={(v) => setAnswers((a) => ({ ...a, local: v }))}
+            />
+          </div>
+
+          <NextButton onClick={() => setStep(5)} />
+          <SkipLink onClick={() => setStep(5)} />
+        </div>
+      )}
+
+      {/* ── STEP 6: Convidados ── */}
+      {step === 5 && (
         <div>
           <StepTitle title="Quantos convidados?" subtitle="Uma estimativa já ajuda a dimensionar tudo." />
 
@@ -398,11 +491,11 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <NextButton onClick={() => setStep(3)} />
+          <NextButton onClick={() => setStep(6)} />
         </div>
       )}
 
-      {/* ── STEP 4: Plano ── */}
+      {/* ── STEP 7: Plano ── */}
       {step === PLAN_STEP && (
         <div>
           <StepTitle title="Escolha seu plano" subtitle="Você pode mudar de plano quando quiser." />
@@ -486,7 +579,7 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      {/* ── STEPS 5–10 (planos pagos): questionário de personalização Q1–Q24 ── */}
+      {/* ── STEPS 8–13 (planos pagos): questionário de personalização Q1–Q24 ── */}
       {step >= BASE_STEPS && (
         <QuestionnaireWizard
           step={step - BASE_STEPS}

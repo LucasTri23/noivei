@@ -143,6 +143,22 @@ export default async function RsvpPage({ params }: RsvpPageProps) {
           Você foi convidado(a) para este grande dia. Podemos contar com a sua presença?
         </p>
 
+        {rsvp.wedding.dress_code && (
+          <div
+            style={{
+              marginBottom: '22px', padding: '14px 16px', borderRadius: '14px',
+              background: 'var(--wedding-color-subtle)',
+            }}
+          >
+            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '6px' }}>
+              Dress code
+            </div>
+            <p style={{ fontSize: '13.5px', color: 'var(--fg)', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
+              {rsvp.wedding.dress_code}
+            </p>
+          </div>
+        )}
+
         <RsvpForm
           token={parsedToken.data}
           initialStatus={rsvp.guest.status}

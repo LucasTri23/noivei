@@ -66,18 +66,17 @@ export async function POST(req: Request, { params }: RouteContext) {
       return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsed.error.flatten())
     }
 
+    // Não exige RSVP confirmado — padrinho é papel de organização, não depende de
+    // presença já confirmada. Só confere que o convidado existe e é deste casamento.
     const { data: guest, error: guestError } = await supabase
       .from('guests')
-      .select('id, status')
+      .select('id')
       .eq('id', parsed.data.guest_id)
       .eq('wedding_id', wid)
       .maybeSingle()
 
     if (guestError) return err(500, 'DB_ERROR', 'Erro ao verificar o convidado.')
     if (!guest) return err(404, 'GUEST_NOT_FOUND', 'Convidado não encontrado.')
-    if (guest.status !== 'confirmado') {
-      return err(400, 'GUEST_NOT_CONFIRMED', 'Apenas convidados confirmados podem entrar no cortejo.')
-    }
 
     if (parsed.data.paired_with_entry_id) {
       const { data: pairEntry, error: pairError } = await supabase

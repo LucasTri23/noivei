@@ -9,7 +9,9 @@ import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { Guest, WeddingPartyEntry } from '@/types/database'
 
-export type ConfirmedGuest = Pick<Guest, 'id' | 'name'>
+// Nome mantido por compatibilidade histórica, mas não exige mais RSVP confirmado —
+// qualquer convidado do casamento pode virar padrinho/madrinha.
+export type ConfirmedGuest = Pick<Guest, 'id' | 'name' | 'status'>
 
 export interface WeddingPartyEntryWithGuest extends WeddingPartyEntry {
   guest_name: string
@@ -106,6 +108,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
   const [form, setForm]                 = useState(EMPTY_FORM)
+  const [guestQuery, setGuestQuery]     = useState('')
   const [editingEntry, setEditingEntry] = useState<WeddingPartyEntryWithGuest | null>(null)
   const [editForm, setEditForm]         = useState({ role: '', carries_rings: false, hasPair: false, pairSelection: '', pairRole: '' })
   const [editSaving, setEditSaving]     = useState(false)
@@ -340,6 +343,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
 
     setSaving(false)
     setForm(EMPTY_FORM)
+    setGuestQuery('')
     setModalOpen(false)
     toastSuccess('Entrada adicionada ao cortejo.')
   }
@@ -542,7 +546,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
             Padrinhos &amp; Entradas
           </h1>
           <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
-            Monte o cortejo com quem já confirmou presença · {entries.length}/{entryLimit} entradas adicionais do plano
+            Monte o cortejo com os convidados do casamento · {entries.length}/{entryLimit} entradas adicionais do plano
           </p>
         </div>
         <button
@@ -591,7 +595,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
             fontSize: '14px', color: 'var(--muted-fg)',
           }}
         >
-          Nenhum convidado confirmado ainda. Confirme presenças na aba Convidados para poder montar o cortejo.
+          Nenhum convidado cadastrado ainda. Cadastre convidados na aba Convidados para poder montar o cortejo.
         </div>
       )}
 
@@ -705,18 +709,29 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
         <form onSubmit={handleAdd} className="flex flex-col gap-4">
           <div>
             <label htmlFor="party-guest" style={labelStyle}>Convidado *</label>
-            <select
+            <input
               id="party-guest"
+              type="text"
               required
-              value={form.guest_id}
-              onChange={(e) => setForm((f) => ({ ...f, guest_id: e.target.value }))}
+              autoComplete="off"
+              list="party-guest-options"
+              placeholder="Digite pra buscar…"
+              value={guestQuery}
+              onChange={(e) => {
+                const query = e.target.value
+                setGuestQuery(query)
+                // datalist só filtra visualmente — resolve o guest_id real batendo o
+                // texto digitado com o nome de algum convidado disponível.
+                const match = availableGuests.find((g) => g.name === query)
+                setForm((f) => ({ ...f, guest_id: match?.id ?? '' }))
+              }}
               style={inputStyle}
-            >
-              <option value="">Selecione um convidado confirmado…</option>
+            />
+            <datalist id="party-guest-options">
               {availableGuests.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
+                <option key={g.id} value={g.name} />
               ))}
-            </select>
+            </datalist>
           </div>
           <div>
             <label htmlFor="party-role" style={labelStyle}>Papel no cortejo *</label>

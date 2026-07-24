@@ -364,6 +364,24 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           </section>
         )}
 
+        {site.content.dress_code && (
+          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
+            <div
+              style={{
+                maxWidth: '560px', margin: '0 auto', padding: '16px 20px', borderRadius: '14px',
+                background: 'var(--wedding-color-secondary-subtle)',
+              }}
+            >
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '8px' }}>
+                Dress code
+              </div>
+              <p style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }}>
+                {site.content.dress_code}
+              </p>
+            </div>
+          </section>
+        )}
+
         {site.content.custom_message && (
           <section style={{ marginBottom: '56px', textAlign: 'center' }}>
             <p

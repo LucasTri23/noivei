@@ -15,7 +15,9 @@ export const QUESTIONNAIRE_STEPS = 6
 
 type Option<T extends string> = { val: T; label: string }
 
-const ORCAMENTO_OPTS: Option<WeddingAnswers['orcamento']>[] = [
+// Exportadas pro onboarding reaproveitar no passo fixo de orçamento/local (perguntado
+// antes da escolha de plano, pros dois planos — ver src/app/(auth)/onboarding/page.tsx).
+export const ORCAMENTO_OPTS: Option<WeddingAnswers['orcamento']>[] = [
   { val: 'ate_30',   label: 'Até R$ 30 mil' },
   { val: '30_80',    label: 'R$ 30–80 mil' },
   { val: '80_150',   label: 'R$ 80–150 mil' },
@@ -46,7 +48,7 @@ const CERIMONIA_OPTS: Option<WeddingAnswers['cerimonia']>[] = [
   { val: 'nao',            label: 'Não teremos' },
   { val: 'nao_sei',        label: 'Ainda não sabemos' },
 ]
-const LOCAL_OPTS: Option<WeddingAnswers['local']>[] = [
+export const LOCAL_OPTS: Option<WeddingAnswers['local']>[] = [
   { val: 'espaco_cidade', label: 'Espaço de eventos na nossa cidade' },
   { val: 'campo',         label: 'Campo ou fazenda' },
   { val: 'praia',         label: 'Praia' },
@@ -162,7 +164,7 @@ function pillStyle(active: boolean): React.CSSProperties {
   }
 }
 
-function Question({ label, children }: { label: string; children: React.ReactNode }) {
+export function Question({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <div style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '8px' }}>{label}</div>
@@ -171,7 +173,7 @@ function Question({ label, children }: { label: string; children: React.ReactNod
   )
 }
 
-function ChoiceGroup<T extends string>({ options, value, onChange }: {
+export function ChoiceGroup<T extends string>({ options, value, onChange }: {
   options: Option<T>[]
   value: T
   onChange: (val: T) => void

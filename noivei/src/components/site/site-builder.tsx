@@ -450,22 +450,28 @@ function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, 
 interface CerimoniaSectionProps {
   ceremonyInfo:  string
   receptionInfo: string
+  dressCode:     string
   saving:        boolean
   siteExists:    boolean
-  onSave:        (values: { ceremony_info: string; reception_info: string }) => Promise<PatchResult>
+  onSave:        (values: { ceremony_info: string; reception_info: string; dress_code: string }) => Promise<PatchResult>
   onGoToCapa:    () => void
 }
 
-function CerimoniaSection({ ceremonyInfo, receptionInfo, saving, siteExists, onSave, onGoToCapa }: CerimoniaSectionProps) {
+function CerimoniaSection({ ceremonyInfo, receptionInfo, dressCode, saving, siteExists, onSave, onGoToCapa }: CerimoniaSectionProps) {
   const [ceremonyDraft, setCeremonyDraft]   = useState(ceremonyInfo)
   const [receptionDraft, setReceptionDraft] = useState(receptionInfo)
+  const [dressCodeDraft, setDressCodeDraft] = useState(dressCode)
   const showSpinner = useDelayedLoading(saving)
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = await onSave({ ceremony_info: ceremonyDraft.trim(), reception_info: receptionDraft.trim() })
+    const result = await onSave({
+      ceremony_info: ceremonyDraft.trim(),
+      reception_info: receptionDraft.trim(),
+      dress_code: dressCodeDraft.trim(),
+    })
     if (!result.ok) {
       toastError(result.message)
       return
@@ -496,6 +502,18 @@ function CerimoniaSection({ ceremonyInfo, receptionInfo, saving, siteExists, onS
           value={receptionDraft}
           onChange={(e) => setReceptionDraft(e.target.value)}
           placeholder="Endereço, horário e observações da recepção/festa."
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
+        />
+      </div>
+      <div>
+        <label htmlFor="site-dress-code" style={labelStyle}>Dress code (opcional)</label>
+        <textarea
+          id="site-dress-code"
+          rows={2}
+          maxLength={300}
+          value={dressCodeDraft}
+          onChange={(e) => setDressCodeDraft(e.target.value)}
+          placeholder="Ex: Traje esporte fino. Evitem branco e tons de verde-militar."
           style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
@@ -1006,7 +1024,7 @@ export default function SiteBuilder({
   async function saveContentPatch(patch: Partial<SiteContent>): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
 
-    const textKeys = ['cover_title', 'our_story', 'ceremony_info', 'reception_info', 'custom_message'] as const
+    const textKeys = ['cover_title', 'our_story', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code'] as const
     for (const key of textKeys) {
       if (!(key in patch)) continue
       const value = patch[key]
@@ -1157,6 +1175,7 @@ export default function SiteBuilder({
               <CerimoniaSection
                 ceremonyInfo={content.ceremony_info ?? ''}
                 receptionInfo={content.reception_info ?? ''}
+                dressCode={content.dress_code ?? ''}
                 saving={saving}
                 siteExists={siteExists}
                 onSave={saveContentPatch}
