@@ -41,6 +41,9 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .eq('financial_entry_id', id)
       .eq('wedding_id', wid)
       .order('installment_number', { ascending: true })
+      // Defesa em profundidade: um plano de parcelas de um único lançamento é
+      // naturalmente pequeno; este teto só evita devolver a tabela inteira.
+      .limit(120)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar parcelas.')
 

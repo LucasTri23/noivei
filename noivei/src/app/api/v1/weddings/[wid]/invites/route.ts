@@ -27,6 +27,9 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .select('*')
       .eq('wedding_id', wid)
       .order('created_at', { ascending: false })
+      // Defesa em profundidade: checkMemberLimit já restringe quantos convites um
+      // casamento consegue gerar; este teto só evita devolver a tabela inteira.
+      .limit(500)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar convites.')
 

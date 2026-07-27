@@ -1,6 +1,7 @@
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { cancelPreapproval } from '@/lib/integrations/payment/mercadopago'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 // Cancela a assinatura recorrente (Preapproval) ativa do usuário — só faz sentido
@@ -10,6 +11,11 @@ export async function POST() {
   try {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
+
+    // Cancelar repetidamente não é uma ação de negócio legítima em loop, e cada chamada
+    // bem-sucedida chega a fazer uma requisição real de cancelamento no Mercado Pago.
+    const limitCheck = await checkRateLimit(supabase, `cancel-subscription:${user.id}`, 10, 3600)
+    if (!limitCheck.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
 
     const { data: subscription, error: subError } = await supabase
       .from('subscriptions')

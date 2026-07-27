@@ -18,5 +18,10 @@ export const UpdateSiteConfigSchema = z
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo para atualizar.')
+  .superRefine((value, ctx) => {
+    if (value.content && JSON.stringify(value.content).length > 200_000) {
+      ctx.addIssue({ code: 'custom', message: 'Conteúdo do site excede o tamanho máximo permitido.' })
+    }
+  })
 
 export type UpdateSiteConfigInput = z.infer<typeof UpdateSiteConfigSchema>

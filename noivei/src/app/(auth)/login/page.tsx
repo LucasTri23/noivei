@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import TurnstileWidget from '@/components/auth/turnstile-widget'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
 const LoginSchema = z.object({
@@ -25,12 +26,29 @@ function LoginForm() {
   const next         = searchParams.get('next') ?? '/dashboard'
   const [serverError, setServerError] = useState('')
   const [loading, setLoading]         = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [turnstileKey, setTurnstileKey] = useState(0)
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFields>({
     resolver: zodResolver(LoginSchema),
   })
 
+  // Token do Turnstile é de uso único — qualquer falha abaixo (rate limit, credenciais
+  // erradas etc.) invalida o token já usado; sem pedir um novo, uma segunda tentativa
+  // reenviaria o mesmo token e falharia de novo na verificação do Supabase, mesmo
+  // corrigindo o campo que causou o erro original. Trocar a key força o React a
+  // desmontar/remontar o widget (criando um token novo do zero).
+  function resetCaptcha() {
+    setCaptchaToken(null)
+    setTurnstileKey((k) => k + 1)
+  }
+
   async function onSubmit(data: LoginFields) {
+    if (!captchaToken) {
+      setServerError('Confirme que você não é um robô.')
+      return
+    }
+
     setLoading(true)
     setServerError('')
 
@@ -43,6 +61,7 @@ function LoginForm() {
       const body = await limitCheck.json().catch(() => null)
       setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
       setLoading(false)
+      resetCaptcha()
       return
     }
 
@@ -50,10 +69,12 @@ function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword({
       email:    data.email,
       password: data.password,
+      options: { captchaToken },
     })
     if (error) {
       setServerError('E-mail ou senha incorretos.')
       setLoading(false)
+      resetCaptcha()
       return
     }
     router.push(next)
@@ -99,6 +120,10 @@ function LoginForm() {
           <Link href="/forgot-password" style={{ fontSize: '13.5px', color: '#C6943A', fontWeight: 600 }}>
             Esqueci a senha
           </Link>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <TurnstileWidget key={turnstileKey} onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
         </div>
 
         {serverError && (

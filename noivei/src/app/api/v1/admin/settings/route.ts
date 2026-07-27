@@ -3,6 +3,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { UpdateAppSettingsSchema } from '@/lib/api/validation/admin-settings.schema'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 export async function GET() {
@@ -31,6 +32,9 @@ export async function PATCH(req: Request) {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     await requireAdmin(supabase, user.id)
+
+    const limitCheck = await checkRateLimit(supabase, `admin-settings-write:${user.id}`, 50, 3600)
+    if (!limitCheck.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
 
     const body = await parseJsonBody(req)
     const parsed = UpdateAppSettingsSchema.safeParse(body)

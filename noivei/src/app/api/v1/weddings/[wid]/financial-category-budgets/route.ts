@@ -25,6 +25,10 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .from('financial_category_budgets')
       .select('*')
       .eq('wedding_id', wid)
+      // Defesa em profundidade: uma meta por categoria financeira — o teto de
+      // categorias é bem menor que o de outras coleções, mas o cinto-e-suspensório
+      // segue o mesmo padrão.
+      .limit(200)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar metas de gastos por categoria.')
 

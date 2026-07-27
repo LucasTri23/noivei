@@ -36,6 +36,9 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .select('*')
       .eq('wedding_id', wid)
       .order('created_at', { ascending: false })
+      // Defesa em profundidade: a cota de armazenamento (compartilhada com Central de
+      // arquivos) já limita o volume real; este teto só evita devolver a tabela inteira.
+      .limit(1000)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar fotos da galeria.')
 

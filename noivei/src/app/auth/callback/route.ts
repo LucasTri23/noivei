@@ -3,11 +3,18 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 
 export async function GET(request: Request) {
-  const url    = new URL(request.url)
-  const code   = url.searchParams.get('code')
-  const next   = url.searchParams.get('next') ?? '/dashboard'
-  const type   = url.searchParams.get('type')
-  const origin = url.origin
+  const url     = new URL(request.url)
+  const code    = url.searchParams.get('code')
+  const rawNext = url.searchParams.get('next')
+  const type    = url.searchParams.get('type')
+  const origin  = url.origin
+
+  // `next` só é aceito se for um path relativo de verdade — sem isso, um valor tipo
+  // "//evil.com" (protocol-relative) concatenado direto na URL de redirect vira um
+  // open redirect (CWE-601). Hoje a concatenação simples de string já neutraliza um
+  // "https://evil.com" completo, mas essa validação explícita não depende de
+  // continuar sendo concatenação em vez de uma resolução de URL no futuro.
+  const next = rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/dashboard'
 
   if (code) {
     const supabase = await createSupabaseServer()

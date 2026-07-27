@@ -32,6 +32,8 @@ export async function GET(_req: Request, { params }: RouteContext) {
       )
       .eq('wedding_id', wid)
       .order('created_at', { ascending: true })
+      // Defesa em profundidade: só evita devolver a tabela inteira em caso de edge case.
+      .limit(1000)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar mesas.')
 

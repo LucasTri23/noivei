@@ -3,6 +3,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { UpdatePlanSchema } from '@/lib/api/validation/admin-plan.schema'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 interface RouteContext {
@@ -14,6 +15,10 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     await requireAdmin(supabase, user.id)
+
+    const limitCheck = await checkRateLimit(supabase, `admin-plan-write:${user.id}`, 50, 3600)
+    if (!limitCheck.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+
     const { id } = await params
 
     const body = await parseJsonBody(req)
@@ -47,6 +52,10 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     await requireAdmin(supabase, user.id)
+
+    const limitCheck = await checkRateLimit(supabase, `admin-plan-write:${user.id}`, 50, 3600)
+    if (!limitCheck.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+
     const { id } = await params
 
     const { count, error: countError } = await supabase

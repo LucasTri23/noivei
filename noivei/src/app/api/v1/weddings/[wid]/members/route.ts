@@ -32,6 +32,9 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .select('id, wedding_id, user_id, role, permissions, created_at')
       .eq('wedding_id', wid)
       .order('created_at', { ascending: true })
+      // Defesa em profundidade: checkMemberLimit já restringe quantos membros um
+      // casamento pode ter; este teto só evita devolver a tabela inteira.
+      .limit(500)
 
     if (membersError) return err(500, 'DB_ERROR', 'Erro ao listar membros.')
 

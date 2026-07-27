@@ -25,6 +25,10 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .eq('wedding_id', wid)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
+      // Defesa em profundidade: os limites do plano já restringem o volume real de
+      // itens; este teto só evita que uma linha corrompida/edge case devolva a tabela
+      // inteira.
+      .limit(1000)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar itens do checklist.')
 

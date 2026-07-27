@@ -19,15 +19,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq('id', user.id)
     .maybeSingle()
 
-  // Log temporário de diagnóstico (aparece nos Function Logs da Vercel) — sem isso,
-  // uma falha na consulta (RLS, erro de rede etc.) e "não é admin de verdade" davam
-  // exatamente o mesmo 404, sem jeito de distinguir os dois casos à distância.
-  console.log('[admin-layout] checagem de acesso:', {
-    userId: user.id,
-    email:  user.email,
-    role:   profile?.role ?? null,
-    error:  profileError?.message ?? null,
-  })
+  // Log temporário de diagnóstico (aparece nos Function Logs da Vercel) — só quando a
+  // consulta falha de verdade (RLS, erro de rede etc.), pra distinguir esse caso de
+  // "não é admin de verdade" (que também cai no mesmo 404). Não loga em todo acesso
+  // (evita registrar PII de quem só testou a URL) nem inclui e-mail (PII).
+  if (profileError) {
+    console.log('[admin-layout] erro ao checar acesso:', {
+      userId: user.id,
+      error:  profileError.message,
+    })
+  }
 
   if (profile?.role !== 'admin') notFound()
 

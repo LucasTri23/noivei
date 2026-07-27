@@ -8,6 +8,7 @@ export const PUBLIC_ROUTES = [
   '/signup',
   '/verify',
   '/forgot-password',
+  '/reset-password',
   '/rsvp',
   '/convite',
   '/auth/callback',

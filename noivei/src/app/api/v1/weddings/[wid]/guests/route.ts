@@ -38,7 +38,10 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (parsed.data.status) query = query.eq('status', parsed.data.status)
     if (parsed.data.group_name) query = query.eq('group_name', parsed.data.group_name)
 
-    const { data, error } = await query
+    // Defesa em profundidade: checkGuestLimit já restringe o volume real de convidados
+    // pelo plano; o teto aqui é mais alto que o das outras coleções porque casamentos
+    // grandes legitimamente têm centenas/poucos milhares de convidados.
+    const { data, error } = await query.limit(2000)
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar convidados.')
 

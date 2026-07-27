@@ -80,7 +80,10 @@ export default function SignupPage() {
       },
     })
     if (error) {
-      setServerError(error.message)
+      // Nunca repassar error.message cru: mensagens como "User already registered"
+      // confirmam pra quem está atacando se um e-mail já tem conta (enumeração de
+      // usuário). Mostramos sempre uma mensagem genérica, sem confirmar nem negar.
+      setServerError('Não foi possível criar a conta. Se você já tem cadastro, tente entrar.')
       setLoading(false)
       resetCaptcha()
       return

@@ -3,6 +3,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { UpsertPlanFeatureValueSchema } from '@/lib/api/validation/admin-plan-features.schema'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 // Uma célula da matriz por vez (feature_id + group_key) — a UI salva ao sair do
@@ -12,6 +13,12 @@ export async function PUT(req: Request) {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     await requireAdmin(supabase, user.id)
+
+    // Salva uma célula por vez (ver comentário acima) — uma edição em massa na matriz
+    // legitimamente gera dezenas de chamadas, então o teto aqui é mais alto que o das
+    // outras rotas de admin.
+    const limitCheck = await checkRateLimit(supabase, `admin-plan-feature-value-write:${user.id}`, 150, 3600)
+    if (!limitCheck.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
 
     const body = await parseJsonBody(req)
     const parsed = UpsertPlanFeatureValueSchema.safeParse(body)
