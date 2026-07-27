@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import TurnstileWidget from '@/components/auth/turnstile-widget'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
 const SignupSchema = z.object({
@@ -29,12 +30,29 @@ export default function SignupPage() {
   const router = useRouter()
   const [serverError, setServerError] = useState('')
   const [loading, setLoading]         = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [turnstileKey, setTurnstileKey] = useState(0)
 
   const { register, handleSubmit, formState: { errors } } = useForm<SignupFields>({
     resolver: zodResolver(SignupSchema),
   })
 
+  // Token do Turnstile é de uso único — qualquer falha abaixo (rate limit, e-mail já
+  // cadastrado etc.) invalida o token já usado; sem pedir um novo, uma segunda
+  // tentativa reenviaria o mesmo token e falharia de novo na verificação do Supabase,
+  // mesmo corrigindo o campo que causou o erro original. Trocar a key força o React a
+  // desmontar/remontar o widget (criando um token novo do zero).
+  function resetCaptcha() {
+    setCaptchaToken(null)
+    setTurnstileKey((k) => k + 1)
+  }
+
   async function onSubmit(data: SignupFields) {
+    if (!captchaToken) {
+      setServerError('Confirme que você não é um robô.')
+      return
+    }
+
     setLoading(true)
     setServerError('')
 
@@ -47,6 +65,7 @@ export default function SignupPage() {
       const body = await limitCheck.json().catch(() => null)
       setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
       setLoading(false)
+      resetCaptcha()
       return
     }
 
@@ -57,11 +76,13 @@ export default function SignupPage() {
       options: {
         data: { full_name: data.full_name },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        captchaToken,
       },
     })
     if (error) {
       setServerError(error.message)
       setLoading(false)
+      resetCaptcha()
       return
     }
     router.push(`/verify?email=${encodeURIComponent(data.email)}`)
@@ -130,6 +151,10 @@ export default function SignupPage() {
           </span>
         </label>
         {errors.terms && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.terms.message}</p>}
+
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <TurnstileWidget key={turnstileKey} onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
+        </div>
 
         {serverError && (
           <p style={{ fontSize: '13.5px', color: '#C0553F', background: '#FBEEE6', padding: '10px 14px', borderRadius: '10px' }}>

@@ -123,7 +123,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         >
           {children}
         </main>
-        <MobileBottomNav />
+        <MobileBottomNav visibleModules={visibleModules} isFreePlan={!isPaidPlan(planId)} />
       </div>
     </div>
   )
