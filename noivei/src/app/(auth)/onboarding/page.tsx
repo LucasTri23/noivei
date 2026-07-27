@@ -280,29 +280,26 @@ export default function OnboardingPage() {
       }
     }
 
-    // Cadastro cria assinatura gratuita via trigger — plano pago atualiza a existente
-    // (mesmo padrão simulado do PlanSelector; gateway real é escopo da Fase 2).
-    // O casamento já foi criado com sucesso acima — uma falha só nesta parte não deve
-    // travar a entrada no dashboard, só avisar que o plano precisa ser escolhido de novo.
+    // Casamento já foi criado com sucesso acima — plano pago NUNCA é ativado direto
+    // aqui: passa pelo mesmo checkout do Mercado Pago que /perfil/planos usa, e só
+    // fica 'active' de fato quando o webhook confirmar o pagamento. Sem isso, dava
+    // pra "assinar" um plano pago no onboarding sem nunca ser cobrado.
     if (paidPlan) {
-      try {
-        const { data: subscription } = await supabase
-          .from('subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+      const checkoutRes = await fetch('/api/v1/billing/checkout', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ plan_id: data.plan }),
+      })
+      const checkoutBody = (await checkoutRes.json().catch(() => null)) as { data?: { redirect_url: string }; error?: { message: string } } | null
 
-        if (subscription) {
-          await supabase.from('subscriptions').update({ plan_id: data.plan }).eq('id', subscription.id)
-        } else {
-          await supabase.from('subscriptions').insert({ user_id: user.id, plan_id: data.plan, status: 'active' })
-        }
-      } catch {
-        toastError('Seu casamento foi criado, mas não foi possível ativar o plano pago agora — escolha de novo em Perfil > Planos.')
+      if (!checkoutRes.ok || !checkoutBody?.data?.redirect_url) {
+        toastError('Seu casamento foi criado! Não foi possível iniciar o pagamento agora — escolha o plano em Perfil > Planos quando quiser.')
+        router.push('/dashboard')
+        return
       }
+
+      window.location.assign(checkoutBody.data.redirect_url)
+      return
     }
 
     router.push('/dashboard')
