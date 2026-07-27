@@ -248,7 +248,7 @@ export interface Subscription {
   current_period_start: string | null
   current_period_end:   string | null
   cancel_at_period_end: boolean
-  gateway:         'stripe' | 'pagarme' | null
+  gateway:         'stripe' | 'pagarme' | 'mercadopago' | null
   gateway_sub_id:  string | null
   expires_at:      string | null
   created_at:      string

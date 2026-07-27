@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
@@ -75,6 +75,27 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
   const [couponCode, setCouponCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
 
+  // Volta do checkout do Mercado Pago com ?checkout=sucesso|falha|pendente|retorno
+  // (ver back_urls/back_url em /api/v1/billing/checkout) — a ativação de verdade do
+  // plano só acontece pelo webhook, então mesmo "sucesso" aqui é só "em processamento".
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const checkout = params.get('checkout')
+    if (!checkout) return
+
+    if (checkout === 'sucesso' || checkout === 'retorno') {
+      toastSuccess('Pagamento recebido! Seu plano será atualizado assim que a confirmação chegar (pode levar alguns instantes).')
+    } else if (checkout === 'pendente') {
+      toastSuccess('Pagamento pendente de confirmação. Assim que for aprovado, seu plano é atualizado automaticamente.')
+    } else if (checkout === 'falha') {
+      toastError('Pagamento não foi concluído. Você pode tentar novamente quando quiser.')
+    }
+
+    window.history.replaceState(null, '', window.location.pathname)
+    router.refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só deve rodar uma vez, ao montar (lendo a URL de retorno do checkout)
+  }, [])
+
   const valueByFeatureAndGroup = new Map(values.map((v) => [`${v.feature_id}:${v.group_key}`, v.value]))
   const featuresByCategory = new Map<string, PlanFeature[]>()
   features.forEach((feature) => {
@@ -104,9 +125,32 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
   }
 
   async function selectPlan(planId: string) {
-    setSwitching(planId)
+    const plan = plans.find((p) => p.id === planId)
 
-    // TODO Fase 2: integrar gateway de pagamento real (Stripe/Pagar.me) antes de processar cobrança de verdade
+    // Plano pago: não grava nada direto — cria o checkout no Mercado Pago e
+    // redireciona. A assinatura só vira 'active' de fato quando o webhook confirmar
+    // o pagamento (ver /api/v1/webhooks/mercadopago).
+    if (plan && plan.price_brl > 0) {
+      setSwitching(planId)
+      const res = await fetch('/api/v1/billing/checkout', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ plan_id: planId }),
+      })
+      const resBody = (await res.json().catch(() => null)) as { data?: { redirect_url: string }; error?: { message: string } } | null
+
+      if (!res.ok || !resBody?.data?.redirect_url) {
+        setSwitching(null)
+        toastError(resBody?.error?.message ?? 'Não foi possível iniciar o pagamento. Tente novamente.')
+        return
+      }
+
+      window.location.assign(resBody.data.redirect_url)
+      return
+    }
+
+    // Plano Gratuito: sem pagamento nenhum, grava direto.
+    setSwitching(planId)
     const supabase = createSupabaseBrowser()
     const { error: dbError } = subscriptionId
       ? await supabase
