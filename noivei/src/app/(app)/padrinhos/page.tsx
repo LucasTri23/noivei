@@ -16,7 +16,7 @@ async function PadrinhosContent() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id')
+    .select('id, couple_names, bride_name, groom_name, couple_entrance_position')
     .is('deleted_at', null)
     .order('created_at')
     .limit(1)
@@ -34,6 +34,11 @@ async function PadrinhosContent() {
   }
 
   const weddingId = wedding.id as string
+  const brideName = wedding.bride_name as string | null
+  const groomName = wedding.groom_name as string | null
+  const coupleEntranceLabel = groomName && brideName
+    ? `${groomName} & ${brideName}`
+    : (wedding.couple_names as string)
 
   // Não exige RSVP confirmado pra entrar no cortejo — padrinho é papel de
   // organização, independente de já ter confirmado presença.
@@ -61,6 +66,8 @@ async function PadrinhosContent() {
       initialEntries={entries}
       confirmedGuests={(confirmedGuests ?? []) as ConfirmedGuest[]}
       entryLimit={limitCheck.limit}
+      coupleEntranceLabel={coupleEntranceLabel}
+      coupleEntrancePosition={wedding.couple_entrance_position as number}
     />
   )
 }

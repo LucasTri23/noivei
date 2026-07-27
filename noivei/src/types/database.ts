@@ -45,6 +45,7 @@ export interface Wedding {
   couple_names:   string
   bride_name:     string | null
   groom_name:     string | null
+  couple_entrance_position: number
   wedding_date:   string
   venue:          string | null
   city:           string | null

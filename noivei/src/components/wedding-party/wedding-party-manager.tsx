@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
+import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { Guest, WeddingPartyEntry } from '@/types/database'
 
@@ -18,10 +19,14 @@ export interface WeddingPartyEntryWithGuest extends WeddingPartyEntry {
 }
 
 interface WeddingPartyManagerProps {
-  weddingId:       string
-  initialEntries:  WeddingPartyEntryWithGuest[]
-  confirmedGuests: ConfirmedGuest[]
-  entryLimit:      number
+  weddingId:              string
+  initialEntries:         WeddingPartyEntryWithGuest[]
+  confirmedGuests:        ConfirmedGuest[]
+  entryLimit:             number
+  // Nomes reais do casal — fixos, não editáveis por aqui (edição fica em Perfil >
+  // Dados do casamento). Só a posição de entrada deles no cortejo pode mudar.
+  coupleEntranceLabel:    string
+  coupleEntrancePosition: number
 }
 
 interface ApiErrorBody {
@@ -103,8 +108,11 @@ function isPadrinhoOuMadrinha(role: string): boolean {
   return normalized === 'padrinho' || normalized === 'madrinha'
 }
 
-export default function WeddingPartyManager({ weddingId, initialEntries, confirmedGuests, entryLimit }: WeddingPartyManagerProps) {
+export default function WeddingPartyManager({
+  weddingId, initialEntries, confirmedGuests, entryLimit, coupleEntranceLabel, coupleEntrancePosition,
+}: WeddingPartyManagerProps) {
   const [entries, setEntries]           = useState<WeddingPartyEntryWithGuest[]>(initialEntries)
+  const [couplePosition, setCouplePosition] = useState(coupleEntrancePosition)
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
   const [form, setForm]                 = useState(EMPTY_FORM)
@@ -259,6 +267,32 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
     if (!ok) {
       setEntries(previous)
       toastError('Não foi possível reordenar o cortejo.')
+    }
+  }
+
+  // Posição dos noivos é independente do sort_order das entradas — é só "depois de
+  // quantas entradas do cortejo eles entram" (0 = primeiro de todos). Mover não
+  // renumera ninguém, só muda esse contador; por isso não usa persistSortOrder nem
+  // passa por /api/v1/weddings — igual ao padrão já usado em WeddingDataForm (update
+  // direto via client autenticado, RLS de "users can update own weddings" cobre).
+  async function moveCouple(direction: 'up' | 'down') {
+    const rowCount = buildRows().length
+    const clamped  = Math.min(couplePosition, rowCount)
+    const next     = direction === 'up' ? clamped - 1 : clamped + 1
+    if (next < 0 || next > rowCount) return
+
+    const previous = couplePosition
+    setCouplePosition(next)
+
+    const supabase = createSupabaseBrowser()
+    const { error } = await supabase
+      .from('weddings')
+      .update({ couple_entrance_position: next })
+      .eq('id', weddingId)
+
+    if (error) {
+      setCouplePosition(previous)
+      toastError('Não foi possível reordenar a entrada dos noivos.')
     }
   }
 
@@ -533,6 +567,22 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
   }
 
   const cortejoRows = buildRows()
+  // Quantas entradas do cortejo aparecem antes dos noivos — se entradas foram
+  // removidas depois da última vez que essa posição foi salva, só ajusta a EXIBIÇÃO
+  // (clamp); a próxima vez que o casal mover a entrada, o valor salvo se corrige.
+  const clampedCouplePosition = Math.min(couplePosition, cortejoRows.length)
+
+  type DisplaySlot =
+    | { kind: 'couple' }
+    | { kind: 'entry'; row: CortejoRow; entryIdx: number }
+
+  const displaySlots: DisplaySlot[] = [
+    ...cortejoRows.slice(0, clampedCouplePosition).map((row, i) => ({ kind: 'entry' as const, row, entryIdx: i })),
+    { kind: 'couple' as const },
+    ...cortejoRows
+      .slice(clampedCouplePosition)
+      .map((row, i) => ({ kind: 'entry' as const, row, entryIdx: i + clampedCouplePosition })),
+  ]
 
   return (
     <div>
@@ -601,32 +651,73 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
 
       {/* Lista do cortejo */}
       <div className="overflow-hidden rounded-2xl bg-[var(--surface)]" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-        {/* Entrada dos noivos — sempre a primeira, informativa */}
-        <div
-          className="flex flex-wrap items-center gap-4 px-5 py-4"
-          style={{ borderBottom: '1px solid #F8F3EE', background: 'var(--wedding-color-subtle)' }}
-        >
-          <div
-            style={{
-              width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
-              background: 'var(--wedding-color)', color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 700, fontSize: '13px',
-            }}
-          >
-            1
-          </div>
-          <div style={{ flex: 1, minWidth: '160px' }}>
-            <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--fg)' }}>
-              Entrada dos noivos
-            </div>
-            <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
-              Sempre a entrada final do cortejo — não precisa ser cadastrada.
-            </div>
-          </div>
-        </div>
+        {displaySlots.map((slot, displayIdx) => {
+          const isLastSlot = displayIdx === displaySlots.length - 1
 
-        {cortejoRows.map((row, idx) => {
+          if (slot.kind === 'couple') {
+            const upDisabled   = clampedCouplePosition === 0
+            const downDisabled = clampedCouplePosition === cortejoRows.length
+            return (
+              <div
+                key="couple-entrance"
+                className="flex flex-wrap items-center gap-4 px-5 py-4"
+                style={{ borderBottom: isLastSlot ? 'none' : '1px solid #F8F3EE', background: 'var(--wedding-color-subtle)' }}
+              >
+                <div
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                    background: 'var(--wedding-color)', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: '13px',
+                  }}
+                >
+                  {displayIdx + 1}
+                </div>
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--fg)' }}>
+                    Entrada dos noivos <span style={{ fontWeight: 400, color: 'var(--muted-fg)' }}>· {coupleEntranceLabel}</span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
+                    Nome fixo — use as setas para decidir em que momento do cortejo os noivos entram.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => moveCouple('up')}
+                    disabled={upDisabled}
+                    aria-label="Mover entrada dos noivos para cima"
+                    title="Mover para cima"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: '26px', height: '26px', borderRadius: '8px',
+                      border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+                      cursor: upDisabled ? 'not-allowed' : 'pointer', opacity: upDisabled ? 0.35 : 1, padding: 0,
+                    }}
+                  >
+                    <ArrowUpIcon />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveCouple('down')}
+                    disabled={downDisabled}
+                    aria-label="Mover entrada dos noivos para baixo"
+                    title="Mover para baixo"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: '26px', height: '26px', borderRadius: '8px',
+                      border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+                      cursor: downDisabled ? 'not-allowed' : 'pointer', opacity: downDisabled ? 0.35 : 1, padding: 0,
+                    }}
+                  >
+                    <ArrowDownIcon />
+                  </button>
+                </div>
+              </div>
+            )
+          }
+
+          const { row, entryIdx } = slot
           const showCasalTag = Boolean(
             row.partner && isPadrinhoOuMadrinha(row.primary.role) && isPadrinhoOuMadrinha(row.partner.role),
           )
@@ -634,7 +725,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
             <div
               key={row.primary.id}
               className="flex flex-wrap items-center gap-4 px-5 py-4"
-              style={{ borderBottom: idx < cortejoRows.length - 1 ? '1px solid #F8F3EE' : 'none' }}
+              style={{ borderBottom: isLastSlot ? 'none' : '1px solid #F8F3EE' }}
             >
               <div
                 style={{
@@ -644,7 +735,7 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
                   fontWeight: 700, fontSize: '13px', alignSelf: 'flex-start',
                 }}
               >
-                {idx + 2}
+                {displayIdx + 1}
               </div>
               <div style={{ flex: 1, minWidth: '200px' }}>
                 {renderPersonLine(row.primary, !row.partner)}
@@ -664,31 +755,31 @@ export default function WeddingPartyManager({ weddingId, initialEntries, confirm
               <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0, alignSelf: 'flex-start' }}>
                 <button
                   type="button"
-                  onClick={() => handleMoveRow(idx, 'up')}
-                  disabled={idx === 0}
+                  onClick={() => handleMoveRow(entryIdx, 'up')}
+                  disabled={entryIdx === 0}
                   aria-label="Mover para cima"
                   title="Mover para cima"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: '26px', height: '26px', borderRadius: '8px',
                     border: 'none', background: 'transparent', color: 'var(--muted-fg)',
-                    cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.35 : 1, padding: 0,
+                    cursor: entryIdx === 0 ? 'not-allowed' : 'pointer', opacity: entryIdx === 0 ? 0.35 : 1, padding: 0,
                   }}
                 >
                   <ArrowUpIcon />
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleMoveRow(idx, 'down')}
-                  disabled={idx === cortejoRows.length - 1}
+                  onClick={() => handleMoveRow(entryIdx, 'down')}
+                  disabled={entryIdx === cortejoRows.length - 1}
                   aria-label="Mover para baixo"
                   title="Mover para baixo"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: '26px', height: '26px', borderRadius: '8px',
                     border: 'none', background: 'transparent', color: 'var(--muted-fg)',
-                    cursor: idx === cortejoRows.length - 1 ? 'not-allowed' : 'pointer',
-                    opacity: idx === cortejoRows.length - 1 ? 0.35 : 1, padding: 0,
+                    cursor: entryIdx === cortejoRows.length - 1 ? 'not-allowed' : 'pointer',
+                    opacity: entryIdx === cortejoRows.length - 1 ? 0.35 : 1, padding: 0,
                   }}
                 >
                   <ArrowDownIcon />

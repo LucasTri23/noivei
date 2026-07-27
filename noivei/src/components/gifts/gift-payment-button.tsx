@@ -23,20 +23,27 @@ export default function GiftPaymentButton({ giftId, giftName }: GiftPaymentButto
     if (loading) return
     setLoading(true)
 
-    const res = await fetch(`/api/v1/gifts/${giftId}/checkout`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ guest_name: guestName.trim() || null }),
-    })
-    const body = (await res.json().catch(() => null)) as { data?: { redirect_url: string }; error?: { message: string } } | null
+    try {
+      const res = await fetch(`/api/v1/gifts/${giftId}/checkout`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ guest_name: guestName.trim() || null }),
+      })
+      const body = (await res.json().catch(() => null)) as { data?: { redirect_url: string }; error?: { message: string } } | null
 
-    if (!res.ok || !body?.data?.redirect_url) {
+      if (!res.ok || !body?.data?.redirect_url) {
+        setLoading(false)
+        toastError(body?.error?.message ?? 'Não foi possível iniciar o pagamento. Tente novamente.')
+        return
+      }
+
+      window.location.assign(body.data.redirect_url)
+    } catch {
+      // fetch rejeitado (rede caiu, etc.) — sem isso, loading nunca voltava a false e o
+      // botão ficava preso em "Aguarde…" pra sempre, sem nenhuma mensagem de erro.
       setLoading(false)
-      toastError(body?.error?.message ?? 'Não foi possível iniciar o pagamento. Tente novamente.')
-      return
+      toastError('Não foi possível iniciar o pagamento. Verifique sua conexão e tente novamente.')
     }
-
-    window.location.assign(body.data.redirect_url)
   }
 
   return (
