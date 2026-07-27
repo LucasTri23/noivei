@@ -45,11 +45,35 @@ export async function POST(req: Request) {
       return err(400, 'EMAIL_REQUIRED', 'Sua conta precisa de um e-mail para assinar um plano recorrente.')
     }
 
+    // Cupom percent/fixed já resgatado (ver /api/v1/coupons/redeem) e ainda não usado
+    // em nenhum pagamento — reduz o valor cobrado agora; só é marcado como "gasto" de
+    // fato quando o webhook confirmar o pagamento (ver fn_get_pending_coupon_discount).
+    const { data: pendingDiscount } = (await supabase
+      .rpc('fn_get_pending_coupon_discount', { p_user_id: user.id, p_plan_id: plan.id })
+      .maybeSingle()) as { data: { redemption_id: string; discount_type: string; discount_value: number } | null }
+
+    let amountCents = plan.price_brl
+    if (pendingDiscount) {
+      amountCents = pendingDiscount.discount_type === 'percent'
+        ? Math.round(plan.price_brl * (1 - pendingDiscount.discount_value / 100))
+        : plan.price_brl - pendingDiscount.discount_value
+      // Mercado Pago não aceita valor zero/negativo — um cupom generoso demais some
+      // no chão de 1 centavo em vez de quebrar a criação do checkout.
+      amountCents = Math.max(1, amountCents)
+    }
+    const discountBrl = plan.price_brl - amountCents
+
     const mpReference = crypto.randomUUID()
 
     const { data: checkout, error: checkoutError } = await supabase
       .from('payment_checkouts')
-      .insert({ user_id: user.id, plan_id: plan.id, mp_reference: mpReference })
+      .insert({
+        user_id:              user.id,
+        plan_id:              plan.id,
+        mp_reference:         mpReference,
+        coupon_redemption_id: pendingDiscount?.redemption_id ?? null,
+        discount_brl:         discountBrl,
+      })
       .select('id')
       .single()
 
@@ -57,7 +81,7 @@ export async function POST(req: Request) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin
     const notificationUrl = `${appUrl}/api/v1/webhooks/mercadopago`
-    const amountBrl = plan.price_brl / 100
+    const amountBrl = amountCents / 100
 
     try {
       const result = plan.billing_interval === 'monthly'

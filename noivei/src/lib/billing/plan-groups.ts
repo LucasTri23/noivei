@@ -7,3 +7,18 @@
 export function effectiveGroupKey(plan: { id: string; group_key: string | null }): string {
   return plan.group_key || plan.id
 }
+
+// Agrupa uma lista de planos pelo group_key efetivo, preservando a ordem de
+// chegada — usado em qualquer tela que renderiza os planos como cards com
+// variantes de cobrança (toggle mensal/único), pra garantir que todas calculam
+// os mesmos grupos a partir da mesma lista de planos ativos.
+export function groupPlans<T extends { id: string; group_key: string | null }>(plans: T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>()
+  for (const plan of plans) {
+    const key = effectiveGroupKey(plan)
+    const list = groups.get(key) ?? []
+    list.push(plan)
+    groups.set(key, list)
+  }
+  return groups
+}

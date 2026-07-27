@@ -37,6 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin/planos',           label: 'Planos & limites' },
     { href: '/admin/planos/features',  label: 'Tabela de comparação' },
     { href: '/admin/cupons',           label: 'Cupons' },
+    { href: '/admin/configuracoes',    label: 'Configurações' },
   ]
 
   return (

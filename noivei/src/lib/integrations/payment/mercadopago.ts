@@ -12,10 +12,29 @@ function getAccessToken(): string {
   return token
 }
 
+// Credenciais OAuth da "Application" da Wednest no Mercado Pago — diferentes do
+// MERCADOPAGO_ACCESS_TOKEN acima (aquele é só um token nosso, usado pra vender a
+// própria assinatura). Estas autorizam a Wednest a agir como marketplace: cada casal
+// conecta a PRÓPRIA conta MP (fluxo OAuth), e o presente do convidado é processado
+// com o token do casal, não o nosso — ver /api/v1/weddings/[wid]/gift-payments.
+function getOAuthClientId(): string {
+  const id = process.env.MERCADOPAGO_CLIENT_ID
+  if (!id) throw new Error('MERCADOPAGO_CLIENT_ID não configurado.')
+  return id
+}
+
+function getOAuthClientSecret(): string {
+  const secret = process.env.MERCADOPAGO_CLIENT_SECRET
+  if (!secret) throw new Error('MERCADOPAGO_CLIENT_SECRET não configurado.')
+  return secret
+}
+
 // Token de teste (sandbox) sempre começa com "TEST-" — usado pra decidir se o
-// usuário deve ser redirecionado pro checkout de sandbox ou de produção.
-function isSandbox(): boolean {
-  return getAccessToken().startsWith('TEST-')
+// usuário deve ser redirecionado pro checkout de sandbox ou de produção. Recebe o
+// token que de fato foi usado pra criar o checkout (nosso ou o do casal conectado
+// via OAuth) — sandbox é decidido pelo token da transação, não sempre pelo nosso.
+function isSandboxToken(accessToken: string): boolean {
+  return accessToken.startsWith('TEST-')
 }
 
 export interface CheckoutResult {
@@ -31,13 +50,29 @@ interface CreatePreferenceParams {
   failureUrl:        string
   pendingUrl:        string
   notificationUrl:   string
+  // Presente de convidado (Fase 2): usa o token OAuth do CASAL (não o nosso) e retém
+  // a comissão da Wednest via marketplace_fee — omitidos, é uma preferência normal
+  // nossa (ex.: assinatura). accessToken ausente cai no nosso próprio token.
+  accessToken?:       string
+  marketplaceFeeBrl?: number
 }
 
-/** Cria uma Preferência de pagamento avulso (Checkout Pro) — planos com billing_interval 'once'. */
+/**
+ * Cria uma Preferência de pagamento avulso (Checkout Pro) — usada tanto pra planos
+ * com billing_interval 'once' (token nosso) quanto pra presentes de convidado (token
+ * OAuth do casal + marketplace_fee, ver gift-payments/checkout). `marketplace_fee` é
+ * o campo documentado pela API de Preferences do Mercado Pago pra reter uma comissão
+ * de marketplace num pagamento que cai na conta de terceiro — CONFERIR contra a doc
+ * atual do MP/testar no sandbox antes de confiar em produção (assim como o formato
+ * de x-signature abaixo, o Mercado Pago já mudou nome de campo de marketplace entre
+ * versões da documentação).
+ */
 export async function createOneTimeCheckout(params: CreatePreferenceParams): Promise<CheckoutResult> {
+  const accessToken = params.accessToken ?? getAccessToken()
+
   const res = await fetch(`${MP_API_BASE}/checkout/preferences`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken()}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({
       items: [{
         title:       params.itemTitle,
@@ -53,6 +88,7 @@ export async function createOneTimeCheckout(params: CreatePreferenceParams): Pro
       },
       auto_return:      'approved',
       notification_url: params.notificationUrl,
+      ...(params.marketplaceFeeBrl != null ? { marketplace_fee: params.marketplaceFeeBrl } : {}),
     }),
   })
 
@@ -61,7 +97,7 @@ export async function createOneTimeCheckout(params: CreatePreferenceParams): Pro
   }
 
   const data = (await res.json()) as { id: string; init_point: string; sandbox_init_point: string }
-  return { id: data.id, redirectUrl: isSandbox() ? data.sandbox_init_point : data.init_point }
+  return { id: data.id, redirectUrl: isSandboxToken(accessToken) ? data.sandbox_init_point : data.init_point }
 }
 
 interface CreatePreapprovalParams {
@@ -131,6 +167,16 @@ export async function fetchPreapproval(preapprovalId: string): Promise<MpPreappr
   return (await res.json()) as MpPreapproval
 }
 
+/** Cancela uma assinatura recorrente — para as cobranças futuras (não reembolsa o que já foi pago). */
+export async function cancelPreapproval(preapprovalId: string): Promise<void> {
+  const res = await fetch(`${MP_API_BASE}/preapproval/${preapprovalId}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken()}` },
+    body:    JSON.stringify({ status: 'cancelled' }),
+  })
+  if (!res.ok) throw new Error(`Mercado Pago (cancel preapproval) ${res.status}: ${await res.text()}`)
+}
+
 /**
  * Valida a assinatura do webhook (header x-signature) — sem isso, qualquer um
  * poderia forjar uma notificação de "pagamento aprovado" e ganhar o plano de graça.
@@ -168,4 +214,86 @@ export function verifyWebhookSignature(params: {
   const providedBuf = Buffer.from(v1, 'hex')
   if (expectedBuf.length !== providedBuf.length) return false
   return timingSafeEqual(expectedBuf, providedBuf)
+}
+
+// =========================================================
+// OAuth marketplace — cada casal conecta a PRÓPRIA conta Mercado Pago pra receber
+// presentes de convidado direto, sem o dinheiro passar pela conta da Wednest. Ver
+// /api/v1/weddings/[wid]/gift-payments/{connect,disconnect,status} e
+// /api/v1/billing/mp-oauth-callback.
+// =========================================================
+
+/** Monta a URL de autorização — o casal loga no MP dele e autoriza a Wednest. */
+export function getOAuthAuthorizationUrl(redirectUri: string, state: string): string {
+  const params = new URLSearchParams({
+    client_id:     getOAuthClientId(),
+    response_type: 'code',
+    platform_id:   'mp',
+    redirect_uri:  redirectUri,
+    state,
+  })
+  return `https://auth.mercadopago.com/authorization?${params.toString()}`
+}
+
+export interface OAuthTokenResult {
+  accessToken:  string
+  refreshToken: string
+  expiresIn:    number // segundos até expirar
+  mpUserId:     string
+}
+
+async function parseOAuthTokenResponse(res: Response): Promise<OAuthTokenResult> {
+  if (!res.ok) throw new Error(`Mercado Pago (oauth/token) ${res.status}: ${await res.text()}`)
+
+  const data = (await res.json()) as {
+    access_token: string; refresh_token: string; expires_in: number; user_id: number
+  }
+  return {
+    accessToken:  data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn:    data.expires_in,
+    mpUserId:     String(data.user_id),
+  }
+}
+
+/** Troca o `code` do redirect de autorização pelo access_token/refresh_token do casal. */
+export async function exchangeOAuthCode(code: string, redirectUri: string): Promise<OAuthTokenResult> {
+  const res = await fetch(`${MP_API_BASE}/oauth/token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id:     getOAuthClientId(),
+      client_secret: getOAuthClientSecret(),
+      grant_type:    'authorization_code',
+      code,
+      redirect_uri:  redirectUri,
+    }),
+  })
+  return parseOAuthTokenResponse(res)
+}
+
+/** Renova o access_token do casal usando o refresh_token guardado (token expira, refresh não). */
+export async function refreshOAuthAccessToken(refreshToken: string): Promise<OAuthTokenResult> {
+  const res = await fetch(`${MP_API_BASE}/oauth/token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id:     getOAuthClientId(),
+      client_secret: getOAuthClientSecret(),
+      grant_type:    'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  })
+  return parseOAuthTokenResponse(res)
+}
+
+/** Busca e-mail/nickname da conta MP recém-conectada, só pra exibir "conectado como X" na UI. */
+export async function fetchMpUserInfo(accessToken: string): Promise<{ email: string | null; nickname: string | null }> {
+  const res = await fetch(`${MP_API_BASE}/users/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) return { email: null, nickname: null }
+
+  const data = (await res.json()) as { email?: string; nickname?: string }
+  return { email: data.email ?? null, nickname: data.nickname ?? null }
 }

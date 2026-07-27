@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import GiftPaymentButton from '@/components/gifts/gift-payment-button'
+import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast'
 import { getPublicSiteBySlug, type PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
@@ -396,6 +398,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
         {/* Lista de presentes */}
         {site.gifts.length > 0 && (
           <section style={{ marginBottom: '56px' }}>
+            <GiftPaymentReturnToast />
             <SectionTitle>Lista de presentes</SectionTitle>
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))' }}>
               {site.gifts.map((gift) => (
@@ -435,12 +438,8 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                           Ver na loja
                         </a>
                       )}
-                      {/* Pagamento pelo app ainda não existe de fato — só sinaliza a intenção,
-                          sem processar nada (ver migration 20260722000003). */}
                       {!gift.is_purchased && gift.gift_type === 'app_payment' && (
-                        <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--muted-fg)' }}>
-                          Presentear pelo app · em breve
-                        </span>
+                        <GiftPaymentButton giftId={gift.id} giftName={gift.name} />
                       )}
                     </div>
                   </div>

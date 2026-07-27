@@ -5,21 +5,10 @@ import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
-import Spinner from '@/components/ui/spinner'
-import { effectiveGroupKey } from '@/lib/billing/plan-groups'
+import PlanCardsGrid, { fillPlanVariantSelection, type PlanCardPlan } from '@/components/billing/plan-cards-grid'
 import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
-export interface Plan {
-  id:            string
-  name:          string
-  description:   string | null
-  price_brl:     number
-  group_key:     string | null
-  billing_label: string | null
-  billing_note:  string | null
-  emoji:         string
-  highlight:     boolean
-}
+export type Plan = PlanCardPlan
 
 interface PlanSelectorProps {
   userId:         string
@@ -34,46 +23,40 @@ interface PlanSelectorProps {
   values:     PlanFeatureValue[]
 }
 
-function formatBrl(cents: number | undefined): string {
-  if (cents == null) return '—'
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)
-}
-
-function featureLine(label: string, value: string): { text: string; included: boolean } {
-  if (value === '❌') return { text: label, included: false }
-  if (value === '✅') return { text: label, included: true }
-  return { text: `${label}: ${value.replace(/^✅\s*/, '')}`, included: true }
-}
-
-function groupPlans(plans: Plan[]): Map<string, Plan[]> {
-  const groups = new Map<string, Plan[]>()
-  for (const plan of plans) {
-    const key = effectiveGroupKey(plan)
-    const list = groups.get(key) ?? []
-    list.push(plan)
-    groups.set(key, list)
-  }
-  return groups
-}
-
 export default function PlanSelector({ userId, currentPlanId, subscriptionId, plans, categories, features, values }: PlanSelectorProps) {
   const router = useRouter()
-  const groupedPlans = groupPlans(plans)
 
-  const [selectedVariant, setSelectedVariant] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {}
-    for (const [groupKey, variants] of groupedPlans) {
-      const current = variants.find((v) => v.id === currentPlanId)
-      // variants nunca é vazio — groupPlans só cria a entrada ao dar push do 1º item.
-      initial[groupKey] = current?.id ?? variants[0]!.id
-    }
-    return initial
-  })
+  const [selectedVariant, setSelectedVariant] = useState<Record<string, string>>(() =>
+    fillPlanVariantSelection(plans, currentPlanId, {}),
+  )
   const [switching, setSwitching] = useState<string | null>(null)
   const showSpinner = useDelayedLoading(switching !== null)
 
   const [couponCode, setCouponCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+
+  const currentPlan = plans.find((p) => p.id === currentPlanId)
+  // Só plano mensal (recorrente de verdade, cobrado até cancelar) tem o que
+  // cancelar — pagamento único já foi cobrado uma vez só e expira sozinho.
+  const canCancelSubscription = Boolean(currentPlan && currentPlan.billing_interval === 'monthly' && currentPlan.price_brl > 0)
+
+  async function cancelSubscription() {
+    if (!window.confirm('Deseja realmente cancelar sua assinatura? Você deixará de ser cobrado, mas perde o acesso aos recursos pagos.')) return
+
+    setCancelling(true)
+    const res = await fetch('/api/v1/billing/cancel-subscription', { method: 'POST' })
+    const body = (await res.json().catch(() => null)) as { error?: { message: string } } | null
+    setCancelling(false)
+
+    if (!res.ok) {
+      toastError(body?.error?.message ?? 'Não foi possível cancelar a assinatura. Tente novamente.')
+      return
+    }
+
+    toastSuccess('Assinatura cancelada. Você voltou para o plano Gratuito.')
+    router.refresh()
+  }
 
   // Volta do checkout do Mercado Pago com ?checkout=sucesso|falha|pendente|retorno
   // (ver back_urls/back_url em /api/v1/billing/checkout) — a ativação de verdade do
@@ -95,14 +78,6 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
     router.refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só deve rodar uma vez, ao montar (lendo a URL de retorno do checkout)
   }, [])
-
-  const valueByFeatureAndGroup = new Map(values.map((v) => [`${v.feature_id}:${v.group_key}`, v.value]))
-  const featuresByCategory = new Map<string, PlanFeature[]>()
-  features.forEach((feature) => {
-    const list = featuresByCategory.get(feature.category_id) ?? []
-    list.push(feature)
-    featuresByCategory.set(feature.category_id, list)
-  })
 
   async function redeemCoupon() {
     if (!couponCode.trim()) return
@@ -173,143 +148,52 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
   return (
     <div>
       {/* Cards */}
-      <div className="grid gap-4 mb-8" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px,1fr))', paddingTop: '14px' }}>
-        {Array.from(groupedPlans.entries()).map(([groupKey, variants]) => {
-          // variants nunca é vazio — mesma garantia de groupPlans.
-          const firstVariant = variants[0]!
-          const activeId = selectedVariant[groupKey] ?? firstVariant.id
-          const activePlan = variants.find((v) => v.id === activeId) ?? firstVariant
-          const isCurrent = activePlan.id === currentPlanId
-          const isSwitchingThis = switching === activePlan.id
-
-          return (
-            <div
-              key={groupKey}
-              className="rounded-2xl bg-[var(--surface)] p-6 flex flex-col"
-              style={{
-                boxShadow: activePlan.highlight
-                  ? '0 16px 36px color-mix(in srgb, var(--wedding-color) 24%, transparent)'
-                  : '0 8px 22px rgba(60,40,24,0.06)',
-                border: activePlan.highlight ? '1.5px solid var(--wedding-color)' : '1.5px solid transparent',
-                position: 'relative',
-                transform: activePlan.highlight ? 'scale(1.02)' : 'none',
-              }}
-            >
-              {activePlan.highlight && (
-                <span
-                  style={{
-                    position: 'absolute', top: '-11px', left: '50%', transform: 'translateX(-50%)',
-                    fontSize: '10px', fontWeight: 700, padding: '3px 12px', borderRadius: '99px',
-                    background: 'var(--wedding-color)', color: '#fff', letterSpacing: '0.08em',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  MAIS ESCOLHIDO
-                </span>
-              )}
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--muted-fg)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '10px' }}>
-                {activePlan.emoji} {activePlan.name}
-              </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                {variants.length > 1 && (
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
-                    {variants.map((variant) => {
-                      const active = variant.id === activeId
-                      return (
-                        <button
-                          key={variant.id}
-                          type="button"
-                          onClick={() => setSelectedVariant((prev) => ({ ...prev, [groupKey]: variant.id }))}
-                          style={{
-                            flex: 1, padding: '7px 8px', borderRadius: '9px', fontSize: '12px', minWidth: '90px',
-                            border: `1.5px solid ${active ? 'var(--wedding-color)' : '#EBDDD0'}`,
-                            background: active ? 'var(--wedding-color-subtle)' : 'transparent',
-                            color: active ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
-                            fontWeight: active ? 700 : 500, cursor: 'pointer', transition: 'all 0.18s',
-                          }}
-                        >
-                          {variant.billing_label ?? variant.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-                <span className="font-display" style={{ fontSize: '32px', fontWeight: 600, color: 'var(--fg)' }}>
-                  {formatBrl(activePlan.price_brl)}
-                  {activePlan.billing_note?.startsWith('/') && (
-                    <span style={{ fontSize: '15px', color: 'var(--muted-fg)', fontFamily: 'var(--font-body)' }}>{activePlan.billing_note}</span>
-                  )}
-                </span>
-                {activePlan.billing_note && !activePlan.billing_note.startsWith('/') && (
-                  <div style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>{activePlan.billing_note}</div>
-                )}
-              </div>
-
-              <p style={{ fontSize: '13px', color: 'var(--muted-fg)', lineHeight: 1.5, margin: '0 0 14px' }}>
-                {activePlan.description}
-              </p>
-
-              <div style={{ flex: 1, marginBottom: '20px' }}>
-                {categories.map((category) => {
-                  const rows = featuresByCategory.get(category.id) ?? []
-                  if (rows.length === 0) return null
-                  return (
-                    <div key={category.id} style={{ marginBottom: '16px' }}>
-                      <div style={{
-                        fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-                        color: 'var(--muted-fg)', marginBottom: '8px',
-                      }}>
-                        {category.title}
-                      </div>
-                      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                        {rows.map((feature) => {
-                          const rawValue = valueByFeatureAndGroup.get(`${feature.id}:${groupKey}`) ?? '❌'
-                          const { text, included } = featureLine(feature.label, rawValue)
-                          return (
-                            <li
-                              key={feature.id}
-                              style={{
-                                display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px',
-                                color: included ? 'var(--fg)' : 'var(--muted-fg)',
-                                opacity: included ? 1 : 0.6,
-                              }}
-                            >
-                              <span style={{ color: included ? 'var(--wedding-color)' : 'var(--muted-fg)', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}>
-                                {included ? '✓' : '✕'}
-                              </span>
-                              <span>{text}</span>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <button
-                type="button"
-                disabled={isCurrent || switching !== null}
-                onClick={() => selectPlan(activePlan.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
-                  width: '100%', border: 'none', borderRadius: '12px', padding: '13px',
-                  fontWeight: 700, fontSize: '14px',
-                  background: isCurrent ? '#F1EAE2' : 'var(--wedding-color)',
-                  color: isCurrent ? 'var(--muted-fg)' : '#fff',
-                  cursor: isCurrent || switching !== null ? 'not-allowed' : 'pointer',
-                  opacity: switching !== null && !isSwitchingThis ? 0.6 : 1,
-                  boxShadow: isCurrent ? 'none' : '0 8px 20px color-mix(in srgb, var(--wedding-color) 28%, transparent)',
-                }}
-              >
-                {isSwitchingThis && showSpinner && <Spinner size={15} color={isCurrent ? 'var(--muted-fg)' : '#fff'} />}
-                {isCurrent ? 'Plano atual' : isSwitchingThis ? 'Alterando…' : activePlan.price_brl === 0 ? 'Usar plano Gratuito' : 'Assinar'}
-              </button>
-            </div>
-          )
-        })}
+      <div className="mb-8">
+        <PlanCardsGrid
+          plans={plans}
+          categories={categories}
+          features={features}
+          values={values}
+          selectedVariant={selectedVariant}
+          onToggleVariant={(groupKey, variantId) => setSelectedVariant((prev) => ({ ...prev, [groupKey]: variantId }))}
+          isActive={(plan) => plan.id === currentPlanId}
+          actionDisabled={(plan, active) => active || switching !== null}
+          actionShowSpinner={(plan) => switching === plan.id && showSpinner}
+          actionLabel={(plan, active) =>
+            active ? 'Plano atual' : switching === plan.id ? 'Alterando…' : plan.price_brl === 0 ? 'Usar plano Gratuito' : 'Assinar'
+          }
+          onAction={(plan) => selectPlan(plan.id)}
+        />
       </div>
+
+      {/* Cancelar assinatura recorrente */}
+      {canCancelSubscription && (
+        <div
+          className="rounded-2xl p-5 mb-5"
+          style={{ background: '#FBEEE6', border: '1px solid #E8C4B8', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', justifyContent: 'space-between' }}
+        >
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#C0553F', marginBottom: '2px' }}>
+              Assinatura recorrente ativa
+            </div>
+            <p style={{ fontSize: '13px', color: '#9A6A5A', margin: 0 }}>
+              Você é cobrado todo mês pelo plano {currentPlan?.name}. Cancele quando quiser — a cobrança para, mas você perde os recursos pagos.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={cancelling}
+            onClick={cancelSubscription}
+            style={{
+              border: '1.5px solid #C0553F', background: 'transparent', color: '#C0553F',
+              borderRadius: '12px', padding: '10px 18px', fontWeight: 700, fontSize: '13.5px',
+              cursor: cancelling ? 'not-allowed' : 'pointer', opacity: cancelling ? 0.6 : 1, flexShrink: 0,
+            }}
+          >
+            {cancelling ? 'Cancelando…' : 'Cancelar assinatura'}
+          </button>
+        </div>
+      )}
 
       {/* Cupom */}
       <div className="rounded-2xl bg-[var(--surface)] p-5" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>

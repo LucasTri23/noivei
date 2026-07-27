@@ -65,7 +65,7 @@ export default async function PlanosPage() {
   const [{ data: plansData }, { data: categories }, { data: features }, { data: values }] = await Promise.all([
     supabase
       .from('plans')
-      .select('id, name, description, price_brl, group_key, billing_label, billing_note, emoji, highlight')
+      .select('id, name, description, price_brl, group_key, billing_label, billing_note, emoji, highlight, billing_interval')
       .eq('is_active', true)
       .order('sort_order', { ascending: true }),
     supabase.from('plan_feature_categories').select('*').order('sort_order'),

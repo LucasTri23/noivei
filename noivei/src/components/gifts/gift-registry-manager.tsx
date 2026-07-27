@@ -1,14 +1,21 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import CurrencyInput from '@/components/ui/currency-input'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
-import { toastError } from '@/store/toast.store'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import type { GiftRegistryItem, GiftRegistryType } from '@/types/database'
+
+interface MpAccountStatus {
+  connected:    boolean
+  email:        string | null
+  nickname:     string | null
+  connected_at: string | null
+}
 
 interface GiftRegistryManagerProps {
   weddingId:    string
@@ -140,7 +147,52 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
   const [givingSaving, setGivingSaving]   = useState(false)
   const showGiveSpinner = useDelayedLoading(givingSaving)
 
+  const [mpStatus, setMpStatus]       = useState<MpAccountStatus | null>(null)
+  const [mpLoading, setMpLoading]     = useState(true)
+  const [disconnecting, setDisconnecting] = useState(false)
+
   const apiBase = `/api/v1/weddings/${weddingId}/gifts`
+  const mpApiBase = `/api/v1/weddings/${weddingId}/gift-payments`
+
+  useEffect(() => {
+    fetch(`${mpApiBase}/status`)
+      .then((res) => res.json())
+      .then((body: { data?: MpAccountStatus }) => setMpStatus(body.data ?? null))
+      .catch(() => setMpStatus(null))
+      .finally(() => setMpLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só deve rodar uma vez, ao montar
+  }, [])
+
+  // Volta do fluxo de autorização do Mercado Pago (ver .../gift-payments/connect e
+  // .../billing/mp-oauth-callback) — ?mp=conectado|erro na URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const mp = params.get('mp')
+    if (!mp) return
+
+    if (mp === 'conectado') {
+      toastSuccess('Conta Mercado Pago conectada! Os presentes pelo app já caem direto na sua conta.')
+    } else if (mp === 'erro') {
+      toastError('Não foi possível conectar sua conta Mercado Pago. Tente novamente.')
+    }
+
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  async function disconnectMpAccount() {
+    if (!window.confirm('Desconectar sua conta Mercado Pago? Os presentes pelo app param de funcionar até você conectar de novo.')) return
+
+    setDisconnecting(true)
+    const res = await fetch(`${mpApiBase}/disconnect`, { method: 'POST' })
+    setDisconnecting(false)
+
+    if (!res.ok) {
+      toastError('Não foi possível desconectar a conta.')
+      return
+    }
+    setMpStatus({ connected: false, email: null, nickname: null, connected_at: null })
+    toastSuccess('Conta Mercado Pago desconectada.')
+  }
 
   const stats = {
     total:      items.length,
@@ -335,6 +387,54 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
         </button>
       </div>
 
+      {/* Conexão com Mercado Pago — presente "pelo app" cai direto na conta do casal */}
+      {!mpLoading && (
+        <div
+          className="rounded-2xl p-5 mb-6"
+          style={{
+            background: mpStatus?.connected ? '#EAF3EC' : '#FBEEE6',
+            border: `1px solid ${mpStatus?.connected ? '#BFDCC6' : '#E8C4B8'}`,
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: mpStatus?.connected ? '#3E7A50' : '#C0553F', marginBottom: '2px' }}>
+              {mpStatus?.connected ? 'Conta Mercado Pago conectada' : 'Receber presentes pelo app'}
+            </div>
+            <p style={{ fontSize: '13px', color: mpStatus?.connected ? '#4F8A5E' : '#9A6A5A', margin: 0 }}>
+              {mpStatus?.connected
+                ? `Conectada${mpStatus.email ? ` como ${mpStatus.email}` : ''}. Presentes pagos pelo app caem direto na sua conta Mercado Pago.`
+                : 'Conecte sua conta Mercado Pago para os convidados pagarem presentes "pelo app" — o dinheiro cai direto na conta de vocês, sem passar pela Wednest.'}
+            </p>
+          </div>
+          {mpStatus?.connected ? (
+            <button
+              type="button"
+              disabled={disconnecting}
+              onClick={disconnectMpAccount}
+              style={{
+                border: '1.5px solid #C0553F', background: 'transparent', color: '#C0553F',
+                borderRadius: '12px', padding: '10px 18px', fontWeight: 700, fontSize: '13.5px',
+                cursor: disconnecting ? 'not-allowed' : 'pointer', opacity: disconnecting ? 0.6 : 1, flexShrink: 0,
+              }}
+            >
+              {disconnecting ? 'Desconectando…' : 'Desconectar'}
+            </button>
+          ) : (
+            <a
+              href={`${mpApiBase}/connect`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', border: 'none', textDecoration: 'none',
+                background: 'var(--wedding-color)', color: '#fff',
+                borderRadius: '12px', padding: '10px 18px', fontWeight: 700, fontSize: '13.5px', flexShrink: 0,
+              }}
+            >
+              Conectar Mercado Pago
+            </a>
+          )}
+        </div>
+      )}
+
       {/* Stats */}
       <div className="mb-6 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))' }}>
         {[
@@ -517,7 +617,9 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
             </div>
             {form.gift_type === 'app_payment' && (
               <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '6px' }}>
-                Presente simbólico — em breve os convidados vão poder pagar direto pelo app. Por enquanto, defina nome, preço e foto normalmente.
+                {mpStatus?.connected
+                  ? 'O convidado paga direto no site do casal e o dinheiro cai na sua conta Mercado Pago conectada.'
+                  : 'Você precisa conectar uma conta Mercado Pago (painel acima) antes dos convidados conseguirem pagar este presente.'}
               </p>
             )}
           </div>

@@ -271,10 +271,10 @@ export default function AdminCouponsManager({ initialCoupons, plans }: AdminCoup
         className="mb-6 rounded-2xl p-4"
         style={{ background: '#F4EFE7', border: '1px solid #E5D8C4', fontSize: '13.5px', color: '#8A7560', lineHeight: 1.6 }}
       >
-Cupons de <strong>dias grátis</strong> já podem ser resgatados pelo casal em /perfil/planos (concedem o plano
-        na hora, sem cobrança). Cupons de <strong>desconto percentual/fixo</strong> ficam só cadastrados —
-        aplicá-los de fato depende de um gateway de pagamento real (ver TODO Fase 2 em{' '}
-        <code>plan-selector.tsx</code>), que ainda não existe.
+Cupons de <strong>dias grátis</strong> concedem o plano na hora, sem cobrança, assim que resgatados pelo
+        casal em /perfil/planos. Cupons de <strong>desconto percentual/fixo</strong> reduzem o valor cobrado no
+        próximo checkout do Mercado Pago — o desconto só é consumido de fato quando esse pagamento é aprovado
+        (se o casal abandonar o checkout, o cupom continua disponível para uma nova tentativa).
       </div>
 
       <div className="overflow-hidden rounded-2xl" style={{ background: '#FFFFFF', boxShadow: '0 6px 18px rgba(60,40,24,0.07)' }}>

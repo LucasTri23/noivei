@@ -22,6 +22,8 @@ export default function LogoutButton() {
   const showSpinner = useDelayedLoading(loading)
 
   async function handleLogout() {
+    if (!window.confirm('Deseja realmente sair?')) return
+
     setLoading(true)
     const supabase = createSupabaseBrowser()
     await supabase.auth.signOut()

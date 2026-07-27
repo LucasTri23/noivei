@@ -92,7 +92,7 @@ export async function POST(req: Request) {
 
     const { data: checkout } = await supabase
       .from('payment_checkouts')
-      .select('id, user_id, plan_id')
+      .select('id, user_id, plan_id, coupon_redemption_id')
       .eq('mp_reference', externalReference)
       .maybeSingle()
 
@@ -127,6 +127,16 @@ export async function POST(req: Request) {
         await supabase.from('subscriptions').update(subPayload).eq('id', activeSub.id)
       } else {
         await supabase.from('subscriptions').insert({ user_id: checkout.user_id, ...subPayload })
+      }
+
+      // Só marca o cupom como "gasto" agora que o pagamento foi confirmado de
+      // verdade — um checkout abandonado/rejeitado deixa o cupom disponível de novo.
+      if (checkout.coupon_redemption_id) {
+        await supabase
+          .from('coupon_redemptions')
+          .update({ applied_at: new Date().toISOString() })
+          .eq('id', checkout.coupon_redemption_id)
+          .is('applied_at', null)
       }
     } else if (status && rejectedStatuses.includes(status)) {
       await supabase.from('payment_checkouts').update({ status: 'rejected' }).eq('id', checkout.id)

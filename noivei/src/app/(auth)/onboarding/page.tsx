@@ -15,17 +15,16 @@ import QuestionnaireWizard, {
 import { DEFAULT_ANSWERS, deriveFacts, type WeddingAnswers } from '@/lib/checklist/facts'
 import { generateChecklistItems } from '@/lib/checklist/generate'
 import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
-import { isPaidPlan } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import { toastError } from '@/store/toast.store'
-import type { WeddingStyle } from '@/types/database'
+import { effectiveGroupKey } from '@/lib/billing/plan-groups'
+import PlanCardsGrid, { fillPlanVariantSelection, type PlanCardPlan } from '@/components/billing/plan-cards-grid'
+import type { WeddingStyle, PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
 interface IbgeMunicipio {
   nome: string
   microrregiao: { mesorregiao: { UF: { sigla: string } } }
 }
-
-type PlanChoice = 'free' | 'premium_monthly' | 'premium_plus_once'
 
 interface FormData {
   brideName:  string
@@ -33,7 +32,7 @@ interface FormData {
   date:       string
   city:       string
   guests:     string
-  plan:       PlanChoice
+  plan:       string
   style:      WeddingStyle | ''
 }
 
@@ -84,33 +83,6 @@ function SkipLink({ onClick }: { onClick: () => void }) {
   )
 }
 
-const PLANS: { id: PlanChoice; name: string; price: string; desc: string; features: string[]; highlight: boolean }[] = [
-  {
-    id: 'free',
-    name: 'Gratuito',
-    price: 'R$ 0',
-    desc: 'Ideal para conhecer a plataforma',
-    highlight: false,
-    features: ['Checklist', 'Timeline', 'Até 50 convidados', 'Dashboard básico'],
-  },
-  {
-    id: 'premium_monthly',
-    name: 'Premium',
-    price: 'R$ 29,90/mês',
-    desc: 'Esse é o plano que a maioria dos casais escolhe',
-    highlight: true,
-    features: ['Checklist inteligente', 'Até 250 convidados', 'Site do casal', 'Organização de mesas', 'Financeiro completo', 'RSVP ilimitado'],
-  },
-  {
-    id: 'premium_plus_once',
-    name: 'Premium Plus',
-    price: 'R$ 299 único',
-    desc: 'Tudo liberado, IA completa, mais armazenamento e personalização',
-    highlight: false,
-    features: ['Tudo do Premium', 'Convidados ilimitados', 'IA completa', 'Suporte prioritário'],
-  },
-]
-
 // ── Ícones ──
 
 function BackIcon() {
@@ -142,14 +114,6 @@ function UsersIcon() {
     </svg>
   )
 }
-function CheckIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  )
-}
-
 // ── Estilos ──
 
 const inputStyle = {
@@ -174,6 +138,17 @@ export default function OnboardingPage() {
   })
   const [answers, setAnswers] = useState<WeddingAnswers>(DEFAULT_ANSWERS)
 
+  // Catálogo de planos vem do banco (igual /perfil/planos) — nada fixo aqui, senão
+  // o onboarding mostra planos/preços desatualizados assim que o admin editar algo
+  // em /admin/planos. A tabela de comparação (categorias/linhas/valores) vem junto,
+  // pra mostrar de verdade as diferenças entre os planos já na hora do cadastro.
+  const [billingPlans, setBillingPlans]     = useState<PlanCardPlan[]>([])
+  const [categories, setCategories]         = useState<PlanFeatureCategory[]>([])
+  const [features, setFeatures]             = useState<PlanFeature[]>([])
+  const [featureValues, setFeatureValues]   = useState<PlanFeatureValue[]>([])
+  const [plansLoading, setPlansLoading]     = useState(true)
+  const [selectedVariant, setSelectedVariant] = useState<Record<string, string>>({})
+
   function set<K extends keyof FormData>(key: K, val: FormData[K]) {
     setData((d) => ({ ...d, [key]: val }))
   }
@@ -187,6 +162,43 @@ export default function OnboardingPage() {
       })
       .catch(() => setCities([]))
   }, [])
+
+  // Carrega o catálogo de planos + comparação de recursos uma vez, em paralelo com
+  // as cidades — mesmo padrão. Sem isso, na tela de plano do onboarding o casal não
+  // via as diferenças reais entre os planos (só um resumo truncado e hardcoded).
+  useEffect(() => {
+    const supabase = createSupabaseBrowser()
+    Promise.all([
+      supabase
+        .from('plans')
+        .select('id, name, description, price_brl, group_key, billing_label, billing_note, emoji, highlight, billing_interval')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }),
+      supabase.from('plan_feature_categories').select('*').order('sort_order'),
+      supabase.from('plan_features').select('*').order('sort_order'),
+      supabase.from('plan_feature_values').select('*'),
+    ]).then(([plansRes, categoriesRes, featuresRes, valuesRes]) => {
+      const plansData = (plansRes.data ?? []) as PlanCardPlan[]
+      setBillingPlans(plansData)
+      setCategories((categoriesRes.data ?? []) as PlanFeatureCategory[])
+      setFeatures((featuresRes.data ?? []) as PlanFeature[])
+      setFeatureValues((valuesRes.data ?? []) as PlanFeatureValue[])
+      setSelectedVariant((prev) => fillPlanVariantSelection(plansData, 'free', prev))
+      setPlansLoading(false)
+    })
+  }, [])
+
+  function onToggleVariant(groupKey: string, variantId: string) {
+    setSelectedVariant((prev) => ({ ...prev, [groupKey]: variantId }))
+    // Se o grupo trocado é o plano já escolhido, a troca de variante (mensal/único)
+    // também deve atualizar a escolha de verdade — senão o toggle muda só o card
+    // exibido, sem refletir no plano que `finish()` vai de fato contratar.
+    setData((d) => {
+      const chosenPlan = billingPlans.find((p) => p.id === d.plan)
+      if (chosenPlan && effectiveGroupKey(chosenPlan) === groupKey) return { ...d, plan: variantId }
+      return d
+    })
+  }
 
   // Quem já é dono ou membro de um casamento (ex: acabou de aceitar um convite) não
   // deve ver o wizard — evita criar um segundo casamento sem querer via URL direta.
@@ -206,7 +218,8 @@ export default function OnboardingPage() {
     return () => { cancelled = true }
   }, [router])
 
-  const paidPlan = isPaidPlan(data.plan)
+  const selectedPlanRow = billingPlans.find((p) => p.id === data.plan)
+  const paidPlan = Boolean(selectedPlanRow && selectedPlanRow.price_brl > 0)
   // A numeração "Passo X de Y" varia com o plano: Gratuito termina na escolha do
   // plano; pago segue pelas 6 etapas do questionário.
   const totalSteps = paidPlan ? BASE_STEPS + QUESTIONNAIRE_STEPS : BASE_STEPS
@@ -495,82 +508,38 @@ export default function OnboardingPage() {
       {/* ── STEP 7: Plano ── */}
       {step === PLAN_STEP && (
         <div>
-          <StepTitle title="Escolha seu plano" subtitle="Você pode mudar de plano quando quiser." />
+          <StepTitle title="Escolha seu plano" subtitle="Compare os planos abaixo — você pode mudar quando quiser." />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-            {PLANS.map((plan) => {
-              const active = data.plan === plan.id
-              return (
-                <button
-                  key={plan.id}
-                  onClick={() => set('plan', plan.id)}
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: '14px',
-                    padding: '14px 16px', borderRadius: '14px', textAlign: 'left',
-                    border: `1.5px solid ${active ? '#C6943A' : '#EBDDD0'}`,
-                    background: active ? '#FBF5EE' : '#FFFFFF',
-                    cursor: 'pointer', transition: 'all 0.18s',
-                    boxShadow: active ? '0 4px 14px rgba(198,148,58,0.16)' : 'none',
-                  }}
-                >
-                  {/* Radio */}
-                  <div
-                    style={{
-                      width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, marginTop: '2px',
-                      border: `2px solid ${active ? '#C6943A' : '#D8C6A6'}`,
-                      background: active ? '#C6943A' : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    {active && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />}
-                  </div>
-
-                  {/* Info */}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '3px' }}>
-                      <span style={{ fontSize: '14.5px', fontWeight: 700, color: active ? '#3C2818' : '#3C2818' }}>
-                        {plan.name}
-                      </span>
-                      {plan.highlight && (
-                        <span style={{
-                          fontSize: '10px', fontWeight: 700, padding: '1px 8px',
-                          borderRadius: '99px', background: '#C6943A', color: '#fff',
-                          letterSpacing: '0.06em',
-                        }}>
-                          POPULAR
-                        </span>
-                      )}
-                      <span style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: 700, color: '#C6943A' }}>
-                        {plan.price}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#9A7A60', marginBottom: '6px' }}>{plan.desc}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                      {plan.features.slice(0, 2).map((f) => (
-                        <span key={f} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '4px',
-                          fontSize: '11px', color: '#9A7020', background: '#F1E6D4',
-                          padding: '2px 8px', borderRadius: '99px',
-                        }}>
-                          <CheckIcon />{f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+          {plansLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9A7A60', fontSize: '14px' }}>
+              Carregando planos…
+            </div>
+          ) : (
+            <div style={{ marginBottom: '20px' }}>
+              <PlanCardsGrid
+                plans={billingPlans}
+                categories={categories}
+                features={features}
+                values={featureValues}
+                selectedVariant={selectedVariant}
+                onToggleVariant={onToggleVariant}
+                isActive={(plan) => plan.id === data.plan}
+                actionDisabled={() => false}
+                actionLabel={(plan, active) => (active ? 'Selecionado' : plan.price_brl === 0 ? 'Escolher Gratuito' : 'Escolher')}
+                onAction={(plan) => set('plan', plan.id)}
+              />
+            </div>
+          )}
 
           {paidPlan && (
             <p style={{ fontSize: '12.5px', color: '#9A7A60', margin: '0 0 14px' }}>
-              A seguir, 6 etapas rápidas para personalizar o seu checklist inteligente.
+              A seguir, 6 etapas rápidas para personalizar o seu checklist inteligente. O pagamento é feito na próxima tela, direto com o Mercado Pago.
             </p>
           )}
 
           <NextButton
             onClick={paidPlan ? () => setStep(BASE_STEPS) : finish}
-            disabled={loading}
+            disabled={loading || plansLoading}
             label={paidPlan ? 'Continuar' : finishLabel}
           />
         </div>

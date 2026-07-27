@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
-// 'link': loja externa (store_url). 'app_payment': presente simbólico/fictício —
-// dinheiro cairia na conta do casal via pagamento dentro do app (ainda não
-// implementado; ver comentário na migration 20260722000003).
+// 'link': loja externa (store_url). 'app_payment': convidado paga pelo app e o
+// dinheiro cai direto na conta Mercado Pago do casal (marketplace/split, ver
+// /api/v1/gifts/[id]/checkout e migration 20260727000002) — exige o casal ter
+// conectado a própria conta MP em /presentes.
 export const GiftRegistryTypeSchema = z.enum(['link', 'app_payment'])
 
 // image_storage_path/image_size_bytes só vêm preenchidos quando a foto foi enviada do
@@ -41,3 +42,11 @@ export const UpdateGiftRegistryItemSchema = z
 
 export type CreateGiftRegistryItemInput = z.infer<typeof CreateGiftRegistryItemSchema>
 export type UpdateGiftRegistryItemInput = z.infer<typeof UpdateGiftRegistryItemSchema>
+
+// Convidado é anônimo (sem conta/sessão) — nome é só texto livre pra aparecer como
+// "presenteado por" depois do pagamento aprovado, sem validação de identidade nenhuma.
+export const GuestGiftCheckoutSchema = z.object({
+  guest_name: z.string().trim().max(120).nullable().optional(),
+})
+
+export type GuestGiftCheckoutInput = z.infer<typeof GuestGiftCheckoutSchema>
