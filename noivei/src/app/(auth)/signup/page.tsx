@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import PasswordInput from '@/components/auth/password-input'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
@@ -126,18 +127,10 @@ export default function SignupPage() {
         </div>
         {errors.email && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.email.message}</p>}
 
-        <div style={inputStyle}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C89070" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input {...register('password')} type="password" placeholder="Crie uma senha (mín. 8 caracteres)"
-            style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }} />
-        </div>
+        <PasswordInput id="signup-password" placeholder="Crie uma senha (mín. 8 caracteres)" register={register('password')} />
         {errors.password && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.password.message}</p>}
 
-        <div style={inputStyle}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C89070" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input {...register('confirmPassword')} type="password" placeholder="Confirme sua senha"
-            style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }} />
-        </div>
+        <PasswordInput id="signup-confirm-password" placeholder="Confirme sua senha" register={register('confirmPassword')} />
         {errors.confirmPassword && <p style={{ fontSize: '12px', color: '#C0553F', marginTop: '-10px' }}>{errors.confirmPassword.message}</p>}
 
         <label style={{

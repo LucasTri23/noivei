@@ -66,6 +66,14 @@ function dateInputToIso(value: string): string | null {
   return value ? new Date(`${value}T00:00:00.000Z`).toISOString() : null
 }
 
+// "Válido até" precisa cobrir o dia inteiro escolhido — meia-noite UTC do mesmo dia
+// (usado em dateInputToIso) já é passado a qualquer hora depois das 00h, fazendo o
+// cupom expirar horas antes do fim do dia que o admin escolheu (e ainda mais cedo em
+// fusos negativos como o do Brasil). Usa o fim do dia em UTC em vez do início.
+function dateInputToEndOfDayIso(value: string): string | null {
+  return value ? new Date(`${value}T23:59:59.999Z`).toISOString() : null
+}
+
 function isoToDateInput(iso: string | null): string {
   return iso ? new Date(iso).toISOString().slice(0, 10) : ''
 }
@@ -187,7 +195,7 @@ export default function AdminCouponsManager({ initialCoupons, plans }: AdminCoup
             benefit_days:       form.benefit_days,
             max_redemptions:    form.max_redemptions,
             valid_from:         dateInputToIso(form.valid_from),
-            valid_until:        dateInputToIso(form.valid_until),
+            valid_until:        dateInputToEndOfDayIso(form.valid_until),
             is_active:          form.is_active,
           }
         : {
@@ -197,7 +205,7 @@ export default function AdminCouponsManager({ initialCoupons, plans }: AdminCoup
             applies_to_plan_id: form.applies_to_plan_id || null,
             max_redemptions:    form.max_redemptions,
             valid_from:         dateInputToIso(form.valid_from),
-            valid_until:        dateInputToIso(form.valid_until),
+            valid_until:        dateInputToEndOfDayIso(form.valid_until),
             is_active:          form.is_active,
           }
 

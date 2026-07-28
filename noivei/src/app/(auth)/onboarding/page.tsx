@@ -16,7 +16,7 @@ import { DEFAULT_ANSWERS, deriveFacts, type WeddingAnswers } from '@/lib/checkli
 import { generateChecklistItems } from '@/lib/checklist/generate'
 import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
-import { toastError } from '@/store/toast.store'
+import { toastError, toastSuccess } from '@/store/toast.store'
 import { effectiveGroupKey } from '@/lib/billing/plan-groups'
 import PlanCardsGrid, { fillPlanVariantSelection, type PlanCardPlan } from '@/components/billing/plan-cards-grid'
 import type { WeddingStyle, PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
@@ -148,6 +148,8 @@ export default function OnboardingPage() {
   const [featureValues, setFeatureValues]   = useState<PlanFeatureValue[]>([])
   const [plansLoading, setPlansLoading]     = useState(true)
   const [selectedVariant, setSelectedVariant] = useState<Record<string, string>>({})
+  const [couponCode, setCouponCode] = useState('')
+  const [redeeming, setRedeeming]   = useState(false)
 
   function set<K extends keyof FormData>(key: K, val: FormData[K]) {
     setData((d) => ({ ...d, [key]: val }))
@@ -198,6 +200,29 @@ export default function OnboardingPage() {
       if (chosenPlan && effectiveGroupKey(chosenPlan) === groupKey) return { ...d, plan: variantId }
       return d
     })
+  }
+
+  // Mesmo endpoint/fluxo de /perfil/planos: só registra o resgate (coupon_redemptions),
+  // sem cobrar nada agora — cupom percent/fixed é aplicado depois, no checkout do
+  // Mercado Pago (fn_get_pending_coupon_discount); free_days concede o plano na hora,
+  // dentro da própria fn_redeem_coupon.
+  async function redeemCoupon() {
+    if (!couponCode.trim()) return
+    setRedeeming(true)
+    const res = await fetch('/api/v1/coupons/redeem', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ code: couponCode.trim() }),
+    })
+    const body = await res.json().catch(() => null)
+    setRedeeming(false)
+
+    if (!res.ok) {
+      toastError(body?.error?.message ?? 'Não foi possível aplicar esse cupom.')
+      return
+    }
+    toastSuccess(body?.data?.message ?? 'Cupom aplicado!')
+    setCouponCode('')
   }
 
   // Quem já é dono ou membro de um casamento (ex: acabou de aceitar um convite) não
@@ -536,6 +561,44 @@ export default function OnboardingPage() {
               A seguir, 6 etapas rápidas para personalizar o seu checklist inteligente. O pagamento é feito na próxima tela, direto com o Mercado Pago.
             </p>
           )}
+
+          {/* Cupom — mesmo endpoint de /perfil/planos, disponível já no onboarding */}
+          <div
+            className="rounded-2xl"
+            style={{
+              background: '#FFFFFF', border: '1.5px solid #EBDDD0', borderRadius: '16px', padding: '16px',
+              display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '20px',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label htmlFor="onboarding-coupon" style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', display: 'block', marginBottom: '6px' }}>
+                Tenho um cupom
+              </label>
+              <input
+                id="onboarding-coupon"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="Ex: BEMVINDO10"
+                style={{
+                  border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '11px 14px',
+                  fontSize: '14px', color: '#3C2818', outline: 'none', width: '100%',
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              disabled={redeeming || !couponCode.trim()}
+              onClick={redeemCoupon}
+              style={{
+                border: 'none', borderRadius: '12px', padding: '12px 20px', fontWeight: 700, fontSize: '14px',
+                background: '#C6943A', color: '#fff',
+                cursor: redeeming || !couponCode.trim() ? 'not-allowed' : 'pointer',
+                opacity: redeeming || !couponCode.trim() ? 0.6 : 1,
+              }}
+            >
+              {redeeming ? 'Aplicando…' : 'Aplicar cupom'}
+            </button>
+          </div>
 
           <NextButton
             onClick={paidPlan ? () => setStep(BASE_STEPS) : finish}
