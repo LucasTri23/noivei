@@ -39,21 +39,26 @@ export async function POST(req: Request) {
       return ok({ received: true })
     }
 
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
-    if (!secret) {
-      console.error('[webhook/mercadopago-gifts] MERCADOPAGO_WEBHOOK_SECRET não configurado.')
-      return err(500, 'CONFIG_ERROR', 'Webhook não configurado.')
-    }
-
-    const validSignature = verifyWebhookSignature({
-      signatureHeader: req.headers.get('x-signature'),
-      requestId:       req.headers.get('x-request-id'),
-      dataId,
-      secret,
-    })
-    if (!validSignature) {
-      console.error('[webhook/mercadopago-gifts] assinatura inválida.', { dataId, type })
-      return err(401, 'INVALID_SIGNATURE', 'Assinatura inválida.')
+    // Mesmo caso do webhook de assinatura (ver .../webhooks/mercadopago/route.ts): a
+    // notificação chega pelo notification_url da Preference (IPN legado), que nunca
+    // manda x-signature — exigir sempre rejeitava 100% dos pagamentos reais. A
+    // segurança vem de sempre buscar o status direto na API do Mercado Pago
+    // (fetchPayment abaixo) antes de agir, não do header.
+    const signatureHeader = req.headers.get('x-signature')
+    if (signatureHeader) {
+      const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
+      if (secret) {
+        const validSignature = verifyWebhookSignature({
+          signatureHeader,
+          requestId: req.headers.get('x-request-id'),
+          dataId,
+          secret,
+        })
+        if (!validSignature) {
+          console.error('[webhook/mercadopago-gifts] assinatura inválida.', { dataId, type })
+          return err(401, 'INVALID_SIGNATURE', 'Assinatura inválida.')
+        }
+      }
     }
 
     const supabase = createSupabaseService()

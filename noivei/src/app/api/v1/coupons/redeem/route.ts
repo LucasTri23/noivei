@@ -61,7 +61,14 @@ export async function POST(req: Request) {
         ? `Cupom aplicado! Acesso liberado por ${data.benefit_days} dia(s).`
         : 'Cupom válido! O desconto será aplicado quando o pagamento for processado.'
 
-    return ok({ message })
+    // Campos extras (além da mensagem) pro client montar o preview de quanto cada
+    // plano vai custar com o desconto — ver src/lib/billing/coupon-preview.ts.
+    return ok({
+      message,
+      discount_type:      data.discount_type,
+      discount_value:     data.discount_value,
+      applies_to_plan_id: data.applies_to_plan_id,
+    })
   } catch (error) {
     return handleApiError(error)
   }

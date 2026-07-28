@@ -31,27 +31,60 @@ export async function POST(req: Request) {
       return ok({ received: true })
     }
 
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
-    if (!secret) {
-      console.error('[webhook/mercadopago] MERCADOPAGO_WEBHOOK_SECRET não configurado.')
-      return err(500, 'CONFIG_ERROR', 'Webhook não configurado.')
-    }
-
-    const validSignature = verifyWebhookSignature({
-      signatureHeader: req.headers.get('x-signature'),
-      requestId:       req.headers.get('x-request-id'),
-      dataId,
-      secret,
-    })
-    if (!validSignature) {
-      console.error('[webhook/mercadopago] assinatura inválida.', { dataId, type })
-      return err(401, 'INVALID_SIGNATURE', 'Assinatura inválida.')
-    }
-
     // Serviço, não usuário: essa rota não tem sessão de ninguém logado, e as tabelas
     // envolvidas (payment_checkouts em escrita, mp_webhook_events, subscriptions de
     // outro usuário) não têm — de propósito — policy de escrita pra client nenhum.
     const supabase = createSupabaseService()
+
+    const isActionableType = type === 'payment' || type === 'preapproval' || type === 'subscription_preapproval'
+
+    // "merchant_order" e outros tipos são notificações do sistema antigo de IPN do
+    // Mercado Pago, que nunca vêm com x-signature (só o esquema v2 de webhooks, usado
+    // pra "payment"/"preapproval", assina) — exigir assinatura deles sempre falha com
+    // 401, mesmo sendo o próprio Mercado Pago chamando de verdade. Como não agimos em
+    // cima desses tipos (só registra e ignora), não há necessidade de verificar
+    // assinatura — nenhuma ação sensível depende disso.
+    if (!isActionableType) {
+      const eventKey = `${type}:${dataId}`
+      const { data: existingEvent } = await supabase
+        .from('mp_webhook_events')
+        .select('id')
+        .eq('mp_event_key', eventKey)
+        .maybeSingle()
+
+      if (!existingEvent) {
+        await supabase.from('mp_webhook_events').insert({ mp_event_key: eventKey, event_type: type, payload: { dataId } })
+      }
+      return ok({ received: true })
+    }
+
+    // A partir daqui é "payment"/"preapproval": aprova de verdade um pagamento e ativa
+    // um plano. A notificação chega pelo notification_url da própria Preference/
+    // Preapproval (mecanismo de IPN legado do Mercado Pago) — esse mecanismo NUNCA
+    // manda x-signature (só o Webhooks v2, cadastrado à parte no painel do
+    // desenvolvedor, assina); exigir sempre essa assinatura rejeitava 100% dos
+    // pagamentos reais com 401, mesmo aprovados de verdade (visto em produção).
+    // A segurança de verdade não depende do header: SEMPRE buscamos o status direto
+    // na API do Mercado Pago com nosso próprio token (fetchPayment/fetchPreapproval
+    // abaixo) antes de agir — um forjador não consegue inventar um pagamento aprovado
+    // que não existe de fato na conta do Mercado Pago. Se um x-signature vier mesmo
+    // assim (ex.: Webhooks v2 configurado no futuro), ainda validamos como defesa extra.
+    const signatureHeader = req.headers.get('x-signature')
+    if (signatureHeader) {
+      const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
+      if (secret) {
+        const validSignature = verifyWebhookSignature({
+          signatureHeader,
+          requestId: req.headers.get('x-request-id'),
+          dataId,
+          secret,
+        })
+        if (!validSignature) {
+          console.error('[webhook/mercadopago] assinatura inválida.', { dataId, type })
+          return err(401, 'INVALID_SIGNATURE', 'Assinatura inválida.')
+        }
+      }
+    }
 
     const eventKey = `${type}:${dataId}`
     const { data: existingEvent } = await supabase
@@ -72,16 +105,12 @@ export async function POST(req: Request) {
       externalReference = payment.external_reference
       status = payment.status
       gatewaySubId = String(payment.id)
-    } else if (type === 'preapproval' || type === 'subscription_preapproval') {
+    } else {
       const preapproval = await fetchPreapproval(dataId)
       externalReference = preapproval.external_reference
       status = preapproval.status
       gatewaySubId = preapproval.id
       isRecurring = true
-    } else {
-      // Outros tipos de notificação (merchant_order etc.) não afetam assinatura — só registra e ignora.
-      await supabase.from('mp_webhook_events').insert({ mp_event_key: eventKey, event_type: type, payload: { dataId } })
-      return ok({ received: true })
     }
 
     await supabase

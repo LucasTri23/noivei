@@ -14,7 +14,9 @@ interface AdminCouponsManagerProps {
   initialCoupons: Coupon[]
   // Planos pagos ativos, pra escolher o que um cupom "dias grátis" concede — vem do
   // banco (ver admin/cupons/page.tsx), catálogo não é mais fixo no código.
-  plans: { id: string; name: string }[]
+  // billing_label distingue variantes do mesmo plano (ex: Premium Mensal vs Premium
+  // Pagamento único), que têm o mesmo `name` mas são planos (linhas) diferentes.
+  plans: { id: string; name: string; billing_label: string | null }[]
 }
 
 interface ApiErrorBody {
@@ -48,10 +50,13 @@ function fmtDiscount(coupon: Coupon): string {
     : currencyFmt.format((coupon.discount_value ?? 0) / 100)
 }
 
-// Datas são salvas como meia-noite UTC (ver dateInputToIso) — formatar de volta com
-// timeZone: 'UTC' evita que o fuso do navegador jogue o dia exibido para o anterior.
+// Wednest é um produto 100% Brasil (sem fuso configurável) — as datas de validade
+// do cupom são sempre interpretadas como o dia civil em Brasília (UTC-3, sem
+// horário de verão desde 2019), não em UTC. Sem isso, testar/usar um cupom à noite
+// (quando UTC já virou o dia seguinte) fazia "hoje" ou "até hoje" se comportar de
+// forma inconsistente dependendo da hora exata do teste.
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 
 function fmtValidity(coupon: Coupon): string {
@@ -63,19 +68,23 @@ function fmtValidity(coupon: Coupon): string {
 }
 
 function dateInputToIso(value: string): string | null {
-  return value ? new Date(`${value}T00:00:00.000Z`).toISOString() : null
+  return value ? new Date(`${value}T00:00:00.000-03:00`).toISOString() : null
 }
 
-// "Válido até" precisa cobrir o dia inteiro escolhido — meia-noite UTC do mesmo dia
-// (usado em dateInputToIso) já é passado a qualquer hora depois das 00h, fazendo o
-// cupom expirar horas antes do fim do dia que o admin escolheu (e ainda mais cedo em
-// fusos negativos como o do Brasil). Usa o fim do dia em UTC em vez do início.
+// "Válido até" precisa cobrir o dia inteiro escolhido em Brasília — sem o fim do
+// dia (23:59:59 -03:00), o cupom expirava horas antes do fim do dia que o admin
+// escolheu (start-of-day some minutos depois de meia-noite).
 function dateInputToEndOfDayIso(value: string): string | null {
-  return value ? new Date(`${value}T23:59:59.999Z`).toISOString() : null
+  return value ? new Date(`${value}T23:59:59.999-03:00`).toISOString() : null
 }
 
+// Extrai a data em Brasília (não UTC) — precisa bater com o fuso usado em
+// dateInputToIso/dateInputToEndOfDayIso, senão reabrir um cupom pra editar mostra
+// o dia seguinte ao que foi escolhido (isoToDateInput com slice(0,10) em UTC
+// "adiantava" o dia sempre que o horário salvo cruzava a virada UTC).
 function isoToDateInput(iso: string | null): string {
-  return iso ? new Date(iso).toISOString().slice(0, 10) : ''
+  if (!iso) return ''
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(iso))
 }
 
 function draftFromCoupon(coupon: Coupon): CouponForm {
@@ -132,8 +141,12 @@ const labelStyle: React.CSSProperties = {
   fontSize: '12.5px', fontWeight: 600, color: '#2A1E10', marginBottom: '6px', display: 'block',
 }
 
+function planLabel(plan: { name: string; billing_label: string | null }): string {
+  return plan.billing_label ? `${plan.name} — ${plan.billing_label}` : plan.name
+}
+
 export default function AdminCouponsManager({ initialCoupons, plans }: AdminCouponsManagerProps) {
-  const planNameById = new Map(plans.map((p) => [p.id, p.name]))
+  const planNameById = new Map(plans.map((p) => [p.id, planLabel(p)]))
   const fmtPlan = (planId: string | null) => (planId ? (planNameById.get(planId) ?? planId) : 'Qualquer plano pago')
 
   const [coupons, setCoupons]     = useState<Coupon[]>(initialCoupons)
@@ -423,7 +436,7 @@ Cupons de <strong>dias grátis</strong> concedem o plano na hora, sem cobrança,
                 >
                   <option value="">Selecione um plano</option>
                   {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>{plan.name}</option>
+                    <option key={plan.id} value={plan.id}>{planLabel(plan)}</option>
                   ))}
                 </select>
               </div>
@@ -476,7 +489,7 @@ Cupons de <strong>dias grátis</strong> concedem o plano na hora, sem cobrança,
                 >
                   <option value="">Qualquer plano pago</option>
                   {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>{plan.name}</option>
+                    <option key={plan.id} value={plan.id}>{planLabel(plan)}</option>
                   ))}
                 </select>
               </div>

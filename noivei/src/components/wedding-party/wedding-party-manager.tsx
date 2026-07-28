@@ -23,10 +23,13 @@ interface WeddingPartyManagerProps {
   initialEntries:         WeddingPartyEntryWithGuest[]
   confirmedGuests:        ConfirmedGuest[]
   entryLimit:             number
-  // Nomes reais do casal — fixos, não editáveis por aqui (edição fica em Perfil >
-  // Dados do casamento). Só a posição de entrada deles no cortejo pode mudar.
-  coupleEntranceLabel:    string
-  coupleEntrancePosition: number
+  // Nomes reais do noivo e da noiva — fixos, não editáveis por aqui (edição fica em
+  // Perfil > Dados do casamento). Cada um entra em um momento separado do cortejo,
+  // por isso duas posições independentes em vez de uma posição de "casal".
+  groomLabel:             string
+  brideLabel:             string
+  groomEntrancePosition:  number
+  brideEntrancePosition:  number
 }
 
 interface ApiErrorBody {
@@ -109,10 +112,11 @@ function isPadrinhoOuMadrinha(role: string): boolean {
 }
 
 export default function WeddingPartyManager({
-  weddingId, initialEntries, confirmedGuests, entryLimit, coupleEntranceLabel, coupleEntrancePosition,
+  weddingId, initialEntries, confirmedGuests, entryLimit, groomLabel, brideLabel, groomEntrancePosition, brideEntrancePosition,
 }: WeddingPartyManagerProps) {
   const [entries, setEntries]           = useState<WeddingPartyEntryWithGuest[]>(initialEntries)
-  const [couplePosition, setCouplePosition] = useState(coupleEntrancePosition)
+  const [groomPosition, setGroomPosition] = useState(groomEntrancePosition)
+  const [bridePosition, setBridePosition] = useState(brideEntrancePosition)
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
   const [form, setForm]                 = useState(EMPTY_FORM)
@@ -270,30 +274,44 @@ export default function WeddingPartyManager({
     }
   }
 
-  // Posição dos noivos é independente do sort_order das entradas — é só "depois de
-  // quantas entradas do cortejo eles entram" (0 = primeiro de todos). Mover não
-  // renumera ninguém, só muda esse contador; por isso não usa persistSortOrder nem
-  // passa por /api/v1/weddings — igual ao padrão já usado em WeddingDataForm (update
-  // direto via client autenticado, RLS de "users can update own weddings" cobre).
-  async function moveCouple(direction: 'up' | 'down') {
+  // Posição do noivo/noiva é independente do sort_order das entradas — é só "depois
+  // de quantas entradas do cortejo essa pessoa entra" (0 = primeiro de todos). Mover
+  // não renumera ninguém, só muda esse contador; por isso não usa persistSortOrder
+  // nem passa por /api/v1/weddings — igual ao padrão já usado em WeddingDataForm
+  // (update direto via client autenticado, RLS de "users can update own weddings"
+  // cobre). Noivo e noiva são independentes entre si — cada um move sem afetar o outro.
+  async function moveEntrancePosition(
+    who:      'groom' | 'bride',
+    current:  number,
+    setter:   (value: number) => void,
+    column:   'groom_entrance_position' | 'bride_entrance_position',
+    direction: 'up' | 'down',
+  ) {
     const rowCount = buildRows().length
-    const clamped  = Math.min(couplePosition, rowCount)
+    const clamped  = Math.min(current, rowCount)
     const next     = direction === 'up' ? clamped - 1 : clamped + 1
     if (next < 0 || next > rowCount) return
 
-    const previous = couplePosition
-    setCouplePosition(next)
+    setter(next)
 
     const supabase = createSupabaseBrowser()
     const { error } = await supabase
       .from('weddings')
-      .update({ couple_entrance_position: next })
+      .update({ [column]: next })
       .eq('id', weddingId)
 
     if (error) {
-      setCouplePosition(previous)
-      toastError('Não foi possível reordenar a entrada dos noivos.')
+      setter(current)
+      toastError(`Não foi possível reordenar a entrada d${who === 'groom' ? 'o noivo' : 'a noiva'}.`)
     }
+  }
+
+  function moveGroom(direction: 'up' | 'down') {
+    moveEntrancePosition('groom', groomPosition, setGroomPosition, 'groom_entrance_position', direction)
+  }
+
+  function moveBride(direction: 'up' | 'down') {
+    moveEntrancePosition('bride', bridePosition, setBridePosition, 'bride_entrance_position', direction)
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -567,22 +585,26 @@ export default function WeddingPartyManager({
   }
 
   const cortejoRows = buildRows()
-  // Quantas entradas do cortejo aparecem antes dos noivos — se entradas foram
+  // Quantas entradas do cortejo aparecem antes de cada um — se entradas foram
   // removidas depois da última vez que essa posição foi salva, só ajusta a EXIBIÇÃO
-  // (clamp); a próxima vez que o casal mover a entrada, o valor salvo se corrige.
-  const clampedCouplePosition = Math.min(couplePosition, cortejoRows.length)
+  // (clamp); a próxima vez que a posição for movida, o valor salvo se corrige.
+  const clampedGroomPosition = Math.min(groomPosition, cortejoRows.length)
+  const clampedBridePosition = Math.min(bridePosition, cortejoRows.length)
 
   type DisplaySlot =
-    | { kind: 'couple' }
+    | { kind: 'groom' }
+    | { kind: 'bride' }
     | { kind: 'entry'; row: CortejoRow; entryIdx: number }
 
-  const displaySlots: DisplaySlot[] = [
-    ...cortejoRows.slice(0, clampedCouplePosition).map((row, i) => ({ kind: 'entry' as const, row, entryIdx: i })),
-    { kind: 'couple' as const },
-    ...cortejoRows
-      .slice(clampedCouplePosition)
-      .map((row, i) => ({ kind: 'entry' as const, row, entryIdx: i + clampedCouplePosition })),
-  ]
+  // Percorre cada posição possível (0..cortejoRows.length) e insere noivo/noiva
+  // exatamente onde a posição de cada um manda — quando os dois caem na mesma
+  // posição, o noivo sempre aparece antes (empate resolvido pela ordem de push abaixo).
+  const displaySlots: DisplaySlot[] = []
+  for (let i = 0; i <= cortejoRows.length; i++) {
+    if (clampedGroomPosition === i) displaySlots.push({ kind: 'groom' })
+    if (clampedBridePosition === i) displaySlots.push({ kind: 'bride' })
+    if (i < cortejoRows.length) displaySlots.push({ kind: 'entry', row: cortejoRows[i]!, entryIdx: i })
+  }
 
   return (
     <div>
@@ -654,12 +676,17 @@ export default function WeddingPartyManager({
         {displaySlots.map((slot, displayIdx) => {
           const isLastSlot = displayIdx === displaySlots.length - 1
 
-          if (slot.kind === 'couple') {
-            const upDisabled   = clampedCouplePosition === 0
-            const downDisabled = clampedCouplePosition === cortejoRows.length
+          if (slot.kind === 'groom' || slot.kind === 'bride') {
+            const isGroom       = slot.kind === 'groom'
+            const label         = isGroom ? groomLabel : brideLabel
+            const position      = isGroom ? clampedGroomPosition : clampedBridePosition
+            const move          = isGroom ? moveGroom : moveBride
+            const genderSuffix  = isGroom ? 'o noivo' : 'a noiva'
+            const upDisabled    = position === 0
+            const downDisabled  = position === cortejoRows.length
             return (
               <div
-                key="couple-entrance"
+                key={slot.kind}
                 className="flex flex-wrap items-center gap-4 px-5 py-4"
                 style={{ borderBottom: isLastSlot ? 'none' : '1px solid #F8F3EE', background: 'var(--wedding-color-subtle)' }}
               >
@@ -675,18 +702,18 @@ export default function WeddingPartyManager({
                 </div>
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--fg)' }}>
-                    Entrada dos noivos <span style={{ fontWeight: 400, color: 'var(--muted-fg)' }}>· {coupleEntranceLabel}</span>
+                    Entrada d{genderSuffix} <span style={{ fontWeight: 400, color: 'var(--muted-fg)' }}>· {label}</span>
                   </div>
                   <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
-                    Nome fixo — use as setas para decidir em que momento do cortejo os noivos entram.
+                    Nome fixo — use as setas para decidir em que momento do cortejo {isGroom ? 'ele' : 'ela'} entra.
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
                   <button
                     type="button"
-                    onClick={() => moveCouple('up')}
+                    onClick={() => move('up')}
                     disabled={upDisabled}
-                    aria-label="Mover entrada dos noivos para cima"
+                    aria-label={`Mover entrada d${genderSuffix} para cima`}
                     title="Mover para cima"
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -699,9 +726,9 @@ export default function WeddingPartyManager({
                   </button>
                   <button
                     type="button"
-                    onClick={() => moveCouple('down')}
+                    onClick={() => move('down')}
                     disabled={downDisabled}
-                    aria-label="Mover entrada dos noivos para baixo"
+                    aria-label={`Mover entrada d${genderSuffix} para baixo`}
                     title="Mover para baixo"
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center',

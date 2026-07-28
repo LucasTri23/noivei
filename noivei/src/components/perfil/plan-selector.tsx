@@ -6,7 +6,10 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import PlanCardsGrid, { fillPlanVariantSelection, type PlanCardPlan } from '@/components/billing/plan-cards-grid'
+import { computeCouponPreview, type CouponPreviewLine } from '@/lib/billing/coupon-preview'
 import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
+
+const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export type Plan = PlanCardPlan
 
@@ -34,6 +37,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
 
   const [couponCode, setCouponCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
+  const [couponPreview, setCouponPreview] = useState<CouponPreviewLine[]>([])
   const [cancelling, setCancelling] = useState(false)
 
   const currentPlan = plans.find((p) => p.id === currentPlanId)
@@ -82,6 +86,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
   async function redeemCoupon() {
     if (!couponCode.trim()) return
     setRedeeming(true)
+    setCouponPreview([])
     const res = await fetch('/api/v1/coupons/redeem', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,6 +100,7 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
       return
     }
     toastSuccess(body?.data?.message ?? 'Cupom aplicado!')
+    if (body?.data) setCouponPreview(computeCouponPreview(plans, body.data))
     setCouponCode('')
     router.refresh()
   }
@@ -224,6 +230,22 @@ export default function PlanSelector({ userId, currentPlanId, subscriptionId, pl
         >
           {redeeming ? 'Aplicando…' : 'Aplicar cupom'}
         </button>
+
+        {couponPreview.length > 0 && (
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+            {couponPreview.map((line) => (
+              <div key={line.planId} style={{ fontSize: '13px', color: 'var(--fg)' }}>
+                <strong>{line.planLabel}</strong>:{' '}
+                <span style={{ textDecoration: 'line-through', color: 'var(--muted-fg)' }}>
+                  {currencyFmt.format(line.priceBefore / 100)}
+                </span>{' '}
+                <span style={{ fontWeight: 700, color: 'var(--wedding-color-dark)' }}>
+                  {currencyFmt.format(line.priceAfter / 100)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

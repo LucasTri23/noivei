@@ -18,8 +18,11 @@ import { generateFreeChecklistItems } from '@/lib/checklist/generate-free'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import { effectiveGroupKey } from '@/lib/billing/plan-groups'
+import { computeCouponPreview, type CouponPreviewLine } from '@/lib/billing/coupon-preview'
 import PlanCardsGrid, { fillPlanVariantSelection, type PlanCardPlan } from '@/components/billing/plan-cards-grid'
 import type { WeddingStyle, PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
+
+const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 interface IbgeMunicipio {
   nome: string
@@ -150,6 +153,7 @@ export default function OnboardingPage() {
   const [selectedVariant, setSelectedVariant] = useState<Record<string, string>>({})
   const [couponCode, setCouponCode] = useState('')
   const [redeeming, setRedeeming]   = useState(false)
+  const [couponPreview, setCouponPreview] = useState<CouponPreviewLine[]>([])
 
   function set<K extends keyof FormData>(key: K, val: FormData[K]) {
     setData((d) => ({ ...d, [key]: val }))
@@ -209,6 +213,7 @@ export default function OnboardingPage() {
   async function redeemCoupon() {
     if (!couponCode.trim()) return
     setRedeeming(true)
+    setCouponPreview([])
     const res = await fetch('/api/v1/coupons/redeem', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -222,6 +227,7 @@ export default function OnboardingPage() {
       return
     }
     toastSuccess(body?.data?.message ?? 'Cupom aplicado!')
+    if (body?.data) setCouponPreview(computeCouponPreview(billingPlans, body.data))
     setCouponCode('')
   }
 
@@ -598,6 +604,22 @@ export default function OnboardingPage() {
             >
               {redeeming ? 'Aplicando…' : 'Aplicar cupom'}
             </button>
+
+            {couponPreview.length > 0 && (
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                {couponPreview.map((line) => (
+                  <div key={line.planId} style={{ fontSize: '13px', color: '#3C2818' }}>
+                    <strong>{line.planLabel}</strong>:{' '}
+                    <span style={{ textDecoration: 'line-through', color: '#9A7A60' }}>
+                      {currencyFmt.format(line.priceBefore / 100)}
+                    </span>{' '}
+                    <span style={{ fontWeight: 700, color: '#C6943A' }}>
+                      {currencyFmt.format(line.priceAfter / 100)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <NextButton

@@ -9,6 +9,7 @@ import Spinner from '@/components/ui/spinner'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { QUOTE_TYPES, QUOTE_TYPE_LABELS } from '@/lib/api/validation/financial-quote.schema'
+import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { FinancialCategoryBudget, FinancialEntry, FinancialInstallment, FinancialQuote, FinancialQuoteType } from '@/types/database'
 
@@ -120,11 +121,26 @@ interface UpcomingDueItem {
   installmentLabel: string | null
 }
 
-function buildPlanItems(totalCents: number, count: number, firstDueDate: string): InstallmentPlanItem[] {
-  return splitEvenly(totalCents, count).map((amount_cents, i) => ({
-    amount_cents,
-    due_date: i === 0 ? firstDueDate : addMonths(firstDueDate, i),
-  }))
+// `alreadyPaidCents` é o valor pago manualmente ANTES de gerar o plano (campo "Valor
+// pago" do lançamento) — vira a 1ª parcela ("Entrada", já paga) e as demais dividem só
+// o restante. Sem isso, a "entrada" era ignorada e as parcelas voltavam a somar o total
+// inteiro, cobrando de novo um valor que o casal já tinha registrado como pago.
+function buildPlanItems(totalCents: number, count: number, firstDueDate: string, alreadyPaidCents = 0): InstallmentPlanItem[] {
+  const paid = Math.min(Math.max(alreadyPaidCents, 0), totalCents)
+  if (paid <= 0 || count < 2) {
+    return splitEvenly(totalCents, count).map((amount_cents, i) => ({
+      amount_cents,
+      due_date: i === 0 ? firstDueDate : addMonths(firstDueDate, i),
+    }))
+  }
+
+  return [
+    { amount_cents: paid, due_date: firstDueDate },
+    ...splitEvenly(totalCents - paid, count - 1).map((amount_cents, i) => ({
+      amount_cents,
+      due_date: addMonths(firstDueDate, i + 1),
+    })),
+  ]
 }
 
 type PlanMode = 'monthly' | 'wedding_anchor'
@@ -133,12 +149,25 @@ type PlanMode = 'monthly' | 'wedding_anchor'
 // posicionadas de trás pra frente, em intervalos mensais, até chegar na 1ª — assim o
 // casal fecha o parcelamento perto do casamento em vez de simplesmente somar meses
 // pra frente a partir de uma data de início.
-function buildWeddingAnchorPlanItems(totalCents: number, count: number, weddingDate: string, daysBeforeWedding: number): InstallmentPlanItem[] {
+function buildWeddingAnchorPlanItems(totalCents: number, count: number, weddingDate: string, daysBeforeWedding: number, alreadyPaidCents = 0): InstallmentPlanItem[] {
   const anchorDate = addDays(weddingDate, -daysBeforeWedding)
-  return splitEvenly(totalCents, count).map((amount_cents, i) => ({
-    amount_cents,
-    due_date: addMonths(anchorDate, -(count - 1 - i)),
-  }))
+  const paid = Math.min(Math.max(alreadyPaidCents, 0), totalCents)
+  if (paid <= 0 || count < 2) {
+    return splitEvenly(totalCents, count).map((amount_cents, i) => ({
+      amount_cents,
+      due_date: addMonths(anchorDate, -(count - 1 - i)),
+    }))
+  }
+
+  // Item 0 continua sendo a data mais antiga (a "entrada") — só o valor muda pra
+  // refletir o que já foi pago; o restante do total se divide pelas parcelas seguintes.
+  return [
+    { amount_cents: paid, due_date: addMonths(anchorDate, -(count - 1)) },
+    ...splitEvenly(totalCents - paid, count - 1).map((amount_cents, i) => ({
+      amount_cents,
+      due_date: addMonths(anchorDate, -(count - 1 - (i + 1))),
+    })),
+  ]
 }
 
 function computePlanItems(
@@ -148,11 +177,12 @@ function computePlanItems(
   firstDueDate:       string,
   weddingDate:        string | null,
   daysBeforeWedding:  number,
+  alreadyPaidCents:   number = 0,
 ): InstallmentPlanItem[] {
   if (mode === 'wedding_anchor' && weddingDate) {
-    return buildWeddingAnchorPlanItems(totalCents, count, weddingDate, daysBeforeWedding)
+    return buildWeddingAnchorPlanItems(totalCents, count, weddingDate, daysBeforeWedding, alreadyPaidCents)
   }
-  return buildPlanItems(totalCents, count, firstDueDate)
+  return buildPlanItems(totalCents, count, firstDueDate, alreadyPaidCents)
 }
 
 function groupInstallmentsByEntry(
@@ -270,6 +300,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [selectingId, setSelectingId]       = useState<string | null>(null)
   const showQuoteSpinner = useDelayedLoading(savingQuote)
 
+  // Orçamento total do casamento (weddings.budget) — até aqui só era editável em
+  // Perfil > Dados do casamento; atualiza direto via client autenticado (RLS de
+  // "users can update own weddings" cobre), mesmo padrão do WeddingDataForm.
+  const [overallBudget, setOverallBudget]     = useState(budgetCents)
+  const [budgetModalOpen, setBudgetModalOpen] = useState(false)
+  const [budgetDraft, setBudgetDraft]         = useState<number | null>(budgetCents)
+  const [savingBudget, setSavingBudget]       = useState(false)
+
   const [categoryBudgets, setCategoryBudgets]   = useState<FinancialCategoryBudget[]>(initialCategoryBudgets)
   const [budgetDrafts, setBudgetDrafts]         = useState<Record<string, number | null>>({})
   const [savingBudgetCategory, setSavingBudgetCategory] = useState<string | null>(null)
@@ -284,8 +322,8 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [expandedEntryId, setExpandedEntryId]     = useState<string | null>(null)
   const [loadingInstallmentsId, setLoadingInstallmentsId] = useState<string | null>(null)
   const [planEntry, setPlanEntry]                 = useState<FinancialEntry | null>(null)
-  const [planForm, setPlanForm]                   = useState<{ count: number; firstDueDate: string; mode: PlanMode; daysBeforeWedding: number; items: InstallmentPlanItem[] }>(
-    { count: 2, firstDueDate: '', mode: 'monthly', daysBeforeWedding: 30, items: [] },
+  const [planForm, setPlanForm]                   = useState<{ count: number; firstDueDate: string; mode: PlanMode; daysBeforeWedding: number; items: InstallmentPlanItem[]; alreadyPaidCents: number }>(
+    { count: 2, firstDueDate: '', mode: 'monthly', daysBeforeWedding: 30, items: [], alreadyPaidCents: 0 },
   )
   const [savingPlan, setSavingPlan]               = useState(false)
   const [togglingInstallmentId, setTogglingInstallmentId] = useState<string | null>(null)
@@ -298,7 +336,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const isPaid  = isPaidPlan(planId)
   const atLimit = entries.length >= entryLimit
 
-  const budget    = budgetCents ?? 0
+  const budget    = overallBudget ?? 0
   const committed = entries.reduce((sum, e) => sum + e.total_amount, 0)
   const paid      = entries.reduce((sum, e) => sum + e.paid_amount, 0)
   const pct       = budget > 0 ? Math.min(100, Math.round((committed / budget) * 100)) : 0
@@ -460,6 +498,41 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       return next
     })
     if (expandedEntryId === entry.id) setExpandedEntryId(null)
+
+    // O servidor já desmarca o orçamento vinculado como não mais selecionado (ver
+    // DELETE de .../financial/[id]/route.ts) — sem espelhar isso aqui, a aba
+    // Orçamentos continuava mostrando esse orçamento como "selecionado" (apontando
+    // pra um lançamento que não existe mais) até a página ser recarregada.
+    setQuotes((prev) =>
+      prev.map((q) => (q.financial_entry_id === entry.id ? { ...q, is_selected: false, financial_entry_id: null } : q)),
+    )
+  }
+
+  function openBudgetModal() {
+    setBudgetDraft(overallBudget)
+    setBudgetModalOpen(true)
+  }
+
+  async function saveOverallBudget(e: React.FormEvent) {
+    e.preventDefault()
+    if (savingBudget) return
+    setSavingBudget(true)
+
+    const supabase = createSupabaseBrowser()
+    const { error } = await supabase
+      .from('weddings')
+      .update({ budget: budgetDraft })
+      .eq('id', weddingId)
+
+    setSavingBudget(false)
+    if (error) {
+      toastError('Não foi possível salvar o orçamento. Tente novamente.')
+      return
+    }
+
+    setOverallBudget(budgetDraft)
+    setBudgetModalOpen(false)
+    toastSuccess('Orçamento atualizado.')
   }
 
   function openCreateQuote() {
@@ -695,12 +768,16 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     const existing = installments[entry.id] ?? []
     const count = existing.length > 0 ? existing.length : 2
     const firstDueDate = existing[0]?.due_date ?? entry.due_date ?? toIsoDate(new Date())
+    // Só desconta o "Valor pago" na criação de um plano novo — se já existe plano,
+    // paid_amount reflete a soma das parcelas marcadas como pagas (ver
+    // handleSubmitPlan), não é mais uma entrada manual a subtrair de novo.
+    const alreadyPaidCents = existing.length > 0 ? 0 : entry.paid_amount
     const items = existing.length > 0
       ? existing.map((inst) => ({ amount_cents: inst.amount_cents, due_date: inst.due_date }))
-      : buildPlanItems(entry.total_amount, count, firstDueDate)
+      : buildPlanItems(entry.total_amount, count, firstDueDate, alreadyPaidCents)
 
     setPlanEntry(entry)
-    setPlanForm({ count, firstDueDate, mode: 'monthly', daysBeforeWedding: 30, items })
+    setPlanForm({ count, firstDueDate, mode: 'monthly', daysBeforeWedding: 30, items, alreadyPaidCents })
   }
 
   function handlePlanCountChange(count: number) {
@@ -708,7 +785,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     const clamped = Math.min(60, Math.max(1, count))
     setPlanForm((f) => ({
       ...f, count: clamped,
-      items: computePlanItems(planEntry.total_amount, f.mode, clamped, f.firstDueDate, weddingDate, f.daysBeforeWedding),
+      items: computePlanItems(planEntry.total_amount, f.mode, clamped, f.firstDueDate, weddingDate, f.daysBeforeWedding, f.alreadyPaidCents),
     }))
   }
 
@@ -716,7 +793,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     if (!planEntry) return
     setPlanForm((f) => ({
       ...f, firstDueDate: dueDate,
-      items: computePlanItems(planEntry.total_amount, f.mode, f.count, dueDate, weddingDate, f.daysBeforeWedding),
+      items: computePlanItems(planEntry.total_amount, f.mode, f.count, dueDate, weddingDate, f.daysBeforeWedding, f.alreadyPaidCents),
     }))
   }
 
@@ -724,7 +801,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     if (!planEntry) return
     setPlanForm((f) => ({
       ...f, mode,
-      items: computePlanItems(planEntry.total_amount, mode, f.count, f.firstDueDate, weddingDate, f.daysBeforeWedding),
+      items: computePlanItems(planEntry.total_amount, mode, f.count, f.firstDueDate, weddingDate, f.daysBeforeWedding, f.alreadyPaidCents),
     }))
   }
 
@@ -733,7 +810,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     const clamped = Math.max(0, days)
     setPlanForm((f) => ({
       ...f, daysBeforeWedding: clamped,
-      items: computePlanItems(planEntry.total_amount, f.mode, f.count, f.firstDueDate, weddingDate, clamped),
+      items: computePlanItems(planEntry.total_amount, f.mode, f.count, f.firstDueDate, weddingDate, clamped, f.alreadyPaidCents),
     }))
   }
 
@@ -903,8 +980,23 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
           style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 18%, transparent) 1.3px, transparent 1.5px)', backgroundSize: '28px 28px' }}
         />
         <div className="relative">
-          <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)', marginBottom: '4px' }}>
-            Orçamento total
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
+              Orçamento total
+            </div>
+            <button
+              type="button"
+              onClick={openBudgetModal}
+              aria-label="Alterar orçamento total"
+              title="Alterar orçamento"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '22px', height: '22px', borderRadius: '7px', flexShrink: 0,
+                border: 'none', background: 'rgba(255,255,255,0.14)', color: '#FAF0E6', cursor: 'pointer', padding: 0,
+              }}
+            >
+              <PencilIcon />
+            </button>
           </div>
           <div className="font-display" style={{ fontSize: 'clamp(42px,6vw,60px)', fontWeight: 500, lineHeight: 1, marginBottom: '16px' }}>
             {fmt(budget)}
@@ -932,6 +1024,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
               <div
                 key={mc.label}
                 style={{
+                  flex: '1 1 140px', minWidth: '140px',
                   padding: '12px 18px', borderRadius: '14px',
                   background: 'rgba(255,255,255,0.08)',
                   backdropFilter: 'blur(4px)',
@@ -1692,6 +1785,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       >
         {planEntry && (
           <form onSubmit={handleSubmitPlan} className="flex flex-col gap-4">
+            {planForm.alreadyPaidCents > 0 && (
+              <div
+                className="rounded-xl p-3"
+                style={{ background: 'var(--wedding-color-subtle)', fontSize: '12.5px', color: 'var(--fg)' }}
+              >
+                Valor já pago ({fmt(planForm.alreadyPaidCents)}) virou a entrada — as parcelas abaixo dividem só o restante.
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="plan-count" style={labelStyle}>Número de parcelas</label>
@@ -1822,6 +1923,41 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Modal de orçamento total do casamento */}
+      <Modal open={budgetModalOpen} onClose={() => setBudgetModalOpen(false)} title="Alterar orçamento">
+        <form onSubmit={saveOverallBudget} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="overall-budget" style={labelStyle}>Orçamento total</label>
+            <CurrencyInput id="overall-budget" value={budgetDraft} onChange={setBudgetDraft} />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => setBudgetModalOpen(false)}
+              style={{
+                background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={savingBudget}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '10px 18px',
+                fontWeight: 600, fontSize: '14px',
+                cursor: savingBudget ? 'not-allowed' : 'pointer', opacity: savingBudget ? 0.7 : 1,
+              }}
+            >
+              {savingBudget ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   )

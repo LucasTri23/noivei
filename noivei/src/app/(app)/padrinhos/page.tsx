@@ -16,7 +16,7 @@ async function PadrinhosContent() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id, couple_names, bride_name, groom_name, couple_entrance_position')
+    .select('id, bride_name, groom_name, groom_entrance_position, bride_entrance_position')
     .is('deleted_at', null)
     .order('created_at')
     .limit(1)
@@ -34,11 +34,10 @@ async function PadrinhosContent() {
   }
 
   const weddingId = wedding.id as string
-  const brideName = wedding.bride_name as string | null
-  const groomName = wedding.groom_name as string | null
-  const coupleEntranceLabel = groomName && brideName
-    ? `${groomName} & ${brideName}`
-    : (wedding.couple_names as string)
+  // Nome fixo, não editável por aqui — nome real se disponível, senão um rótulo
+  // genérico (edição de bride_name/groom_name fica em Perfil > Dados do casamento).
+  const groomLabel = (wedding.groom_name as string | null) || 'Noivo'
+  const brideLabel = (wedding.bride_name as string | null) || 'Noiva'
 
   // Não exige RSVP confirmado pra entrar no cortejo — padrinho é papel de
   // organização, independente de já ter confirmado presença.
@@ -66,8 +65,10 @@ async function PadrinhosContent() {
       initialEntries={entries}
       confirmedGuests={(confirmedGuests ?? []) as ConfirmedGuest[]}
       entryLimit={limitCheck.limit}
-      coupleEntranceLabel={coupleEntranceLabel}
-      coupleEntrancePosition={wedding.couple_entrance_position as number}
+      groomLabel={groomLabel}
+      brideLabel={brideLabel}
+      groomEntrancePosition={wedding.groom_entrance_position as number}
+      brideEntrancePosition={wedding.bride_entrance_position as number}
     />
   )
 }
