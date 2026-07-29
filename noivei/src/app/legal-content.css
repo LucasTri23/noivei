@@ -1,0 +1,126 @@
+/* Estilos para o conteúdo Markdown das páginas legais públicas (/termos e
+ * /privacidade). Documento simples e isolado (não é um módulo Tailwind
+ * utilitário) porque o conteúdo vem de Markdown renderizado via
+ * react-markdown, então precisamos estilizar tags semânticas soltas
+ * (h1/h2/p/table/blockquote...) em vez de aplicar classes elemento a
+ * elemento. Usa os mesmos tokens de src/app/globals.css (fontes e cores)
+ * para não destoar do restante do site. */
+
+.legal-content {
+  font-family: var(--font-body);
+  color: var(--fg);
+  line-height: 1.75;
+  font-size: 15.5px;
+}
+
+.legal-content h1,
+.legal-content h2,
+.legal-content h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.25;
+}
+
+.legal-content h1 {
+  font-size: clamp(28px, 4vw, 36px);
+  margin: 0 0 8px;
+}
+
+.legal-content h2 {
+  font-size: clamp(20px, 3vw, 24px);
+  margin: 40px 0 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.legal-content h2:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.legal-content h3 {
+  font-size: 17px;
+  margin: 24px 0 8px;
+}
+
+.legal-content p {
+  margin: 0 0 16px;
+}
+
+.legal-content ul,
+.legal-content ol {
+  margin: 0 0 16px;
+  padding-left: 22px;
+}
+
+.legal-content li {
+  margin: 0 0 8px;
+}
+
+.legal-content li > p {
+  margin: 0;
+}
+
+.legal-content a {
+  color: var(--wedding-color);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-content strong {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.legal-content code {
+  background: var(--muted);
+  color: var(--muted-fg);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 0.9em;
+}
+
+.legal-content blockquote {
+  margin: 20px 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--wedding-color);
+  background: var(--wedding-color-subtle);
+  color: var(--muted-fg);
+  border-radius: var(--radius);
+}
+
+.legal-content blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+.legal-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  display: block;
+  overflow-x: auto;
+}
+
+.legal-content th,
+.legal-content td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal-content th {
+  background: var(--muted);
+  color: var(--fg);
+  font-weight: 700;
+  white-space: nowrap;
+}
