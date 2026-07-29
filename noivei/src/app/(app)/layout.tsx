@@ -27,20 +27,37 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // de deixar a pessoa presa no app com todo módulo aparecendo "acesso restrito".
   if (!userWedding) redirect('/onboarding')
 
-  // As duas consultas abaixo só dependem de userWedding.id, não uma da outra —
-  // rodar em paralelo poupa um round-trip no caminho crítico que toda página
-  // autenticada passa (este layout envolve todo o grupo (app)).
-  const [{ data: wedding }, planId] = await Promise.all([
+  // As três consultas abaixo não dependem uma da outra — rodar em paralelo poupa
+  // round-trips no caminho crítico que toda página autenticada passa (este layout
+  // envolve todo o grupo (app)). plan_module_access inteira é pequena (poucas
+  // dezenas de linhas, um plano ativo típico × 8 módulos) — mais barato trazer
+  // tudo aqui e filtrar em código do que esperar planId resolver pra fazer uma
+  // 2ª consulta em série.
+  const [{ data: wedding }, planId, { data: planModuleRows }] = await Promise.all([
     supabase
       .from('weddings')
       .select('couple_names, wedding_color, wedding_color_secondary')
       .eq('id', userWedding.id)
       .maybeSingle(),
     resolveWeddingPlanId(supabase, userWedding.id),
+    supabase.from('plan_module_access').select('plan_id, module, enabled'),
   ])
 
   const visibleModules = Object.fromEntries(
     MODULE_KEYS.map((module) => [module, hasModuleAccess(userWedding, module)]),
+  ) as Record<WeddingModuleKey, boolean>
+
+  // Quais módulos o PLANO atual libera (configurável em /admin/planos/modulos) —
+  // decide o badge "PRO" no menu. Diferente de visibleModules acima (permissão de
+  // MEMBRO convidado, sempre calculada em código) — linha ausente aqui é liberado
+  // (fail-open), mesmo critério do PaywallGate.
+  const planModuleAccessMap = new Map(
+    (planModuleRows ?? [])
+      .filter((row) => row.plan_id === planId)
+      .map((row) => [row.module as WeddingModuleKey, row.enabled as boolean]),
+  )
+  const planModuleAccess = Object.fromEntries(
+    MODULE_KEYS.map((module) => [module, planModuleAccessMap.get(module) ?? true]),
   ) as Record<WeddingModuleKey, boolean>
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
@@ -105,8 +122,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         coupleNames={coupleNames}
         plan={planLabel}
         initial={initial}
-        isFreePlan={!isPaidPlan(planId)}
         visibleModules={visibleModules}
+        planModuleAccess={planModuleAccess}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -123,7 +140,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         >
           {children}
         </main>
-        <MobileBottomNav visibleModules={visibleModules} isFreePlan={!isPaidPlan(planId)} />
+        <MobileBottomNav visibleModules={visibleModules} planModuleAccess={planModuleAccess} />
       </div>
     </div>
   )

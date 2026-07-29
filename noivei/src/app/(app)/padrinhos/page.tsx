@@ -3,6 +3,7 @@ import WeddingPartyManager, {
   type WeddingPartyEntryWithGuest,
 } from '@/components/wedding-party/wedding-party-manager'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
+import PaywallGate from '@/components/billing/paywall-gate'
 import { checkWeddingPartyLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { WeddingPartyEntry } from '@/types/database'
@@ -76,7 +77,9 @@ async function PadrinhosContent() {
 export default function PadrinhosPage() {
   return (
     <ModuleAccessGate module="padrinhos">
-      <PadrinhosContent />
+      <PaywallGate feature="padrinhos">
+        <PadrinhosContent />
+      </PaywallGate>
     </ModuleAccessGate>
   )
 }

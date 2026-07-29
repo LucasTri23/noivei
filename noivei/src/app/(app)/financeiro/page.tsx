@@ -1,5 +1,6 @@
 import FinancialManager from '@/components/financial/financial-manager'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
+import PaywallGate from '@/components/billing/paywall-gate'
 import { checkFinancialEntryLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
@@ -87,7 +88,9 @@ async function FinanceiroContent() {
 export default function FinanceiroPage() {
   return (
     <ModuleAccessGate module="financeiro">
-      <FinanceiroContent />
+      <PaywallGate feature="financeiro">
+        <FinanceiroContent />
+      </PaywallGate>
     </ModuleAccessGate>
   )
 }

@@ -19,19 +19,19 @@ const NAV = [
 const MORE_NAV = [
   { href: '/timeline',   label: 'Timeline',            icon: CalendarIcon, module: 'checklist' as WeddingModuleKey },
   { href: '/padrinhos',  label: 'Padrinhos & Entradas', icon: PartyIcon,    module: 'padrinhos' as WeddingModuleKey },
-  { href: '/mesas',      label: 'Mesas',                icon: ArmchairIcon, pro: true, module: 'mesas' as WeddingModuleKey },
-  { href: '/site',       label: 'Site do casal',        icon: GlobeIcon,    pro: true, module: 'site' as WeddingModuleKey },
-  { href: '/presentes',  label: 'Lista de presentes',   icon: GiftIcon,     pro: true, module: 'presentes' as WeddingModuleKey },
-  { href: '/arquivos',   label: 'Arquivos',             icon: FolderIcon,   pro: true, module: 'arquivos' as WeddingModuleKey },
+  { href: '/mesas',      label: 'Mesas',                icon: ArmchairIcon, module: 'mesas' as WeddingModuleKey },
+  { href: '/site',       label: 'Site do casal',        icon: GlobeIcon,    module: 'site' as WeddingModuleKey },
+  { href: '/presentes',  label: 'Lista de presentes',   icon: GiftIcon,     module: 'presentes' as WeddingModuleKey },
+  { href: '/arquivos',   label: 'Arquivos',             icon: FolderIcon,   module: 'arquivos' as WeddingModuleKey },
   { href: '/perfil',     label: 'Perfil',               icon: SettingsIcon },
 ]
 
 interface MobileBottomNavProps {
-  visibleModules: Record<WeddingModuleKey, boolean>
-  isFreePlan:     boolean
+  visibleModules:   Record<WeddingModuleKey, boolean>
+  planModuleAccess: Record<WeddingModuleKey, boolean>
 }
 
-export default function MobileBottomNav({ visibleModules, isFreePlan }: MobileBottomNavProps) {
+export default function MobileBottomNav({ visibleModules, planModuleAccess }: MobileBottomNavProps) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
 
@@ -78,8 +78,9 @@ export default function MobileBottomNav({ visibleModules, isFreePlan }: MobileBo
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Mais módulos" maxWidth="360px">
         <div className="flex flex-col gap-1">
-          {moreItems.map(({ href, label, icon: Icon, pro }) => {
+          {moreItems.map(({ href, label, icon: Icon, module }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
+            const locked = Boolean(module) && !planModuleAccess[module as WeddingModuleKey]
             return (
               <Link
                 key={href}
@@ -94,7 +95,7 @@ export default function MobileBottomNav({ visibleModules, isFreePlan }: MobileBo
               >
                 <Icon size={19} strokeWidth={1.8} />
                 <span style={{ fontWeight: active ? 600 : 500 }}>{label}</span>
-                {pro && isFreePlan && (
+                {locked && (
                   <span
                     style={{
                       marginLeft: 'auto',

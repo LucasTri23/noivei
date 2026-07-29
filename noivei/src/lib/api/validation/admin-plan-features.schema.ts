@@ -34,3 +34,16 @@ export const UpsertPlanFeatureValueSchema = z.object({
   group_key:  z.string().trim().min(1).max(50),
   value:      z.string().trim().min(1).max(120),
 })
+
+// Mesma lista fixa do CHECK de plan_module_access (migration 20260729000001) — os
+// módulos do casamento são um conjunto fechado, ao contrário de group_key acima.
+export const WeddingModuleKeySchema = z.enum([
+  'checklist', 'convidados', 'financeiro', 'mesas',
+  'site', 'arquivos', 'presentes', 'padrinhos',
+])
+
+export const UpsertPlanModuleAccessSchema = z.object({
+  plan_id: z.string().trim().min(1).max(80),
+  module:  WeddingModuleKeySchema,
+  enabled: z.boolean(),
+})

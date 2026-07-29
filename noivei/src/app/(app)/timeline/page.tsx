@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
+import PaywallGate from '@/components/billing/paywall-gate'
 import TimelineBoard from '@/components/timeline/timeline-board'
 import type { ChecklistItem } from '@/types/database'
 
@@ -113,7 +114,9 @@ async function TimelineContent() {
 export default function TimelinePage() {
   return (
     <ModuleAccessGate module="checklist">
-      <TimelineContent />
+      <PaywallGate feature="checklist">
+        <TimelineContent />
+      </PaywallGate>
     </ModuleAccessGate>
   )
 }

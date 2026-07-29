@@ -1,38 +1,24 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
-import { isPaidPlan, isPlusPlan, type PlanId } from '@/constants/plans'
+import { WEDDING_MODULE_LABELS } from '@/constants/wedding-modules'
+import type { PlanId } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
+import type { WeddingModuleKey } from '@/types/database'
 
-export type PaywallFeature = 'mesas' | 'site' | 'presentes' | 'arquivos'
+// Cada módulo do casamento pode ser liberado por plano — configurável em
+// /admin/planos/modulos (tabela plan_module_access), não mais hardcoded aqui.
+export type PaywallFeature = WeddingModuleKey
 
-interface FeatureInfo {
-  name:         string
-  description:  string
-  requiredPlan: 'premium' | 'premium_plus'
-}
-
-const FEATURES: Record<PaywallFeature, FeatureInfo> = {
-  mesas: {
-    name:         'Organização de mesas',
-    description:  'Monte o mapa de mesas da festa arrastando convidados, controle a capacidade de cada mesa e garanta que ninguém fique sem lugar.',
-    requiredPlan: 'premium',
-  },
-  site: {
-    name:         'Site do casal',
-    description:  'Crie um site lindo para o seu casamento com história, cerimônia, lista de presentes, galeria e confirmação de presença online.',
-    requiredPlan: 'premium',
-  },
-  presentes: {
-    name:         'Lista de presentes',
-    description:  'Monte a lista de presentes do casamento, organize preço e loja de cada item e marque manualmente o que já foi dado por convidados.',
-    requiredPlan: 'premium',
-  },
-  arquivos: {
-    name:         'Central de arquivos',
-    description:  'Guarde contratos, orçamentos e documentos importantes do casamento em um só lugar, com backup seguro.',
-    requiredPlan: 'premium',
-  },
+const FEATURE_DESCRIPTIONS: Record<WeddingModuleKey, string> = {
+  checklist:  'Checklist inteligente e timeline do casamento, com tarefas organizadas por fase e prazos automáticos.',
+  convidados: 'Gerencie a lista de convidados, RSVP online e confirmações de presença.',
+  financeiro: 'Controle o orçamento do casamento, lançamentos, parcelas e fornecedores.',
+  mesas:      'Monte o mapa de mesas da festa arrastando convidados, controle a capacidade de cada mesa e garanta que ninguém fique sem lugar.',
+  site:       'Crie um site lindo para o seu casamento com história, cerimônia, lista de presentes, galeria e confirmação de presença online.',
+  arquivos:   'Guarde contratos, orçamentos e documentos importantes do casamento em um só lugar, com backup seguro.',
+  presentes:  'Monte a lista de presentes do casamento, organize preço e loja de cada item e marque manualmente o que já foi dado por convidados.',
+  padrinhos:  'Organize padrinhos, madrinhas e a ordem de entrada da cerimônia.',
 }
 
 interface PaywallGateProps {
@@ -58,13 +44,14 @@ function StarIcon() {
 }
 
 /**
- * Bloqueia `children` para quem não tem o plano exigido pelo recurso.
- * Busca a assinatura ativa do usuário (mesmo padrão do layout de (app));
- * sem assinatura ativa, assume o plano Gratuito.
+ * Bloqueia `children` para quem está num plano que não libera este módulo (ver
+ * plan_module_access, editável em /admin/planos/modulos). Busca a assinatura ativa
+ * do usuário (mesmo padrão do layout de (app)); sem assinatura ativa, assume o
+ * plano Gratuito. Módulo sem linha em plan_module_access é tratado como liberado
+ * (fail-open) — evita travar todo mundo por acidente se um módulo novo ficar sem
+ * seed (a migration/trigger já cobrem isso, mas não custa a defesa extra).
  */
 export default async function PaywallGate({ feature, children }: PaywallGateProps) {
-  const { name, description, requiredPlan } = FEATURES[feature]
-
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -74,11 +61,31 @@ export default async function PaywallGate({ feature, children }: PaywallGateProp
     planId = wedding ? await resolveWeddingPlanId(supabase, wedding.id) : 'free'
   }
 
-  const allowed = requiredPlan === 'premium_plus' ? isPlusPlan(planId) : isPaidPlan(planId)
+  const { data: accessRow } = await supabase
+    .from('plan_module_access')
+    .select('enabled')
+    .eq('plan_id', planId)
+    .eq('module', feature)
+    .maybeSingle()
 
+  const allowed = accessRow?.enabled ?? true
   if (allowed) return <>{children}</>
 
-  const requiredPlanName = requiredPlan === 'premium_plus' ? 'Premium Plus' : 'Premium'
+  // Quais planos ativos liberam este módulo — pra dizer pro casal pra onde fazer
+  // upgrade, sem hardcoded "Premium"/"Premium Plus" (o catálogo é dinâmico).
+  const { data: enablingRows } = await supabase
+    .from('plan_module_access')
+    .select('plans!inner(name, is_active)')
+    .eq('module', feature)
+    .eq('enabled', true)
+    .eq('plans.is_active', true)
+
+  const planNames = [...new Set(
+    (enablingRows ?? []).map((row) => (row.plans as unknown as { name: string }).name),
+  )]
+  const availabilityText = planNames.length > 0
+    ? `Disponível n${planNames.length > 1 ? 'os planos' : 'o plano'} ${planNames.join(', ')}.`
+    : 'Não disponível em nenhum plano ativo no momento.'
 
   return (
     <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
@@ -120,18 +127,18 @@ export default async function PaywallGate({ feature, children }: PaywallGateProp
               textTransform: 'uppercase', marginBottom: '14px',
             }}
           >
-            <StarIcon /> Recurso {requiredPlanName}
+            <StarIcon /> Recurso exclusivo
           </div>
 
           <h2
             className="font-display"
             style={{ fontSize: 'clamp(24px,3.4vw,30px)', fontWeight: 500, color: '#FAF0E6', lineHeight: 1.15, marginBottom: '10px' }}
           >
-            {name}
+            {WEDDING_MODULE_LABELS[feature]}
           </h2>
 
           <p style={{ fontSize: '14px', color: 'rgba(250,240,230,0.65)', lineHeight: 1.6, margin: '0 auto 24px', maxWidth: '400px' }}>
-            {description} Disponível a partir do plano {requiredPlanName}.
+            {FEATURE_DESCRIPTIONS[feature]} {availabilityText}
           </p>
 
           <Link

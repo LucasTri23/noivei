@@ -1,5 +1,6 @@
 import GuestsManager from '@/components/guests/guests-manager'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
+import PaywallGate from '@/components/billing/paywall-gate'
 import { checkGuestLimit } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { Guest } from '@/types/database'
@@ -48,7 +49,9 @@ async function ConvidadosContent() {
 export default function ConvidadosPage() {
   return (
     <ModuleAccessGate module="convidados">
-      <ConvidadosContent />
+      <PaywallGate feature="convidados">
+        <ConvidadosContent />
+      </PaywallGate>
     </ModuleAccessGate>
   )
 }
