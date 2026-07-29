@@ -1,8 +1,6 @@
 # Política de Privacidade — Wednest
 
-> ⚠️ **Aviso importante:** este é um **rascunho gerado com apoio de IA**, produzido a partir da leitura direta do código-fonte do sistema Wednest (banco de dados, integrações e regras de negócio realmente implementadas nesta data). Ele **não substitui a revisão de um(a) advogado(a) habilitado(a)** antes da publicação — em especial para confirmar o enquadramento tributário da empresa, os dados de identificação da pessoa jurídica, o foro contratual e as cláusulas de responsabilidade sobre pagamentos e repasses via Mercado Pago. Todos os campos marcados como `[PREENCHER]` precisam ser completados por quem administra o negócio antes de qualquer publicação.
-
-**Última atualização:** [DATA DE PUBLICAÇÃO — PREENCHER]
+**Última atualização:** 05 de agosto de 2027
 
 ---
 
@@ -10,13 +8,12 @@
 
 Esta Política de Privacidade descreve como o **Wednest** ("nós", "plataforma", "Wednest"), operado por:
 
-- Razão social: `[RAZÃO SOCIAL — PREENCHER]`
+- Razão social: `[negócio ainda não formalizado como pessoa jurídica — PREENCHER quando o CNPJ for emitido]`
 - Nome fantasia: Wednest
-- CNPJ: `[CNPJ — PREENCHER]`
-- Endereço: `[ENDEREÇO COMPLETO — PREENCHER]`
-- E-mail de contato geral: `[contato@noivei.com.br — CONFIRMAR SE É O CANAL OFICIAL A SER PUBLICADO]`
-- Encarregado(a) pelo tratamento de dados pessoais (DPO), nos termos do art. 41 da Lei nº 13.709/2018 (LGPD): `[NOME DO ENCARREGADO — PREENCHER]`
-- Canal exclusivo para exercício de direitos do titular de dados: `[E-MAIL DO ENCARREGADO/PRIVACIDADE — PREENCHER, ex.: privacidade@wednest.com.br]`
+- CNPJ: `[ainda não emitido — PREENCHER]`
+- E-mail de contato geral: wednest.suport@gmail.com
+- Encarregado(a) pelo tratamento de dados pessoais (DPO), nos termos do art. 41 da Lei nº 13.709/2018 (LGPD): Lucas Nascimento Costa
+- Canal exclusivo para exercício de direitos do titular de dados: wednest.suport@gmail.com
 - Foro/jurisdição: ver Termos de Uso, item de Foro.
 
 coleta, usa, armazena e compartilha dados pessoais no contexto do serviço de planejamento de casamento oferecido através do site e aplicação web do Wednest.
@@ -193,7 +190,7 @@ Nos termos do art. 18 da LGPD, você, titular de dados pessoais, tem direito a s
 
 Hoje, o Wednest já oferece, de forma self-service dentro do produto: exportação da lista de convidados em formato de planilha (CSV) e exclusão da própria conta (tela de Perfil). Para os demais direitos listados acima (acesso integral aos dados do casamento, correção, portabilidade completa, oposição, esclarecimentos), entre em contato pelo canal:
 
-📧 `[E-MAIL DO ENCARREGADO/PRIVACIDADE — PREENCHER]`
+📧 wednest.suport@gmail.com
 
 Responderemos às solicitações dentro dos prazos legais aplicáveis. Podemos solicitar informações adicionais para confirmar sua identidade antes de atender à solicitação, como forma de proteger os dados de terceiros e evitar fraudes.
 

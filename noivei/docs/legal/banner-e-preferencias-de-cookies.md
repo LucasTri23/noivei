@@ -1,7 +1,5 @@
 # Banner e Central de Preferências de Cookies — Wednest
 
-> ⚠️ **Aviso importante:** este é um **rascunho gerado com apoio de IA**, produzido a partir da leitura direta do código-fonte do sistema Wednest para identificar exatamente quais cookies estão em uso hoje. Ele **não substitui a revisão de um(a) advogado(a) habilitado(a)** antes da publicação. Este documento traz apenas o **texto e a estrutura de conteúdo** sugeridos para o banner e a central de preferências — a implementação visual/técnica (componente React, persistência da escolha do usuário etc.) não foi criada por esta tarefa, apenas o conteúdo textual.
-
 ---
 
 ## 1. Contexto e racional de design

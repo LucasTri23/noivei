@@ -1,8 +1,6 @@
 # Termos de Uso — Wednest
 
-> ⚠️ **Aviso importante:** este é um **rascunho gerado com apoio de IA**, produzido a partir da leitura direta do código-fonte do sistema Wednest (funcionalidades, integrações de pagamento e regras de negócio realmente implementadas nesta data). Ele **não substitui a revisão de um(a) advogado(a) habilitado(a)** antes da publicação — em especial para confirmar o enquadramento tributário da empresa, os dados de identificação da pessoa jurídica, o foro contratual e, sobretudo, as cláusulas de responsabilidade sobre a intermediação de pagamentos e sobre o repasse de valores de presentes ao casal via Mercado Pago. Todos os campos marcados como `[PREENCHER]` precisam ser completados por quem administra o negócio antes de qualquer publicação.
-
-**Última atualização:** [DATA DE PUBLICAÇÃO — PREENCHER]
+**Última atualização:** 05 de agosto de 2027
 
 ---
 
@@ -10,10 +8,9 @@
 
 Estes Termos de Uso ("Termos") regem o acesso e uso da plataforma **Wednest** ("Plataforma", "Serviço"), disponibilizada por:
 
-- Razão social: `[RAZÃO SOCIAL — PREENCHER]`
-- CNPJ: `[CNPJ — PREENCHER]`
-- Endereço: `[ENDEREÇO COMPLETO — PREENCHER]`
-- Contato: `[E-MAIL DE CONTATO — PREENCHER]`
+- Razão social: `[negócio ainda não formalizado como pessoa jurídica — PREENCHER quando o CNPJ for emitido]`
+- CNPJ: `[ainda não emitido — PREENCHER]`
+- Contato: wednest.suport@gmail.com
 
 Ao criar uma conta, marcar a caixa de aceite no cadastro e/ou utilizar o Wednest de qualquer forma, você concorda integralmente com estes Termos e com a [Política de Privacidade](./politica-de-privacidade.md) e a [Política de Cookies](./politica-de-cookies.md), que fazem parte integrante deste instrumento. Se você não concorda com qualquer disposição destes Termos, não deve utilizar o Serviço.
 
@@ -172,7 +169,7 @@ O usuário pode encerrar sua conta a qualquer momento pela tela de Perfil. A exc
 
 ## 11. Canal de atendimento
 
-Dúvidas, solicitações relativas a dados pessoais, reembolsos ou qualquer outro assunto relacionado a estes Termos podem ser encaminhadas para: `[E-MAIL DE CONTATO/SUPORTE — PREENCHER]`.
+Dúvidas, solicitações relativas a dados pessoais, reembolsos ou qualquer outro assunto relacionado a estes Termos podem ser encaminhadas para: wednest.suport@gmail.com.
 
 ---
 
@@ -186,4 +183,4 @@ Estes Termos podem ser alterados a qualquer momento, para refletir mudanças no 
 
 Estes Termos constituem o acordo integral entre o usuário e o Wednest quanto ao objeto aqui tratado. Caso qualquer disposição seja considerada nula ou inexequível, as demais permanecerão em pleno vigor.
 
-Fica eleito o foro da comarca de `[CIDADE/UF DO FORO — PREENCHER]` para dirimir quaisquer controvérsias decorrentes destes Termos, com renúncia a qualquer outro, por mais privilegiado que seja, **ressalvado o direito do consumidor de optar pelo foro de seu domicílio**, nos termos do art. 101, I, do Código de Defesa do Consumidor.
+Fica eleito o foro da comarca de Matozinhos, Estado de Minas Gerais, para dirimir quaisquer controvérsias decorrentes destes Termos, com renúncia a qualquer outro, por mais privilegiado que seja, **ressalvado o direito do consumidor de optar pelo foro de seu domicílio**, nos termos do art. 101, I, do Código de Defesa do Consumidor.

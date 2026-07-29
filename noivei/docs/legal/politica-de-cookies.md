@@ -1,8 +1,6 @@
 # Política de Cookies — Wednest
 
-> ⚠️ **Aviso importante:** este é um **rascunho gerado com apoio de IA**, produzido a partir da leitura direta do código-fonte do sistema Wednest para identificar exatamente quais cookies e tecnologias de rastreamento estão em uso hoje. Ele **não substitui a revisão de um(a) advogado(a) habilitado(a)** antes da publicação. Os campos marcados como `[PREENCHER]` precisam ser completados antes de qualquer publicação.
-
-**Última atualização:** [DATA DE PUBLICAÇÃO — PREENCHER]
+**Última atualização:** 05 de agosto de 2027
 
 ---
 
@@ -73,4 +71,4 @@ Você pode, a qualquer momento, gerenciar ou bloquear cookies diretamente nas co
 
 ## 6. Mais informações
 
-Para entender como tratamos os dados pessoais coletados de forma geral (não apenas via cookies), consulte a [Política de Privacidade](./politica-de-privacidade.md). Dúvidas sobre esta Política de Cookies podem ser encaminhadas para `[E-MAIL DO ENCARREGADO/PRIVACIDADE — PREENCHER]`.
+Para entender como tratamos os dados pessoais coletados de forma geral (não apenas via cookies), consulte a [Política de Privacidade](./politica-de-privacidade.md). Dúvidas sobre esta Política de Cookies podem ser encaminhadas para wednest.suport@gmail.com.
