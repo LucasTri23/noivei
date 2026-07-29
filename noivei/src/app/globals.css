@@ -105,12 +105,12 @@
 
 /* ── MODO ESCURO ──────────────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg:       #1E1508;
-  --surface:  #2C1E10;
-  --border:   #3D2D1A;
-  --fg:       #FAF0E6;
-  --muted:    #241808;
-  --muted-fg: #9A8060;
+  --bg:       #121212;
+  --surface:  #1E1E1E;
+  --border:   #2E2E2E;
+  --fg:       #F5F0EA;
+  --muted:    #171717;
+  --muted-fg: #A39B93;
 }
 
 /* ── BASE ─────────────────────────────────────────────────────── */
@@ -156,6 +156,28 @@ h1, h2, h3, h4, h5, h6 {
   outline: 2px solid var(--wedding-color);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
+}
+
+/* ── INTERAÇÃO ────────────────────────────────────────────────── */
+/* Botões e links ficam um pouco mais escuros ao passar o mouse — mesma cor já em
+ * uso (principal ou secundária do casal), só escurecida, pra dar o mesmo feedback
+ * que a barra lateral já tem (lá é feito com classes Tailwind hover: próprias).
+ * Genérico de propósito: a maioria dos botões do app é estilizada com objetos
+ * `style` inline (não aceitam `:hover` direto em React), então em vez de editar
+ * cada componente, um filtro de brilho escurece proporcionalmente qualquer cor
+ * já renderizada — funciona igual pra --wedding-color e --wedding-color-secondary,
+ * sem precisar saber qual das duas o botão está usando.
+ * `@media (hover: hover)` evita que o estado de "hover" fique preso depois de um
+ * toque em tela sensível ao toque (celular/tablet não tem hover de verdade). */
+@media (hover: hover) {
+  button:not(:disabled),
+  a {
+    transition: filter var(--duration-fast) var(--ease-default);
+  }
+  button:not(:disabled):hover,
+  a:hover {
+    filter: brightness(0.91);
+  }
 }
 
 /* ── AUTOFILL ─────────────────────────────────────────────────── */
