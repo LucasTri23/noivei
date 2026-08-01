@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import GoogleButton from '@/components/auth/google-button'
 import PasswordInput from '@/components/auth/password-input'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
@@ -139,11 +140,7 @@ function LoginForm() {
         <span style={{ flex: 1, height: '1px', background: '#EBDDD0' }} /> ou <span style={{ flex: 1, height: '1px', background: '#EBDDD0' }} />
       </div>
 
-      <button onClick={handleGoogle}
-        style={{ width: '100%', background: '#fff', color: '#3C2818', border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '13px', fontWeight: 600, fontSize: '14.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-        <span style={{ fontFamily: 'sans-serif', fontWeight: 700, color: '#4285F4' }}>G</span>
-        Continuar com Google
-      </button>
+      <GoogleButton onClick={handleGoogle} />
 
       <div style={{ textAlign: 'center', marginTop: '26px', fontSize: '14px', color: '#9A7A60' }}>
         Ainda não tem conta?{' '}
