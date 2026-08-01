@@ -121,26 +121,20 @@ interface UpcomingDueItem {
   installmentLabel: string | null
 }
 
-// `alreadyPaidCents` é o valor pago manualmente ANTES de gerar o plano (campo "Valor
-// pago" do lançamento) — vira a 1ª parcela ("Entrada", já paga) e as demais dividem só
-// o restante. Sem isso, a "entrada" era ignorada e as parcelas voltavam a somar o total
-// inteiro, cobrando de novo um valor que o casal já tinha registrado como pago.
+// `alreadyPaidCents` é o valor de entrada (se houve) — SEPARADO das `count` parcelas,
+// não uma delas: a conta é sempre "total - entrada = restante" e o restante é dividido
+// em `count` vezes. A entrada vira uma linha à parte (paga na 1ª data), fora da
+// contagem de parcelas que o usuário informou.
 function buildPlanItems(totalCents: number, count: number, firstDueDate: string, alreadyPaidCents = 0): InstallmentPlanItem[] {
-  const paid = Math.min(Math.max(alreadyPaidCents, 0), totalCents)
-  if (paid <= 0 || count < 2) {
-    return splitEvenly(totalCents, count).map((amount_cents, i) => ({
-      amount_cents,
-      due_date: i === 0 ? firstDueDate : addMonths(firstDueDate, i),
-    }))
-  }
+  const paid      = Math.min(Math.max(alreadyPaidCents, 0), totalCents)
+  const remaining = totalCents - paid
 
-  return [
-    { amount_cents: paid, due_date: firstDueDate },
-    ...splitEvenly(totalCents - paid, count - 1).map((amount_cents, i) => ({
-      amount_cents,
-      due_date: addMonths(firstDueDate, i + 1),
-    })),
-  ]
+  const installments = splitEvenly(remaining, count).map((amount_cents, i) => ({
+    amount_cents,
+    due_date: paid > 0 ? addMonths(firstDueDate, i + 1) : (i === 0 ? firstDueDate : addMonths(firstDueDate, i)),
+  }))
+
+  return paid > 0 ? [{ amount_cents: paid, due_date: firstDueDate }, ...installments] : installments
 }
 
 type PlanMode = 'monthly' | 'wedding_anchor'
@@ -151,23 +145,20 @@ type PlanMode = 'monthly' | 'wedding_anchor'
 // pra frente a partir de uma data de início.
 function buildWeddingAnchorPlanItems(totalCents: number, count: number, weddingDate: string, daysBeforeWedding: number, alreadyPaidCents = 0): InstallmentPlanItem[] {
   const anchorDate = addDays(weddingDate, -daysBeforeWedding)
-  const paid = Math.min(Math.max(alreadyPaidCents, 0), totalCents)
-  if (paid <= 0 || count < 2) {
-    return splitEvenly(totalCents, count).map((amount_cents, i) => ({
-      amount_cents,
-      due_date: addMonths(anchorDate, -(count - 1 - i)),
-    }))
-  }
+  const paid      = Math.min(Math.max(alreadyPaidCents, 0), totalCents)
+  const remaining = totalCents - paid
 
-  // Item 0 continua sendo a data mais antiga (a "entrada") — só o valor muda pra
-  // refletir o que já foi pago; o restante do total se divide pelas parcelas seguintes.
-  return [
-    { amount_cents: paid, due_date: addMonths(anchorDate, -(count - 1)) },
-    ...splitEvenly(totalCents - paid, count - 1).map((amount_cents, i) => ({
-      amount_cents,
-      due_date: addMonths(anchorDate, -(count - 1 - (i + 1))),
-    })),
-  ]
+  const installments = splitEvenly(remaining, count).map((amount_cents, i) => ({
+    amount_cents,
+    due_date: addMonths(anchorDate, -(count - 1 - i)),
+  }))
+
+  if (paid <= 0) return installments
+
+  // Entrada some mês antes da 1ª parcela calculada (que continua ancorada no
+  // casamento) — o restante das parcelas não muda de posição por causa da entrada.
+  const entryDueDate = installments[0] ? addMonths(installments[0].due_date, -1) : anchorDate
+  return [{ amount_cents: paid, due_date: entryDueDate }, ...installments]
 }
 
 function computePlanItems(
@@ -296,6 +287,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [quotes, setQuotes]                 = useState<FinancialQuote[]>(initialQuotes)
   const [quoteModalOpen, setQuoteModalOpen] = useState(false)
   const [quoteForm, setQuoteForm]           = useState<QuoteForm>(EMPTY_QUOTE_FORM)
+  const [editingQuote, setEditingQuote]     = useState<FinancialQuote | null>(null)
   const [savingQuote, setSavingQuote]       = useState(false)
   const [selectingId, setSelectingId]       = useState<string | null>(null)
   const showQuoteSpinner = useDelayedLoading(savingQuote)
@@ -322,8 +314,11 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [expandedEntryId, setExpandedEntryId]     = useState<string | null>(null)
   const [loadingInstallmentsId, setLoadingInstallmentsId] = useState<string | null>(null)
   const [planEntry, setPlanEntry]                 = useState<FinancialEntry | null>(null)
-  const [planForm, setPlanForm]                   = useState<{ count: number; firstDueDate: string; mode: PlanMode; daysBeforeWedding: number; items: InstallmentPlanItem[]; alreadyPaidCents: number }>(
-    { count: 2, firstDueDate: '', mode: 'monthly', daysBeforeWedding: 30, items: [], alreadyPaidCents: 0 },
+  const [planForm, setPlanForm]                   = useState<{
+    count: number; firstDueDate: string; mode: PlanMode; daysBeforeWedding: number; items: InstallmentPlanItem[]
+    hasDownPayment: boolean; downPaymentCents: number | null
+  }>(
+    { count: 2, firstDueDate: '', mode: 'monthly', daysBeforeWedding: 30, items: [], hasDownPayment: false, downPaymentCents: null },
   )
   const [savingPlan, setSavingPlan]               = useState(false)
   const [togglingInstallmentId, setTogglingInstallmentId] = useState<string | null>(null)
@@ -536,7 +531,19 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   }
 
   function openCreateQuote() {
+    setEditingQuote(null)
     setQuoteForm(EMPTY_QUOTE_FORM)
+    setQuoteModalOpen(true)
+  }
+
+  function openEditQuote(quote: FinancialQuote) {
+    setEditingQuote(quote)
+    setQuoteForm({
+      type:         quote.type,
+      vendor_name:  quote.vendor_name,
+      amount_cents: quote.amount_cents,
+      notes:        quote.notes ?? '',
+    })
     setQuoteModalOpen(true)
   }
 
@@ -553,11 +560,17 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       notes:        quoteForm.notes.trim() || null,
     }
 
-    const res = await fetch(quotesApiBase, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    })
+    const res = editingQuote
+      ? await fetch(`${quotesApiBase}/${editingQuote.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        })
+      : await fetch(quotesApiBase, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        })
 
     setSavingQuote(false)
     if (!res.ok) {
@@ -566,8 +579,9 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     }
 
     const { data } = (await res.json()) as { data: FinancialQuote }
-    setQuotes((prev) => [...prev, data])
+    setQuotes((prev) => (editingQuote ? prev.map((q) => (q.id === data.id ? data : q)) : [...prev, data]))
     setQuoteModalOpen(false)
+    setEditingQuote(null)
   }
 
   async function handleDeleteQuote(quote: FinancialQuote) {
@@ -768,50 +782,60 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     const existing = installments[entry.id] ?? []
     const count = existing.length > 0 ? existing.length : 2
     const firstDueDate = existing[0]?.due_date ?? entry.due_date ?? toIsoDate(new Date())
-    // Só desconta o "Valor pago" na criação de um plano novo — se já existe plano,
-    // paid_amount reflete a soma das parcelas marcadas como pagas (ver
-    // handleSubmitPlan), não é mais uma entrada manual a subtrair de novo.
-    const alreadyPaidCents = existing.length > 0 ? 0 : entry.paid_amount
+    // Pré-marca "teve entrada" só na criação de um plano novo, a partir do "Valor pago"
+    // já preenchido no lançamento — se já existe plano, paid_amount reflete a soma das
+    // parcelas marcadas como pagas (ver handleSubmitPlan), não é mais uma entrada
+    // manual a perguntar de novo.
+    const hasDownPayment  = existing.length === 0 && entry.paid_amount > 0
+    const downPaymentCents = hasDownPayment ? entry.paid_amount : null
     const items = existing.length > 0
       ? existing.map((inst) => ({ amount_cents: inst.amount_cents, due_date: inst.due_date }))
-      : buildPlanItems(entry.total_amount, count, firstDueDate, alreadyPaidCents)
+      : buildPlanItems(entry.total_amount, count, firstDueDate, downPaymentCents ?? 0)
 
     setPlanEntry(entry)
-    setPlanForm({ count, firstDueDate, mode: 'monthly', daysBeforeWedding: 30, items, alreadyPaidCents })
+    setPlanForm({ count, firstDueDate, mode: 'monthly', daysBeforeWedding: 30, items, hasDownPayment, downPaymentCents })
+  }
+
+  function recomputePlanItems(f: typeof planForm, overrides: Partial<typeof planForm> = {}): InstallmentPlanItem[] {
+    if (!planEntry) return f.items
+    const next = { ...f, ...overrides }
+    const alreadyPaidCents = next.hasDownPayment ? (next.downPaymentCents ?? 0) : 0
+    return computePlanItems(planEntry.total_amount, next.mode, next.count, next.firstDueDate, weddingDate, next.daysBeforeWedding, alreadyPaidCents)
   }
 
   function handlePlanCountChange(count: number) {
     if (!planEntry) return
     const clamped = Math.min(60, Math.max(1, count))
-    setPlanForm((f) => ({
-      ...f, count: clamped,
-      items: computePlanItems(planEntry.total_amount, f.mode, clamped, f.firstDueDate, weddingDate, f.daysBeforeWedding, f.alreadyPaidCents),
-    }))
+    setPlanForm((f) => ({ ...f, count: clamped, items: recomputePlanItems(f, { count: clamped }) }))
   }
 
   function handlePlanFirstDueDateChange(dueDate: string) {
     if (!planEntry) return
-    setPlanForm((f) => ({
-      ...f, firstDueDate: dueDate,
-      items: computePlanItems(planEntry.total_amount, f.mode, f.count, dueDate, weddingDate, f.daysBeforeWedding, f.alreadyPaidCents),
-    }))
+    setPlanForm((f) => ({ ...f, firstDueDate: dueDate, items: recomputePlanItems(f, { firstDueDate: dueDate }) }))
   }
 
   function handlePlanModeChange(mode: PlanMode) {
     if (!planEntry) return
-    setPlanForm((f) => ({
-      ...f, mode,
-      items: computePlanItems(planEntry.total_amount, mode, f.count, f.firstDueDate, weddingDate, f.daysBeforeWedding, f.alreadyPaidCents),
-    }))
+    setPlanForm((f) => ({ ...f, mode, items: recomputePlanItems(f, { mode }) }))
   }
 
   function handlePlanDaysBeforeWeddingChange(days: number) {
     if (!planEntry) return
     const clamped = Math.max(0, days)
-    setPlanForm((f) => ({
-      ...f, daysBeforeWedding: clamped,
-      items: computePlanItems(planEntry.total_amount, f.mode, f.count, f.firstDueDate, weddingDate, clamped, f.alreadyPaidCents),
-    }))
+    setPlanForm((f) => ({ ...f, daysBeforeWedding: clamped, items: recomputePlanItems(f, { daysBeforeWedding: clamped }) }))
+  }
+
+  // "Teve valor de entrada?" — pergunta explícita no popup de parcelamento (não some
+  // do "Valor pago" do lançamento sozinho): sim/não decide se uma linha de entrada
+  // separada é criada; o valor da entrada só entra na conta quando marcado "sim".
+  function handleHasDownPaymentChange(hasDownPayment: boolean) {
+    if (!planEntry) return
+    setPlanForm((f) => ({ ...f, hasDownPayment, items: recomputePlanItems(f, { hasDownPayment }) }))
+  }
+
+  function handleDownPaymentAmountChange(cents: number | null) {
+    if (!planEntry) return
+    setPlanForm((f) => ({ ...f, downPaymentCents: cents, items: recomputePlanItems(f, { downPaymentCents: cents }) }))
   }
 
   function handlePlanItemAmountChange(index: number, cents: number | null) {
@@ -1489,6 +1513,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                             </button>
                           )}
                           <button
+                            onClick={() => openEditQuote(quote)}
+                            title="Editar orçamento"
+                            aria-label={`Editar orçamento ${quote.vendor_name}`}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--muted-fg)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
+                          >
+                            <PencilIcon />
+                          </button>
+                          <button
                             onClick={() => handleDeleteQuote(quote)}
                             title="Excluir orçamento"
                             aria-label={`Excluir orçamento ${quote.vendor_name}`}
@@ -1696,8 +1728,8 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       {/* Modal de orçamento */}
       <Modal
         open={quoteModalOpen}
-        onClose={() => setQuoteModalOpen(false)}
-        title="Novo orçamento"
+        onClose={() => { setQuoteModalOpen(false); setEditingQuote(null) }}
+        title={editingQuote ? 'Editar orçamento' : 'Novo orçamento'}
       >
         <form onSubmit={handleSubmitQuote} className="flex flex-col gap-4">
           <div>
@@ -1751,7 +1783,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
-              onClick={() => setQuoteModalOpen(false)}
+              onClick={() => { setQuoteModalOpen(false); setEditingQuote(null) }}
               style={{
                 background: 'transparent', color: 'var(--muted-fg)', border: 'none',
                 fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
@@ -1785,17 +1817,48 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       >
         {planEntry && (
           <form onSubmit={handleSubmitPlan} className="flex flex-col gap-4">
-            {planForm.alreadyPaidCents > 0 && (
-              <div
-                className="rounded-xl p-3"
-                style={{ background: 'var(--wedding-color-subtle)', fontSize: '12.5px', color: 'var(--fg)' }}
-              >
-                Valor já pago ({fmt(planForm.alreadyPaidCents)}) virou a entrada — as parcelas abaixo dividem só o restante.
+            <div>
+              <label style={labelStyle}>Teve valor de entrada?</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleHasDownPaymentChange(true)}
+                  style={{
+                    flex: 1, borderRadius: '10px', padding: '10px', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+                    border: `1.5px solid ${planForm.hasDownPayment ? 'var(--wedding-color)' : '#EBDDD0'}`,
+                    background: planForm.hasDownPayment ? 'var(--wedding-color-subtle)' : 'transparent',
+                    color: planForm.hasDownPayment ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+                  }}
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleHasDownPaymentChange(false)}
+                  style={{
+                    flex: 1, borderRadius: '10px', padding: '10px', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+                    border: `1.5px solid ${!planForm.hasDownPayment ? 'var(--wedding-color)' : '#EBDDD0'}`,
+                    background: !planForm.hasDownPayment ? 'var(--wedding-color-subtle)' : 'transparent',
+                    color: !planForm.hasDownPayment ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+                  }}
+                >
+                  Não
+                </button>
+              </div>
+            </div>
+
+            {planForm.hasDownPayment && (
+              <div>
+                <label htmlFor="plan-down-payment" style={labelStyle}>Valor de entrada</label>
+                <CurrencyInput id="plan-down-payment" value={planForm.downPaymentCents} onChange={handleDownPaymentAmountChange} />
               </div>
             )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="plan-count" style={labelStyle}>Número de parcelas</label>
+                <label htmlFor="plan-count" style={labelStyle}>
+                  {planForm.hasDownPayment ? 'O restante foi dividido em quantas vezes?' : 'Número de parcelas'}
+                </label>
                 <input
                   id="plan-count"
                   type="number"
@@ -1807,7 +1870,9 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                 />
               </div>
               <div>
-                <label htmlFor="plan-first-due" style={labelStyle}>Data da 1ª parcela</label>
+                <label htmlFor="plan-first-due" style={labelStyle}>
+                  {planForm.hasDownPayment ? 'Data da entrada' : 'Data da 1ª parcela'}
+                </label>
                 <input
                   id="plan-first-due"
                   type="date"
@@ -1818,6 +1883,16 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                 />
               </div>
             </div>
+
+            {planForm.hasDownPayment && (
+              <div
+                className="rounded-xl p-3"
+                style={{ background: 'var(--wedding-color-subtle)', fontSize: '12.5px', color: 'var(--fg)' }}
+              >
+                {fmt(planEntry.total_amount)} (total) − {fmt(planForm.downPaymentCents ?? 0)} (entrada) ={' '}
+                {fmt(Math.max(planEntry.total_amount - (planForm.downPaymentCents ?? 0), 0))} divididos em {planForm.count}x.
+              </div>
+            )}
 
             {/* Tipo de parcelamento — diferencial Premium/Premium Plus; Gratuito mantém o
                 comportamento mensal fixo de sempre, sem esse seletor. */}
@@ -1865,7 +1940,9 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                 >
                   <div>
                     <label htmlFor={`plan-item-amount-${index}`} style={labelStyle}>
-                      {index === 0 ? 'Entrada / parcela 1' : `Parcela ${index + 1}`}
+                      {planForm.hasDownPayment
+                        ? (index === 0 ? 'Entrada' : `Parcela ${index}`)
+                        : `Parcela ${index + 1}`}
                     </label>
                     <CurrencyInput
                       id={`plan-item-amount-${index}`}
