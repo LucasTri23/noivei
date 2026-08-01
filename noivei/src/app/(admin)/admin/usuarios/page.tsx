@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import ResetPreferencesButton from '@/components/admin/reset-preferences-button'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createSupabaseService } from '@/lib/supabase/service'
 
@@ -220,7 +221,7 @@ export default async function AdminUsuariosPage({ searchParams }: UsuariosPagePr
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: '13.5px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #EFE7DC', textAlign: 'left' }}>
-              {['Nome', 'E-mail', 'Plano', 'Casamento', 'Cadastrado em'].map((h) => (
+              {['Nome', 'E-mail', 'Plano', 'Casamento', 'Cadastrado em', 'Ações'].map((h) => (
                 <th key={h} style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 600, color: '#8A7560', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                   {h}
                 </th>
@@ -230,7 +231,7 @@ export default async function AdminUsuariosPage({ searchParams }: UsuariosPagePr
           <tbody>
             {profiles.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ padding: '24px 16px', textAlign: 'center', color: '#8A7560' }}>
+                <td colSpan={6} style={{ padding: '24px 16px', textAlign: 'center', color: '#8A7560' }}>
                   Nenhum usuário encontrado.
                 </td>
               </tr>
@@ -256,6 +257,12 @@ export default async function AdminUsuariosPage({ searchParams }: UsuariosPagePr
                   </td>
                   <td style={{ padding: '12px 16px', color: '#2A1E10' }}>
                     {new Date(p.created_at).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <ResetPreferencesButton
+                      userId={p.id}
+                      userLabel={p.full_name || emailByUserId.get(p.id) || 'este usuário'}
+                    />
                   </td>
                 </tr>
               )

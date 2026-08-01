@@ -31,15 +31,27 @@ function UsersIcon() {
 function StarIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
 }
+function RefreshIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/></svg>
+}
 
-const MENU_ITEMS = [
-  { label: 'Dados do casamento',   href: '/perfil/dados-do-casamento', icon: <CalendarIcon /> },
-  { label: 'Membros do casamento', href: '/perfil/membros',            icon: <UsersIcon /> },
-  { label: 'Notificações',         href: '/perfil/notificacoes',       icon: <BellIcon /> },
-  { label: 'Aparência',            href: '/perfil/aparencia',          icon: <SunIcon /> },
-  { label: 'Segurança',            href: '/perfil/seguranca',          icon: <LockIcon /> },
-  { label: 'Ajuda',                href: '/perfil/ajuda',              icon: <HelpIcon /> },
-]
+// "Refazer questionário" só aparece pra planos pagos — /checklist/personalizar
+// redireciona o Gratuito de volta pro /checklist, então mostrar o item pra ele
+// só levaria a um beco sem saída.
+function buildMenuItems(isPremium: boolean) {
+  const items = [
+    { label: 'Dados do casamento',   href: '/perfil/dados-do-casamento', icon: <CalendarIcon /> },
+    { label: 'Membros do casamento', href: '/perfil/membros',            icon: <UsersIcon /> },
+    { label: 'Notificações',         href: '/perfil/notificacoes',       icon: <BellIcon /> },
+    { label: 'Aparência',            href: '/perfil/aparencia',          icon: <SunIcon /> },
+    { label: 'Segurança',            href: '/perfil/seguranca',          icon: <LockIcon /> },
+    { label: 'Ajuda',                href: '/perfil/ajuda',              icon: <HelpIcon /> },
+  ]
+  if (isPremium) {
+    items.splice(1, 0, { label: 'Refazer questionário de personalização', href: '/checklist/personalizar', icon: <RefreshIcon /> })
+  }
+  return items
+}
 
 export default async function PerfilPage() {
   const supabase = await createSupabaseServer()
@@ -59,6 +71,7 @@ export default async function PerfilPage() {
   const isPremium = isPaidPlan(planId)
   const planName = PLAN_NAMES[planId] ?? 'Gratuito'
   const initial = coupleNames.charAt(0).toUpperCase()
+  const menuItems = buildMenuItems(isPremium)
 
   return (
     <div>
@@ -114,14 +127,14 @@ export default async function PerfilPage() {
 
           {/* Menu list */}
           <div className="rounded-2xl bg-[var(--surface)] overflow-hidden" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-            {MENU_ITEMS.map((item, idx) => (
+            {menuItems.map((item, idx) => (
               <Link
                 key={item.label}
                 href={item.href}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
                   padding: '14px 20px', background: 'transparent',
-                  borderBottom: idx < MENU_ITEMS.length - 1 ? '1px solid #F8F3EE' : 'none',
+                  borderBottom: idx < menuItems.length - 1 ? '1px solid #F8F3EE' : 'none',
                   textAlign: 'left', textDecoration: 'none',
                 }}
               >
