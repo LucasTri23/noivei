@@ -122,7 +122,7 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
 
     const { error: uploadError } = await supabase.storage.from('wedding-files').upload(path, file)
     if (uploadError) {
-      toastError(`Não foi possível enviar "${file.name}". Verifique o tamanho (máx. 10 MB) e tente novamente.`)
+      toastError(`Não foi possível enviar "${file.name}". Verifique o tamanho (máx. 50 MB) e tente novamente.`)
       return false
     }
 
