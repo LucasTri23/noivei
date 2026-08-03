@@ -13,4 +13,6 @@ export const WEDDING_MODULE_LABELS: Record<WeddingModuleKey, string> = {
   arquivos:   'Central de arquivos',
   presentes:  'Lista de presentes',
   padrinhos:  'Padrinhos & Entradas',
+  checkin:    'Portaria',
+  album:      'Álbum de fotos',
 }

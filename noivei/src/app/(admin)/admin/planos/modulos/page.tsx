@@ -25,7 +25,7 @@ export default async function AdminPlanModulesPage() {
         Módulos por plano
       </h1>
       <p style={{ fontSize: '14.5px', color: '#8A7560', margin: '0 0 28px' }}>
-        Defina o que cada plano libera de verdade — checklist, convidados, financeiro, mesas, site, arquivos, presentes e padrinhos.
+        Defina o que cada plano libera de verdade — checklist, convidados, financeiro, mesas, site, arquivos, presentes, padrinhos, check-in e álbum de fotos.
       </p>
 
       <AdminPlanModulesManager

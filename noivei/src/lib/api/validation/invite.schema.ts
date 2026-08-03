@@ -15,7 +15,7 @@ export const AcceptInviteBodySchema = z
 // importado) porque schemas de validação do projeto não dependem de types/database,
 // só o contrário; mantenha as duas listas em sincronia se um módulo for adicionado.
 export const WEDDING_MODULE_KEYS = [
-  'checklist', 'convidados', 'financeiro', 'mesas', 'site', 'arquivos', 'presentes', 'padrinhos',
+  'checklist', 'convidados', 'financeiro', 'mesas', 'site', 'arquivos', 'presentes', 'padrinhos', 'checkin', 'album',
 ] as const
 
 export const WeddingMemberPermissionsSchema = z.object({

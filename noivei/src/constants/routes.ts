@@ -10,6 +10,8 @@ export const PUBLIC_ROUTES = [
   '/forgot-password',
   '/reset-password',
   '/rsvp',
+  '/ingresso',
+  '/mural',
   '/convite',
   '/auth/callback',
 ] as const
@@ -20,6 +22,6 @@ export const PUBLIC_ROUTES = [
 // com esta lista é tratado como /[slug] e deixado passar sem exigir login.
 export const APP_ROUTE_PREFIXES = [
   '/dashboard', '/checklist', '/timeline', '/convidados', '/financeiro',
-  '/mesas', '/site', '/arquivos', '/presentes', '/padrinhos', '/perfil',
+  '/mesas', '/site', '/arquivos', '/presentes', '/padrinhos', '/checkin', '/album', '/perfil',
   '/onboarding', '/admin',
 ] as const

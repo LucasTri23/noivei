@@ -19,6 +19,8 @@ const FEATURE_DESCRIPTIONS: Record<WeddingModuleKey, string> = {
   arquivos:   'Guarde contratos, orçamentos e documentos importantes do casamento em um só lugar, com backup seguro.',
   presentes:  'Monte a lista de presentes do casamento, organize preço e loja de cada item e marque manualmente o que já foi dado por convidados.',
   padrinhos:  'Organize padrinhos, madrinhas e a ordem de entrada da cerimônia.',
+  checkin:    'Gere o ingresso com QR code de cada convidado confirmado e valide a entrada deles no dia do casamento.',
+  album:      'Compartilhe um QR code no salão para os convidados enviarem fotos do casamento em tempo real, direto do celular.',
 }
 
 interface PaywallGateProps {

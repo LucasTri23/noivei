@@ -73,8 +73,9 @@ const DEFAULT_STORAGE_LIMIT_MB = 100
  * `additionalBytes` é o tamanho do arquivo que se pretende adicionar; `allowed` considera o uso
  * já existente somado a ele, já que aqui (diferente de convidados) cada upload tem um peso diferente.
  * A cota é única para a conta: soma a Central de arquivos (wedding_files), as fotos da
- * Galeria do site (wedding_gallery_photos) e as fotos enviadas na Lista de presentes
- * (gift_registry_items.image_size_bytes) — não são pools separados.
+ * Galeria do site (wedding_gallery_photos), as fotos enviadas na Lista de presentes
+ * (gift_registry_items.image_size_bytes) e as fotos enviadas pelos convidados no Álbum
+ * (album_photos) — não são pools separados.
  */
 export async function checkStorageLimit(
   supabase:        SupabaseClient,
@@ -83,7 +84,7 @@ export async function checkStorageLimit(
 ): Promise<LimitCheck> {
   const planId = await resolveWeddingPlanId(supabase, weddingId)
 
-  const [{ data: files }, { data: galleryPhotos }, { data: giftPhotos }, { data: limitRow }] = await Promise.all([
+  const [{ data: files }, { data: galleryPhotos }, { data: giftPhotos }, { data: albumPhotos }, { data: limitRow }] = await Promise.all([
     supabase
       .from('wedding_files')
       .select('size_bytes')
@@ -97,6 +98,10 @@ export async function checkStorageLimit(
       .select('image_size_bytes')
       .eq('wedding_id', weddingId)
       .not('image_size_bytes', 'is', null),
+    supabase
+      .from('album_photos')
+      .select('size_bytes')
+      .eq('wedding_id', weddingId),
     supabase
       .from('plan_limits')
       .select('value')
@@ -114,6 +119,7 @@ export async function checkStorageLimit(
         ((giftPhotos ?? []) as { image_size_bytes: number | null }[])
           .map((row) => ({ size_bytes: row.image_size_bytes ?? 0 })),
       )
+    + sumSizeBytes(albumPhotos as { size_bytes: number }[] | null)
   const limitMb = (limitRow?.value as number | undefined) ?? DEFAULT_STORAGE_LIMIT_MB
   const limit   = limitMb * BYTES_PER_MB
   const allowed = current + additionalBytes <= limit

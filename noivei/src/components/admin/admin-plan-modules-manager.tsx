@@ -25,10 +25,11 @@ interface ApiErrorBody {
   error?: { message?: string }
 }
 
-// Mesma lista fixa do CHECK em plan_module_access (migration 20260729000001).
+// Mesma lista fixa do CHECK em plan_module_access (migration 20260729000001,
+// estendida em 20260801000001 para incluir 'checkin' e em 20260803000001 para incluir 'album').
 const MODULES: WeddingModuleKey[] = [
   'checklist', 'convidados', 'financeiro', 'mesas',
-  'site', 'arquivos', 'presentes', 'padrinhos',
+  'site', 'arquivos', 'presentes', 'padrinhos', 'checkin', 'album',
 ]
 
 export default function AdminPlanModulesManager({ plans, initialAccess }: AdminPlanModulesManagerProps) {

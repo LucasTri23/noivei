@@ -55,6 +55,10 @@ export interface Wedding {
   style:          WeddingStyle | null
   wedding_color:  string
   wedding_color_secondary: string
+  // Identificador estável e imprevisível do link/QR público do mural de fotos
+  // (/mural/[album_token]) — não depende de site_config.slug (nem todo
+  // casamento tem site publicado).
+  album_token:    string
   rsvp_message_template: string | null
   wedding_score:  number
   score_calculated_at: string | null
@@ -77,6 +81,7 @@ export interface Guest {
   attending_count: number | null
   parent_guest_id: string | null
   invite_sent_at:  string | null
+  checked_in_at:   string | null
   created_at:      string
 }
 
@@ -283,6 +288,25 @@ export interface WeddingGalleryPhoto {
   created_at:   string
 }
 
+export interface AlbumContributor {
+  id:           string
+  wedding_id:   string
+  name:         string
+  relationship: string
+  phone:        string
+  created_at:   string
+}
+
+export interface AlbumPhoto {
+  id:             string
+  wedding_id:     string
+  contributor_id: string
+  storage_path:   string
+  size_bytes:     number
+  mime_type:      string
+  created_at:     string
+}
+
 export interface Profile {
   id:              string
   full_name:       string | null
@@ -307,6 +331,8 @@ export type WeddingModuleKey =
   | 'arquivos'
   | 'presentes'
   | 'padrinhos'
+  | 'checkin'
+  | 'album'
 
 export interface WeddingMemberPermissions {
   full_access: boolean
