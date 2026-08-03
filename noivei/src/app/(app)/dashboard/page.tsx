@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import CountdownCard from '@/components/dashboard/countdown-card'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
@@ -74,6 +75,8 @@ export default async function DashboardPage() {
   let checklistDone  = 0
   let overdueTasks   = 0
   let pendingGuests  = 0
+  let confirmedGuests = 0
+  let upcomingTasks: { id: string; label: string; due_date: string | null }[] = []
   let notifyTimeline = true
   let notifyRsvp     = true
   let planId: PlanId = 'free'
@@ -100,7 +103,7 @@ export default async function DashboardPage() {
   if (wedding?.id) {
     const today = new Date(now).toLocaleDateString('sv-SE') // yyyy-mm-dd local
 
-    const [{ data: tasks }, { count: pendingCount }] = await Promise.all([
+    const [{ data: tasks }, { count: pendingCount }, { count: confirmedCount }, { data: upcoming }] = await Promise.all([
       supabase
         .from('checklist_items')
         .select('completed, due_date')
@@ -112,13 +115,30 @@ export default async function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .eq('wedding_id', wedding.id)
         .eq('status', 'pendente'),
+      supabase
+        .from('guests')
+        .select('*', { count: 'exact', head: true })
+        .eq('wedding_id', wedding.id)
+        .eq('status', 'confirmado'),
+      supabase
+        .from('checklist_items')
+        .select('id, label, due_date')
+        .eq('wedding_id', wedding.id)
+        .eq('completed', false)
+        .eq('is_archived', false)
+        .eq('is_dismissed', false)
+        .not('due_date', 'is', null)
+        .order('due_date', { ascending: true })
+        .limit(4),
     ])
 
     const items = (tasks ?? []) as { completed: boolean; due_date: string | null }[]
-    checklistTotal = items.length
-    checklistDone  = items.filter((t) => t.completed).length
-    overdueTasks   = items.filter((t) => !t.completed && t.due_date !== null && t.due_date < today).length
-    pendingGuests  = pendingCount ?? 0
+    checklistTotal  = items.length
+    checklistDone   = items.filter((t) => t.completed).length
+    overdueTasks    = items.filter((t) => !t.completed && t.due_date !== null && t.due_date < today).length
+    pendingGuests   = pendingCount ?? 0
+    confirmedGuests = confirmedCount ?? 0
+    upcomingTasks   = (upcoming ?? []) as { id: string; label: string; due_date: string | null }[]
   }
 
   const progressPct = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0
@@ -204,38 +224,8 @@ export default async function DashboardPage() {
         className="mb-4 grid gap-4"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
       >
-        {/* Countdown */}
-        <div
-          className="relative overflow-hidden rounded-3xl p-8"
-          style={{ background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))', color: '#FAF0E6' }}
-        >
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{ backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 18%, transparent) 1.3px, transparent 1.5px)', backgroundSize: '26px 26px' }}
-          />
-          <div className="relative">
-            <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
-              Faltam
-            </div>
-            {daysLeft !== null ? (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '14px', marginTop: '4px' }}>
-                <span className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(60px,8vw,88px)', lineHeight: 0.9 }}>
-                  {daysLeft}
-                </span>
-                <span className="font-display" style={{ fontStyle: 'italic', fontSize: '28px', color: 'var(--wedding-color-light)' }}>dias</span>
-              </div>
-            ) : (
-              <p className="font-display mt-2" style={{ fontStyle: 'italic', fontSize: '22px', color: 'var(--wedding-color-light)' }}>
-                Adicione a data do casamento nas configurações
-              </p>
-            )}
-            {weddingDate && (
-              <div style={{ fontSize: '14px', color: 'rgba(250,240,230,0.65)', marginTop: '6px' }}>
-                {weddingDate}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Countdown — dias/horas/min/seg, ticando ao vivo (client component) */}
+        <CountdownCard weddingDate={wedding?.wedding_date ?? null} formattedDate={weddingDate} />
 
         {/* Progress circle */}
         <div className="flex flex-col items-center justify-center rounded-3xl bg-[var(--surface)] p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
@@ -250,7 +240,18 @@ export default async function DashboardPage() {
           </div>
           <div className="font-display mt-3.5" style={{ fontSize: '23px', color: 'var(--fg)' }}>Planejamento</div>
           <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>
-            {checklistDone} de {checklistTotal} tarefas concluídas
+            {checklistDone} concluída{checklistDone === 1 ? '' : 's'} · {Math.max(checklistTotal - checklistDone, 0)} pendente{checklistTotal - checklistDone === 1 ? '' : 's'}
+          </div>
+        </div>
+
+        {/* Convidados */}
+        <div className="flex flex-col items-center justify-center rounded-3xl bg-[var(--surface)] p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
+          <span style={{ color: 'var(--wedding-color)' }}><UsersIcon size={26} /></span>
+          <div className="font-display mt-2" style={{ fontSize: '23px', color: 'var(--fg)' }}>Convidados</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '6px' }}>
+            <span style={{ fontWeight: 700, color: '#5E8B6A' }}>{confirmedGuests} confirmado{confirmedGuests === 1 ? '' : 's'}</span>
+            {' · '}
+            <span style={{ fontWeight: 700, color: 'var(--wedding-color-dark)' }}>{pendingGuests} pendente{pendingGuests === 1 ? '' : 's'}</span>
           </div>
         </div>
 
@@ -301,6 +302,40 @@ export default async function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {/* Próximas tarefas */}
+      {upcomingTasks.length > 0 && (
+        <div className="mb-4 rounded-[22px] bg-[var(--surface)] p-6" style={{ boxShadow: '0 10px 26px rgba(60,40,24,0.06)' }}>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="font-display" style={{ fontWeight: 500, fontSize: '24px', color: 'var(--fg)' }}>
+              Próximas tarefas
+            </h3>
+            <Link href="/checklist" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color)', textDecoration: 'underline' }}>
+              Ver todas
+            </Link>
+          </div>
+          <div className="flex flex-col gap-3">
+            {upcomingTasks.map((task) => (
+              <div key={task.id} className="flex items-center justify-between gap-3" style={{ fontSize: '14px' }}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className="flex-shrink-0 rounded-md"
+                    style={{ width: '18px', height: '18px', border: '1.5px solid #D8C6A6' }}
+                  />
+                  <span style={{ color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {task.label}
+                  </span>
+                </div>
+                {task.due_date && (
+                  <span style={{ color: 'var(--muted-fg)', fontSize: '13px', flexShrink: 0 }}>
+                    {new Date(`${task.due_date}T00:00:00`).toLocaleDateString('pt-BR')}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick links */}
       <div className="rounded-[22px] bg-[var(--surface)] p-6" style={{ boxShadow: '0 10px 26px rgba(60,40,24,0.06)' }}>
