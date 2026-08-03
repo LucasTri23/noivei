@@ -2,13 +2,15 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import type { ImportGuestRow } from '@/lib/api/validation/guest.schema'
 import { parseImportCsv, IMPORT_MAX_ROWS, type ParseImportCsvResult } from '@/lib/guests/parse-import-csv'
-import { buildRsvpWhatsAppUrl } from '@/lib/rsvp/build-whatsapp-link'
+import { buildCheckinWhatsAppUrl, buildRsvpWhatsAppUrl } from '@/lib/rsvp/build-whatsapp-link'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { Guest, GuestStatus } from '@/types/database'
 
@@ -19,10 +21,18 @@ type PreviewRow =
   | { line: number; error: string; guest: null }
 
 interface GuestsManagerProps {
-  weddingId:           string
-  initialGuests:       Guest[]
-  guestLimit:          number
-  rsvpMessageTemplate: string | null
+  weddingId:             string
+  initialGuests:         Guest[]
+  guestLimit:            number
+  rsvpMessageTemplate:   string | null
+  coupleNames:           string
+  weddingColor:          string
+  weddingColorSecondary: string
+  // Se o plano do casamento libera o módulo Check-in (plan_module_access) — quando
+  // falso, o botão de enviar ingresso some (mas some só ele, o resto da tela de
+  // convidados continua funcionando normalmente) e um aviso discreto de upgrade
+  // aparece no lugar, mesmo espírito do teaser do Wedding Score no dashboard.
+  checkinEnabled:        boolean
 }
 
 interface ApiErrorBody {
@@ -84,6 +94,16 @@ function matchGroupCategory(groupName: string | null): GuestGroupCategory | null
   return null
 }
 
+// Descreve o recorte atual (filtro de status + filtro de grupo) pra deixar claro, no
+// PDF exportado, que a lista não é necessariamente todos os convidados — evita o casal
+// achar que o PDF "perdeu" convidados quando na verdade só um filtro estava ativo.
+function buildFilterDescription(filter: Filter, groupFilter: GuestGroupCategory | 'todos'): string | null {
+  const parts: string[] = []
+  if (filter !== 'todos') parts.push(FILTER_OPTS.find((f) => f.key === filter)!.label)
+  if (groupFilter !== 'todos') parts.push(GROUP_FILTER_OPTS.find((g) => g.key === groupFilter)!.label)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
 function PlusIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -129,6 +149,31 @@ function DownloadIcon() {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
+function PdfIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M9 15h6M9 11h2" />
+    </svg>
+  )
+}
+function TicketIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4z" />
+      <path d="M13 5v2M13 11v2M13 17v2" />
+    </svg>
+  )
+}
+function LockIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
   )
 }
@@ -183,6 +228,40 @@ function downloadImportTemplate() {
   URL.revokeObjectURL(url)
 }
 
+function toIsoDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+// Mesma normalização de matchGroupCategory (remove acento, minúsculo) — aqui vira um
+// slug pra nome de arquivo, trocando qualquer sequência de caracteres não
+// alfanuméricos por um único hífen.
+function slugify(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-+|-+$)/g, '')
+}
+
+// Clareia uma cor hex misturando com branco — usado pro tom alternado das linhas da
+// tabela do PDF, já que a cor secundária "crua" do casamento pode ser saturada demais
+// pra servir de fundo de linha sem prejudicar a leitura do texto.
+function lightenHex(hex: string, amount: number): string {
+  const clean = hex.replace('#', '')
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+  const num = Number.parseInt(full, 16)
+  const r = (num >> 16) & 255
+  const g = (num >> 8) & 255
+  const b = num & 255
+  const mix = (channel: number) => Math.round(channel + (255 - channel) * amount)
+  const toHex = (n: number) => n.toString(16).padStart(2, '0')
+  return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`
+}
+
 // Quem nomeia os acompanhantes de um convidado com party_size > 1 — só decidido na
 // CRIAÇÃO do convidado principal (editar um acompanhante já existente é feito pela
 // edição genérica de convidado, já que ele é só mais uma linha em `guests`).
@@ -190,7 +269,16 @@ function downloadImportTemplate() {
 // informa nome/telefone de cada acompanhante ao confirmar presença via RSVP).
 type CompanionAssignment = 'guest' | 'couple'
 
-export default function GuestsManager({ weddingId, initialGuests, guestLimit, rsvpMessageTemplate }: GuestsManagerProps) {
+export default function GuestsManager({
+  weddingId,
+  initialGuests,
+  guestLimit,
+  rsvpMessageTemplate,
+  coupleNames,
+  weddingColor,
+  weddingColorSecondary,
+  checkinEnabled,
+}: GuestsManagerProps) {
   const [guests, setGuests]             = useState<Guest[]>(initialGuests)
   const [filter, setFilter]             = useState<Filter>('todos')
   const [groupFilter, setGroupFilter]   = useState<GuestGroupCategory | 'todos'>('todos')
@@ -435,6 +523,16 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
     }).catch(() => {})
   }
 
+  function handleSendTicket(guest: Guest) {
+    const ticketLink = `${window.location.origin}/ingresso/${guest.rsvp_token}`
+    const url = buildCheckinWhatsAppUrl({
+      guestName:  guest.name,
+      guestPhone: guest.phone,
+      ticketLink,
+    })
+    window.open(url, '_blank')
+  }
+
   async function handleDelete(guest: Guest) {
     if (!window.confirm(`Remover ${guest.name} da lista de convidados?`)) return
 
@@ -446,6 +544,56 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
       setGuests(previous)
       toastError(await readApiError(res, 'Não foi possível remover o convidado.'))
     }
+  }
+
+  // Exporta exatamente o que está em `visible` (respeitando filter/groupFilter), não a
+  // lista completa de `guests` — senão o PDF não bateria com o que o casal está vendo
+  // na tela no momento em que clicou em exportar.
+  function handleExportPdf() {
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const filterDescription = buildFilterDescription(filter, groupFilter)
+    const subtitle = filterDescription ? `Convidados — ${filterDescription}` : 'Lista de Convidados'
+
+    doc.setFillColor(weddingColor)
+    doc.rect(0, 0, pageWidth, 30, 'F')
+
+    doc.setTextColor('#FFFFFF')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(18)
+    doc.text(coupleNames, 14, 14)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(12)
+    doc.text(subtitle, 14, 23)
+
+    doc.setTextColor('#3A2E22')
+    doc.setFontSize(10.5)
+    doc.text(
+      `Total: ${stats.total}    Confirmados: ${stats.confirmado}    Pendentes: ${stats.pendente}    Recusados: ${stats.recusado}`,
+      14,
+      38,
+    )
+
+    autoTable(doc, {
+      startY: 44,
+      head: [['Nome', 'Grupo', 'Status', 'Qtd. pessoas', 'Telefone', 'E-mail']],
+      body: visible.map((guest) => [
+        guest.name,
+        guest.group_name ?? '—',
+        STATUS_STYLE[guest.status].label,
+        String(guest.party_size),
+        guest.phone ?? '—',
+        guest.email ?? '—',
+      ]),
+      margin: { left: 14, right: 14 },
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: weddingColor, textColor: '#FFFFFF' },
+      alternateRowStyles: { fillColor: lightenHex(weddingColorSecondary, 0.8) },
+    })
+
+    const slug = slugify(coupleNames) || 'casamento'
+    doc.save(`convidados-${slug}-${toIsoDate(new Date())}.pdf`)
   }
 
   return (
@@ -486,6 +634,18 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             {showImportSpinner ? <Spinner /> : <UploadIcon />} Importar CSV
           </button>
           <button
+            onClick={handleExportPdf}
+            title="Exportar a lista de convidados em PDF"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'transparent', color: 'var(--wedding-color)',
+              border: '1.5px solid var(--wedding-color)', borderRadius: '12px',
+              padding: '10px 16px', fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+            }}
+          >
+            <PdfIcon /> Exportar PDF
+          </button>
+          <button
             onClick={() => setHelpOpen(true)}
             title="Como formatar o arquivo de importação"
             style={{
@@ -514,6 +674,22 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
           </button>
         </div>
       </div>
+
+      {/* Aviso de upsell do Check-in — só o botão de ingresso some sem o módulo, o
+          resto da tela continua liberado; aqui só avisamos que dá pra fazer mais. */}
+      {!checkinEnabled && (
+        <Link
+          href="/perfil/planos"
+          className="mb-5 flex items-center gap-2"
+          style={{
+            width: 'fit-content', borderRadius: '99px', padding: '7px 14px',
+            background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
+            fontSize: '12.5px', fontWeight: 600, textDecoration: 'none',
+          }}
+        >
+          <LockIcon /> Ingresso com QR code e controle de chegada — disponível em planos superiores
+        </Link>
+      )}
 
       {/* Aviso de limite do plano */}
       {atLimit && (
@@ -694,6 +870,19 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
                   }}
                 >
                   <WhatsAppIcon />
+                </button>
+              )}
+              {guest.status === 'confirmado' && checkinEnabled && (
+                <button
+                  onClick={() => handleSendTicket(guest)}
+                  title={`Enviar ingresso (QR code) para ${guest.name} pelo WhatsApp`}
+                  aria-label={`Enviar ingresso (QR code) para ${guest.name} pelo WhatsApp`}
+                  style={{
+                    border: 'none', background: 'transparent', color: 'var(--wedding-color)',
+                    cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
+                  }}
+                >
+                  <TicketIcon />
                 </button>
               )}
               <button
