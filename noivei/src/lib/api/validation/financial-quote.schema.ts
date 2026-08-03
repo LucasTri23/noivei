@@ -20,7 +20,7 @@ export const CreateFinancialQuoteSchema = z.object({
   type:         z.enum(QUOTE_TYPES),
   vendor_name:  z.string().trim().min(1, 'Informe o nome do fornecedor/local.').max(160),
   amount_cents: z.number().int().min(0),
-  notes:        z.string().trim().max(1000).nullable().optional(),
+  notes:        z.string().trim().max(1020).nullable().optional(),
 })
 
 export const UpdateFinancialQuoteSchema = CreateFinancialQuoteSchema.partial()

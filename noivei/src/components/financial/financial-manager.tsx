@@ -1088,7 +1088,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                 return (
                   <div key={cat.name}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--fg)' }}>{cat.name}</span>
+                      <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--fg)' }}>{cat.name}</span>
                       <span style={{ fontSize: '12.5px', color: 'var(--muted-fg)' }}>
                         {fmt(cat.paid)} / {fmt(cat.total)}
                         {catBudget && (
@@ -1491,7 +1491,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                             )}
                           </div>
                           {quote.notes && (
-                            <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>{quote.notes}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px', whiteSpace: 'pre-line' }}>{quote.notes}</div>
                           )}
                         </div>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)', flexShrink: 0 }}>
@@ -1769,14 +1769,14 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
           </div>
           <div>
             <label htmlFor="quote-notes" style={labelStyle}>Observações</label>
-            <input
+            <textarea
               id="quote-notes"
-              type="text"
-              maxLength={1000}
+              rows={4}
+              maxLength={1020}
               value={quoteForm.notes}
               onChange={(e) => setQuoteForm((f) => ({ ...f, notes: e.target.value }))}
               placeholder="Inclui decoração básica"
-              style={inputStyle}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
             />
           </div>
 
