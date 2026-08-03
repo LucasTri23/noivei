@@ -24,7 +24,9 @@ const securityHeaders = [
       // Widget do Cloudflare Turnstile (CAPTCHA de signup/login/esqueci-senha) renderiza
       // num iframe — sem essa diretiva cai em default-src 'self' e o iframe é bloqueado
       // silenciosamente (o widget nunca aparece, só o console acusa CSP violation).
-      "frame-src https://challenges.cloudflare.com",
+      // https://*.supabase.co: preview de PDF em <iframe> na Central de arquivos usa a
+      // signed URL do Storage — mesma classe de bug (bloqueio silencioso sem essa diretiva).
+      "frame-src https://challenges.cloudflare.com https://*.supabase.co",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

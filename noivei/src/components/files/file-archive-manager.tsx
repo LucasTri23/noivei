@@ -66,6 +66,14 @@ function TrashIcon() {
     </svg>
   )
 }
+function EyeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
 function ImageFileIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -98,6 +106,12 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
   return <GenericFileIcon />
 }
 
+// Só imagem e PDF têm preview confiável no browser sem depender de uma lib nova
+// (docx/xlsx/etc. não têm renderer nativo) — os demais tipos seguem só com download.
+function isPreviewable(mimeType: string | null): boolean {
+  return mimeType?.startsWith('image/') === true || mimeType === 'application/pdf'
+}
+
 export default function FileArchiveManager({ weddingId, initialFiles, storageLimitBytes }: FileArchiveManagerProps) {
   const [files, setFiles]           = useState<WeddingFile[]>(initialFiles)
   const [uploading, setUploading]   = useState(false)
@@ -106,6 +120,12 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   const [deleting, setDeleting]     = useState<WeddingFile | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  // Preview: previewFile só é setado depois que a signed URL inline já foi buscada
+  // (evita um estado "modal aberto, carregando" — o botão já mostra o spinner antes disso).
+  const [previewFile, setPreviewFile] = useState<WeddingFile | null>(null)
+  const [previewUrl, setPreviewUrl]   = useState<string | null>(null)
+  const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null)
   const inputRef        = useRef<HTMLInputElement>(null)
   const showUploadSpinner = useDelayedLoading(uploading)
 
@@ -155,9 +175,10 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   // mesmo se um arquivo estourar a cota ou falhar por outro motivo — os que couberem são
   // salvos normalmente (cada falha já mostra seu próprio erro), em vez de abortar tudo no
   // primeiro problema e descartar uploads que já eram válidos.
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = Array.from(e.target.files ?? [])
-    e.target.value = ''
+  // Compartilhada pelo <input type="file"> e pelo drop da drag-and-drop — mesma pipeline,
+  // mesmo guard de "já tem upload em andamento", pra não duplicar a lógica de progresso.
+  async function uploadFiles(fileList: FileList | File[]) {
+    const selected = Array.from(fileList)
     if (selected.length === 0 || uploading) return
 
     setUploading(true)
@@ -171,6 +192,28 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
 
     setUploadProgress(null)
     setUploading(false)
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    void uploadFiles(selected)
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDraggingOver(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDraggingOver(false)
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDraggingOver(false)
+    void uploadFiles(e.dataTransfer.files)
   }
 
   async function handleDownload(file: WeddingFile) {
@@ -187,6 +230,31 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
 
     const { data } = (await res.json()) as { data: { url: string } }
     window.open(data.url, '_blank', 'noopener,noreferrer')
+  }
+
+  // Visualização inline: busca a signed URL SEM `download` (?disposition=inline), diferente
+  // da usada em handleDownload — essa não força Content-Disposition: attachment, então o
+  // browser renderiza direto no <img>/<iframe> em vez de baixar o arquivo.
+  async function handlePreview(file: WeddingFile) {
+    if (previewLoadingId) return
+    setPreviewLoadingId(file.id)
+
+    const res = await fetch(`${apiBase}/${file.id}?disposition=inline`)
+    setPreviewLoadingId(null)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível abrir a visualização.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: { url: string } }
+    setPreviewUrl(data.url)
+    setPreviewFile(file)
+  }
+
+  function closePreview() {
+    setPreviewFile(null)
+    setPreviewUrl(null)
   }
 
   async function handleDelete() {
@@ -221,22 +289,25 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
             Guarde contratos, orçamentos e documentos importantes do casamento
           </p>
         </div>
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'var(--wedding-color)', color: '#fff', border: 'none',
-            borderRadius: '12px', padding: '10px 16px',
-            fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
-            opacity: uploading ? 0.7 : 1,
-            boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
-          }}
-        >
-          {showUploadSpinner ? <Spinner color="#fff" /> : <UploadIcon />}
-          {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Enviar arquivo'}
-        </button>
-        <input ref={inputRef} type="file" multiple onChange={handleFileChange} style={{ display: 'none' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color)', color: '#fff', border: 'none',
+              borderRadius: '12px', padding: '10px 16px',
+              fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+              opacity: uploading ? 0.7 : 1,
+              boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
+            }}
+          >
+            {showUploadSpinner ? <Spinner color="#fff" /> : <UploadIcon />}
+            {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Enviar arquivo'}
+          </button>
+          <input ref={inputRef} type="file" multiple onChange={handleFileChange} style={{ display: 'none' }} />
+          <span style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>ou arraste um arquivo até a lista abaixo</span>
+        </div>
       </div>
 
       {/* Barra de uso */}
@@ -261,8 +332,19 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
         </div>
       </div>
 
-      {/* Lista de arquivos */}
-      <div className="overflow-hidden rounded-2xl bg-[var(--surface)]" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
+      {/* Lista de arquivos — também é a dropzone de drag-and-drop */}
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className="overflow-hidden rounded-2xl bg-[var(--surface)]"
+        style={{
+          boxShadow: '0 8px 22px rgba(60,40,24,0.06)',
+          border: isDraggingOver ? '2px dashed var(--wedding-color)' : '2px dashed transparent',
+          background: isDraggingOver ? 'var(--wedding-color-subtle)' : undefined,
+          transition: 'border-color 0.15s, background 0.15s',
+        }}
+      >
         {files.map((file, idx) => (
           <div
             key={file.id}
@@ -289,6 +371,21 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
             </div>
 
             <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+              {isPreviewable(file.mime_type) && (
+                <button
+                  onClick={() => handlePreview(file)}
+                  disabled={previewLoadingId === file.id}
+                  title="Visualizar arquivo"
+                  aria-label={`Visualizar ${file.file_name}`}
+                  style={{
+                    border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+                    cursor: previewLoadingId === file.id ? 'wait' : 'pointer', padding: '6px', borderRadius: '8px',
+                    opacity: previewLoadingId === file.id ? 0.5 : 1,
+                  }}
+                >
+                  {previewLoadingId === file.id ? <Spinner size={14} /> : <EyeIcon />}
+                </button>
+              )}
               <button
                 onClick={() => handleDownload(file)}
                 disabled={downloadingId === file.id}
@@ -315,7 +412,7 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
         ))}
         {files.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
-            Nenhum arquivo enviado ainda. Envie contratos, orçamentos e outros documentos.
+            Nenhum arquivo enviado ainda. Envie contratos, orçamentos e outros documentos, ou arraste um arquivo aqui.
           </div>
         )}
       </div>
@@ -352,6 +449,26 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
             {deletingId !== null ? 'Excluindo…' : 'Sim, excluir'}
           </button>
         </div>
+      </Modal>
+
+      {/* Modal de visualização inline (imagem/PDF) */}
+      <Modal open={previewFile !== null} onClose={closePreview} title={previewFile?.file_name} maxWidth="900px">
+        {previewUrl && previewFile && (
+          previewFile.mime_type?.startsWith('image/') ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed URL do Storage, expira em 60s, sem domínio fixo pra configurar no next/image
+            <img
+              src={previewUrl}
+              alt={previewFile.file_name}
+              style={{ display: 'block', maxWidth: '100%', maxHeight: '80vh', margin: '0 auto', borderRadius: '8px' }}
+            />
+          ) : (
+            <iframe
+              src={previewUrl}
+              title={previewFile.file_name}
+              style={{ width: '100%', height: '80vh', border: 'none', borderRadius: '8px' }}
+            />
+          )
+        )}
       </Modal>
     </div>
   )

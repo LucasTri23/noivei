@@ -12,7 +12,7 @@ const SIGNED_URL_TTL_SECONDS = 60
 
 // Retorna uma signed URL de download (não a URL do arquivo em si) — o bucket é privado
 // e a signed URL expira em 60s, evitando link permanente compartilhável.
-export async function GET(_req: Request, { params }: RouteContext) {
+export async function GET(req: Request, { params }: RouteContext) {
   try {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
@@ -37,12 +37,20 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
     // `download` força Content-Disposition: attachment — sem isso, um arquivo com
     // mime_type de imagem/PDF abriria inline na aba, e depende só do allowlist do
-    // bucket pra não ser um tipo renderizável/executável pelo browser.
+    // bucket pra não ser um tipo renderizável/executável pelo browser. Quando o caller
+    // pede `disposition=inline` (preview embutido em <img>/<iframe>), omitimos `download`
+    // para que o Storage sirva com disposition inline — comportamento padrão (sem o
+    // parâmetro) continua idêntico ao de hoje, para não quebrar o fluxo de download.
+    const { searchParams } = new URL(req.url)
+    const inline = searchParams.get('disposition') === 'inline'
+
     const { data: signed, error: signError } = await supabase.storage
       .from('wedding-files')
-      .createSignedUrl(file.storage_path as string, SIGNED_URL_TTL_SECONDS, {
-        download: file.file_name as string,
-      })
+      .createSignedUrl(
+        file.storage_path as string,
+        SIGNED_URL_TTL_SECONDS,
+        inline ? undefined : { download: file.file_name as string },
+      )
 
     if (signError || !signed) return err(500, 'STORAGE_ERROR', 'Erro ao gerar link de download.')
 
