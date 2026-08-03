@@ -14,6 +14,11 @@ export const CreateGuestSchema = z.object({
   email:      z.email('E-mail inválido.').nullable().optional(),
   phone:      z.string().trim().min(5).max(30).nullable().optional(),
   party_size: PartySizeSchema.optional(),
+  // Presente só quando o casal já nomeia o acompanhante na hora de cadastrar (em vez
+  // de deixar o próprio convidado informar o nome ao confirmar presença via RSVP) —
+  // liga esta linha a outra já existente em `guests` na MESMA wedding (a rota confere
+  // isso antes de inserir, ver route.ts).
+  parent_guest_id: z.uuid().nullable().optional(),
 })
 
 export const UpdateGuestSchema = z

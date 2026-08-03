@@ -19,6 +19,12 @@ export interface RsvpInfo {
     // Quantas pessoas o convite cobre (definido pelo casal) — seguro expor, é só um
     // número; o formulário usa pra limitar quantos acompanhantes podem ser informados.
     party_size:      number
+    // Acompanhantes que o CASAL já nomeou ao cadastrar (ver parent_guest_id em
+    // CreateGuestSchema) — só o nome, pra pré-preencher o formulário de RSVP; nunca o
+    // telefone (mesmo motivo do convidado principal, ver comentário acima: o
+    // acompanhante ainda digita o próprio telefone ao confirmar). Lista vazia é o caso
+    // comum (o convidado é quem nomeia os acompanhantes ao confirmar, não o casal).
+    companions:      { name: string }[]
   }
   wedding: {
     couple_names: string
@@ -45,15 +51,16 @@ export async function getRsvpByToken(
 ): Promise<RsvpInfo | null> {
   const { data: guest, error } = await supabase
     .from('guests')
-    .select('name, status, wedding_id, party_size')
+    .select('id, name, status, wedding_id, party_size')
     .eq('rsvp_token', token)
     .maybeSingle()
 
   if (error || !guest) return null
 
   const weddingId = guest.wedding_id as string
+  const guestId = guest.id as string
 
-  const [{ data: wedding }, { data: site }, planId] = await Promise.all([
+  const [{ data: wedding }, { data: site }, planId, { data: companions }] = await Promise.all([
     supabase
       .from('weddings')
       .select('couple_names, wedding_date, venue, city, wedding_color_secondary')
@@ -67,6 +74,11 @@ export async function getRsvpByToken(
       .eq('published', true)
       .maybeSingle(),
     resolveWeddingPlanId(supabase, weddingId),
+    supabase
+      .from('guests')
+      .select('name')
+      .eq('parent_guest_id', guestId)
+      .order('created_at', { ascending: true }),
   ])
 
   if (!wedding) return null
@@ -76,6 +88,7 @@ export async function getRsvpByToken(
       name:       guest.name as string,
       status:     guest.status as GuestStatus,
       party_size: guest.party_size as number,
+      companions: (companions ?? []).map((c) => ({ name: c.name as string })),
     },
     wedding: {
       couple_names: wedding.couple_names as string,

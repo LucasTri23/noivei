@@ -74,6 +74,23 @@ export async function POST(req: Request, { params }: RouteContext) {
       })
     }
 
+    // Se o casal já está nomeando o acompanhante na hora de cadastrar, confere que o
+    // convidado "principal" apontado existe NESTE casamento antes de linkar — sem essa
+    // checagem, um client malicioso/com bug poderia amarrar a linha a um convidado de
+    // outro casamento.
+    if (parsed.data.parent_guest_id) {
+      const { data: parentGuest } = await supabase
+        .from('guests')
+        .select('id')
+        .eq('id', parsed.data.parent_guest_id)
+        .eq('wedding_id', wid)
+        .maybeSingle()
+
+      if (!parentGuest) {
+        return err(404, 'GUEST_NOT_FOUND', 'Convidado principal não encontrado.')
+      }
+    }
+
     const { data, error } = await supabase
       .from('guests')
       .insert({ ...parsed.data, wedding_id: wid })

@@ -9,10 +9,20 @@ import { PhoneSchema } from '@/lib/api/validation/rsvp.schema'
 import { toastError } from '@/store/toast.store'
 import type { GuestStatus } from '@/types/database'
 
+interface InitialCompanion {
+  name: string
+}
+
 interface RsvpFormProps {
   token:             string
   initialStatus:     GuestStatus
   initialPartySize:  number
+  // Acompanhantes já nomeados pelo casal ao cadastrar (ver parent_guest_id) — usado
+  // só pra pré-preencher o nome de cada slot quando o convidado aumenta a quantidade
+  // de pessoas confirmadas; o telefone nunca vem pré-preenchido (ver comentário do
+  // estado `phone` abaixo). Continua totalmente editável — é um preenchimento
+  // sugerido, não um valor travado.
+  initialCompanions: InitialCompanion[]
   // Slug do site público do casal, só quando publicado — usado pra redirecionar o
   // convidado pra lá depois de confirmar presença. null = fica na própria página de
   // RSVP (sem site publicado ainda pra mandar o convidado, ou o casal recusou).
@@ -61,7 +71,7 @@ function validateCompanions(companions: CompanionForm[]): CompanionFormError[] {
   })
 }
 
-export default function RsvpForm({ token, initialStatus, initialPartySize, siteSlug }: RsvpFormProps) {
+export default function RsvpForm({ token, initialStatus, initialPartySize, initialCompanions, siteSlug }: RsvpFormProps) {
   const router = useRouter()
   const [status, setStatus]   = useState<GuestStatus>(initialStatus)
   // Nunca pré-preenchido: o telefone existente não é devolvido pela API de propósito
@@ -70,7 +80,13 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, siteS
   const [phone, setPhone]     = useState('')
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [attendingCount, setAttendingCount] = useState(1)
-  const [companions, setCompanions]         = useState<CompanionForm[]>([])
+  // Começa com os nomes que o casal já cadastrou (se houver) — telefone sempre em
+  // branco, o acompanhante preenche o dele mesmo. Como attendingCount começa em 1,
+  // esses slots só aparecem de fato quando o convidado aumentar a quantidade (ver
+  // handleAttendingCountChange), mas já ficam prontos aqui pra não perder a ordem.
+  const [companions, setCompanions] = useState<CompanionForm[]>(
+    () => initialCompanions.map((companion) => ({ name: companion.name, phone: '' })),
+  )
   const [companionErrors, setCompanionErrors] = useState<CompanionFormError[]>([])
   const [saving, setSaving]   = useState<Answer | null>(null)
   const [saved, setSaved]     = useState(false)
@@ -82,7 +98,13 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, siteS
     setCompanions((prev) => {
       const needed = Math.max(0, value - 1)
       const next = prev.slice(0, needed)
-      while (next.length < needed) next.push({ name: '', phone: '' })
+      // Novo slot pega o nome já nomeado pelo casal (por índice) antes de cair pro
+      // padrão em branco — assim, mesmo depois de diminuir e aumentar de novo, o
+      // slot volta a mostrar o nome pré-cadastrado em vez de ficar vazio à toa.
+      while (next.length < needed) {
+        const prefillName = initialCompanions[next.length]?.name ?? ''
+        next.push({ name: prefillName, phone: '' })
+      }
       return next
     })
   }

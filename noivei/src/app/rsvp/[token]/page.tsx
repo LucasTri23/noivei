@@ -163,6 +163,7 @@ export default async function RsvpPage({ params }: RsvpPageProps) {
           token={parsedToken.data}
           initialStatus={rsvp.guest.status}
           initialPartySize={rsvp.guest.party_size}
+          initialCompanions={rsvp.guest.companions}
           siteSlug={rsvp.wedding.site_slug}
         />
 

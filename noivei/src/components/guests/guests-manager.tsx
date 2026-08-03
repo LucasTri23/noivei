@@ -107,6 +107,13 @@ function TrashIcon() {
     </svg>
   )
 }
+function PencilIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
 function InfoIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -176,6 +183,13 @@ function downloadImportTemplate() {
   URL.revokeObjectURL(url)
 }
 
+// Quem nomeia os acompanhantes de um convidado com party_size > 1 — só decidido na
+// CRIAÇÃO do convidado principal (editar um acompanhante já existente é feito pela
+// edição genérica de convidado, já que ele é só mais uma linha em `guests`).
+// 'guest' é o padrão: mantém o comportamento já existente (o próprio convidado
+// informa nome/telefone de cada acompanhante ao confirmar presença via RSVP).
+type CompanionAssignment = 'guest' | 'couple'
+
 export default function GuestsManager({ weddingId, initialGuests, guestLimit, rsvpMessageTemplate }: GuestsManagerProps) {
   const [guests, setGuests]             = useState<Guest[]>(initialGuests)
   const [filter, setFilter]             = useState<Filter>('todos')
@@ -184,6 +198,9 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
   const [saving, setSaving]             = useState(false)
   const [importing, setImporting]       = useState(false)
   const [form, setForm]                 = useState({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
+  const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
+  const [companionAssignment, setCompanionAssignment] = useState<CompanionAssignment>('guest')
+  const [companionNames, setCompanionNames]           = useState<string[]>([])
   const [helpOpen, setHelpOpen]         = useState(false)
   const [previewCsv, setPreviewCsv]     = useState<string | null>(null)
   const [previewResult, setPreviewResult] = useState<ParseImportCsvResult | null>(null)
@@ -220,32 +237,125 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
     previewResult.invalidRows.length === 0 &&
     previewResult.validRows.length > 0
 
-  async function handleAdd(e: React.FormEvent) {
+  function resetCompanionState() {
+    setCompanionAssignment('guest')
+    setCompanionNames([])
+  }
+
+  function openCreate() {
+    setEditingGuest(null)
+    setForm({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
+    resetCompanionState()
+    setModalOpen(true)
+  }
+
+  function openEdit(guest: Guest) {
+    setEditingGuest(guest)
+    setForm({
+      name:       guest.name,
+      email:      guest.email ?? '',
+      phone:      guest.phone ?? '',
+      group_name: guest.group_name ?? '',
+      party_size: guest.party_size,
+    })
+    resetCompanionState()
+    setModalOpen(true)
+  }
+
+  // Mantém companionNames do tamanho certo (party_size - 1) conforme o campo de
+  // quantidade muda — cresce preenchendo com vazio, encolhe cortando do final
+  // (mesmo padrão de handleAttendingCountChange em rsvp-form.tsx).
+  function handlePartySizeChange(rawValue: string) {
+    const clamped = Math.min(20, Math.max(1, Number.parseInt(rawValue, 10) || 1))
+    setForm((f) => ({ ...f, party_size: clamped }))
+    setCompanionNames((prev) => {
+      const needed = Math.max(0, clamped - 1)
+      const next = prev.slice(0, needed)
+      while (next.length < needed) next.push('')
+      return next
+    })
+  }
+
+  function updateCompanionName(index: number, value: string) {
+    setCompanionNames((prev) => prev.map((name, i) => (i === index ? value : name)))
+  }
+
+  async function handleSubmitGuest(e: React.FormEvent) {
     e.preventDefault()
     if (saving) return
     setSaving(true)
 
-    const res = await fetch(apiBase, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name:       form.name.trim(),
-        email:      form.email.trim() || null,
-        phone:      form.phone.trim() || null,
-        group_name: form.group_name.trim() || null,
-        party_size: form.party_size,
-      }),
-    })
+    const payload = {
+      name:       form.name.trim(),
+      email:      form.email.trim() || null,
+      phone:      form.phone.trim() || null,
+      group_name: form.group_name.trim() || null,
+      party_size: form.party_size,
+    }
 
-    setSaving(false)
+    const res = editingGuest
+      ? await fetch(`${apiBase}/${editingGuest.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        })
+      : await fetch(apiBase, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        })
+
     if (!res.ok) {
-      toastError(await readApiError(res, 'Não foi possível adicionar o convidado.'))
+      setSaving(false)
+      toastError(await readApiError(res, editingGuest ? 'Não foi possível salvar o convidado.' : 'Não foi possível adicionar o convidado.'))
       return
     }
 
     const { data } = (await res.json()) as { data: Guest }
-    setGuests((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')))
+    const createdGuests = [data]
+
+    // Só se aplica na CRIAÇÃO (nunca na edição) e só quando o casal escolheu nomear
+    // os acompanhantes agora — o padrão ('guest') não cria nada aqui, o próprio
+    // convidado nomeia cada acompanhante ao confirmar presença via RSVP (fluxo já
+    // existente em rsvp-form.tsx, sem mudanças).
+    if (!editingGuest && companionAssignment === 'couple') {
+      const namesToCreate = companionNames.map((name) => name.trim()).filter((name) => name.length > 0)
+
+      for (const companionName of namesToCreate) {
+        const companionRes = await fetch(apiBase, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ name: companionName, party_size: 1, parent_guest_id: data.id }),
+        })
+
+        if (!companionRes.ok) {
+          // Best-effort, sem rollback: uma falha aqui NÃO desfaz o convidado principal
+          // nem os acompanhantes já criados antes dele. Diferente do precedente em
+          // wedding-party-manager.tsx (handleAdd), que desfaz a primeira POST se a
+          // segunda falhar — lá isso faz sentido porque uma entrada de cortejo sozinha,
+          // sem o par que o casal pediu, não tem utilidade nenhuma sozinha. Aqui o
+          // convidado principal já é um convidado válido e útil por conta própria, então
+          // preferimos manter tudo que deu certo e só avisar o que faltou, deixando o
+          // casal completar manualmente (a mesma tela de convidados já permite editar
+          // esse convidado principal e cadastrar mais um convidado avulso depois).
+          const message = await readApiError(companionRes, 'Não foi possível adicionar este acompanhante.')
+          toastError(`Acompanhante "${companionName}": ${message}`)
+          continue
+        }
+
+        const { data: companionData } = (await companionRes.json()) as { data: Guest }
+        createdGuests.push(companionData)
+      }
+    }
+
+    setSaving(false)
+    setGuests((prev) =>
+      (editingGuest ? prev.map((g) => (g.id === data.id ? data : g)) : [...prev, ...createdGuests])
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    )
     setForm({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
+    setEditingGuest(null)
+    resetCompanionState()
     setModalOpen(false)
   }
 
@@ -388,7 +498,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             <InfoIcon /> Como formatar o arquivo?
           </button>
           <button
-            onClick={() => setModalOpen(true)}
+            onClick={openCreate}
             disabled={atLimit}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
@@ -573,16 +683,29 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
                 <option value="confirmado">Confirmado</option>
                 <option value="recusado">Recusado</option>
               </select>
+              {guest.phone && (
+                <button
+                  onClick={() => handleSendWhatsApp(guest)}
+                  title={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
+                  aria-label={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
+                  style={{
+                    border: 'none', background: 'transparent', color: '#5E8B6A',
+                    cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
+                  }}
+                >
+                  <WhatsAppIcon />
+                </button>
+              )}
               <button
-                onClick={() => handleSendWhatsApp(guest)}
-                title={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
-                aria-label={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
+                onClick={() => openEdit(guest)}
+                title={`Editar ${guest.name}`}
+                aria-label={`Editar ${guest.name}`}
                 style={{
-                  border: 'none', background: 'transparent', color: '#5E8B6A',
+                  border: 'none', background: 'transparent', color: 'var(--muted-fg)',
                   cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
                 }}
               >
-                <WhatsAppIcon />
+                <PencilIcon />
               </button>
               <button
                 onClick={() => handleDelete(guest)}
@@ -607,9 +730,13 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
         )}
       </div>
 
-      {/* Modal de novo convidado */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo convidado">
-        <form onSubmit={handleAdd} className="flex flex-col gap-4">
+      {/* Modal de novo convidado / editar convidado */}
+      <Modal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setEditingGuest(null); resetCompanionState() }}
+        title={editingGuest ? 'Editar convidado' : 'Novo convidado'}
+      >
+        <form onSubmit={handleSubmitGuest} className="flex flex-col gap-4">
           <div>
             <label htmlFor="guest-name" style={labelStyle}>Nome *</label>
             <input
@@ -671,9 +798,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
               min={1}
               max={20}
               value={form.party_size}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, party_size: Math.min(20, Math.max(1, Number.parseInt(e.target.value, 10) || 1)) }))
-              }
+              onChange={(e) => handlePartySizeChange(e.target.value)}
               style={inputStyle}
             />
             <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '6px 0 0' }}>
@@ -681,10 +806,68 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
             </p>
           </div>
 
+          {/* Quem nomeia os acompanhantes — só na criação de um convidado principal com
+              mais de 1 pessoa no convite. Editar um acompanhante já criado (seja pelo
+              casal aqui ou pelo próprio convidado via RSVP) usa a edição genérica de
+              convidado logo acima, porque o acompanhante já é uma linha normal em
+              `guests` a essa altura. */}
+          {!editingGuest && form.party_size > 1 && (
+            <div>
+              <label style={labelStyle}>Quem vai informar o nome dos acompanhantes?</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setCompanionAssignment('couple')}
+                  style={{
+                    flex: 1, borderRadius: '10px', padding: '10px', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+                    border: `1.5px solid ${companionAssignment === 'couple' ? 'var(--wedding-color)' : '#EBDDD0'}`,
+                    background: companionAssignment === 'couple' ? 'var(--wedding-color-subtle)' : 'transparent',
+                    color: companionAssignment === 'couple' ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+                  }}
+                >
+                  Nós vamos definir agora
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompanionAssignment('guest')}
+                  style={{
+                    flex: 1, borderRadius: '10px', padding: '10px', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+                    border: `1.5px solid ${companionAssignment === 'guest' ? 'var(--wedding-color)' : '#EBDDD0'}`,
+                    background: companionAssignment === 'guest' ? 'var(--wedding-color-subtle)' : 'transparent',
+                    color: companionAssignment === 'guest' ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+                  }}
+                >
+                  O convidado informa ao confirmar presença
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!editingGuest && form.party_size > 1 && companionAssignment === 'couple' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {companionNames.map((name, index) => (
+                <div key={index}>
+                  <label htmlFor={`companion-name-${index}`} style={labelStyle}>
+                    Nome do acompanhante {index + 1}
+                  </label>
+                  <input
+                    id={`companion-name-${index}`}
+                    type="text"
+                    maxLength={120}
+                    value={name}
+                    onChange={(e) => updateCompanionName(index, e.target.value)}
+                    placeholder="Nome completo"
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
+              onClick={() => { setModalOpen(false); setEditingGuest(null); resetCompanionState() }}
               style={{
                 background: 'transparent', color: 'var(--muted-fg)', border: 'none',
                 fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',
@@ -703,7 +886,7 @@ export default function GuestsManager({ weddingId, initialGuests, guestLimit, rs
                 cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
               }}
             >
-              {showSaveSpinner && <Spinner color="#fff" />} Adicionar
+              {showSaveSpinner && <Spinner color="#fff" />} {editingGuest ? 'Salvar' : 'Adicionar'}
             </button>
           </div>
         </form>
