@@ -167,34 +167,38 @@ export default function WeddingMembersManager({ weddingId, isOwner, canManageInv
     let cancelled = false
 
     async function load() {
-      const supabase = createSupabaseBrowser()
-      const { data: { user } } = await supabase.auth.getUser()
+      try {
+        const supabase = createSupabaseBrowser()
+        const { data: { user } } = await supabase.auth.getUser()
 
-      const [membersRes, invitesRes] = await Promise.all([
-        fetch(`/api/v1/weddings/${weddingId}/members`),
-        canManageInvites ? fetch(`/api/v1/weddings/${weddingId}/invites`) : Promise.resolve(null),
-      ])
+        const [membersRes, invitesRes] = await Promise.all([
+          fetch(`/api/v1/weddings/${weddingId}/members`),
+          canManageInvites ? fetch(`/api/v1/weddings/${weddingId}/invites`) : Promise.resolve(null),
+        ])
 
-      if (cancelled) return
-      setSelfUserId(user?.id ?? null)
+        if (cancelled) return
+        setSelfUserId(user?.id ?? null)
 
-      if (membersRes.ok) {
-        const body = await membersRes.json() as { data: MemberRow[] }
-        if (!cancelled) setMembers(body.data)
-      } else {
-        toastError(await readErrorMessage(membersRes, 'Não foi possível carregar os membros.'))
-      }
-
-      if (invitesRes) {
-        if (invitesRes.ok) {
-          const body = await invitesRes.json() as { data: WeddingInvite[] }
-          if (!cancelled) setInvites(body.data.filter((i) => i.status === 'pending'))
+        if (membersRes.ok) {
+          const body = await membersRes.json() as { data: MemberRow[] }
+          if (!cancelled) setMembers(body.data)
         } else {
-          toastError(await readErrorMessage(invitesRes, 'Não foi possível carregar os convites.'))
+          toastError(await readErrorMessage(membersRes, 'Não foi possível carregar os membros.'))
         }
-      }
 
-      if (!cancelled) setLoading(false)
+        if (invitesRes) {
+          if (invitesRes.ok) {
+            const body = await invitesRes.json() as { data: WeddingInvite[] }
+            if (!cancelled) setInvites(body.data.filter((i) => i.status === 'pending'))
+          } else {
+            toastError(await readErrorMessage(invitesRes, 'Não foi possível carregar os convites.'))
+          }
+        }
+      } catch {
+        if (!cancelled) toastError('Falha de conexão ao carregar os membros. Tente novamente.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
 
     load()

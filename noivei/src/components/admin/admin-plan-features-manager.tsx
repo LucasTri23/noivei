@@ -41,56 +41,79 @@ export default function AdminPlanFeaturesManager({ groups, initialCategories, in
   const [newCategoryTitle, setNewCategoryTitle] = useState('')
 
   async function saveCell(featureId: string, groupKey: string, value: string) {
-    const res = await fetch('/api/v1/admin/plan-features/values', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feature_id: featureId, group_key: groupKey, value }),
-    })
-    if (!res.ok) toastError(await readApiError(res, 'Não foi possível salvar essa célula.'))
+    // Salva sozinho ao sair do campo (blur), sem indicador de loading visível — sem o
+    // catch abaixo, uma falha de rede aqui (não só um 4xx/5xx, já coberto por !res.ok)
+    // passava batido: o admin não teria nenhum sinal de que a célula não foi salva.
+    try {
+      const res = await fetch('/api/v1/admin/plan-features/values', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feature_id: featureId, group_key: groupKey, value }),
+      })
+      if (!res.ok) toastError(await readApiError(res, 'Não foi possível salvar essa célula.'))
+    } catch {
+      toastError('Falha de conexão. Essa célula não foi salva — tente novamente.')
+    }
   }
 
   async function addCategory() {
     if (!newCategoryTitle.trim()) return
-    const res = await fetch('/api/v1/admin/plan-features/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newCategoryTitle.trim(), sort_order: categories.length }),
-    })
-    if (!res.ok) { toastError(await readApiError(res, 'Não foi possível criar a categoria.')); return }
-    const { data } = (await res.json()) as { data: PlanFeatureCategory }
-    setCategories((prev) => [...prev, data])
-    setNewCategoryTitle('')
-    toastSuccess('Categoria criada.')
+    try {
+      const res = await fetch('/api/v1/admin/plan-features/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newCategoryTitle.trim(), sort_order: categories.length }),
+      })
+      if (!res.ok) { toastError(await readApiError(res, 'Não foi possível criar a categoria.')); return }
+      const { data } = (await res.json()) as { data: PlanFeatureCategory }
+      setCategories((prev) => [...prev, data])
+      setNewCategoryTitle('')
+      toastSuccess('Categoria criada.')
+    } catch {
+      toastError('Falha de conexão. Não foi possível criar a categoria.')
+    }
   }
 
   async function deleteCategory(id: string) {
     if (!window.confirm('Remover esta categoria e todas as suas linhas?')) return
-    const res = await fetch(`/api/v1/admin/plan-features/categories/${id}`, { method: 'DELETE' })
-    if (!res.ok) { toastError(await readApiError(res, 'Não foi possível remover a categoria.')); return }
-    setCategories((prev) => prev.filter((c) => c.id !== id))
-    setFeatures((prev) => prev.filter((f) => f.category_id !== id))
+    try {
+      const res = await fetch(`/api/v1/admin/plan-features/categories/${id}`, { method: 'DELETE' })
+      if (!res.ok) { toastError(await readApiError(res, 'Não foi possível remover a categoria.')); return }
+      setCategories((prev) => prev.filter((c) => c.id !== id))
+      setFeatures((prev) => prev.filter((f) => f.category_id !== id))
+    } catch {
+      toastError('Falha de conexão. Não foi possível remover a categoria.')
+    }
   }
 
   async function addFeature(categoryId: string) {
     const label = (newFeatureLabel[categoryId] ?? '').trim()
     if (!label) return
     const count = features.filter((f) => f.category_id === categoryId).length
-    const res = await fetch('/api/v1/admin/plan-features/features', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_id: categoryId, label, sort_order: count }),
-    })
-    if (!res.ok) { toastError(await readApiError(res, 'Não foi possível criar a linha.')); return }
-    const { data } = (await res.json()) as { data: PlanFeature }
-    setFeatures((prev) => [...prev, data])
-    setNewFeatureLabel((prev) => ({ ...prev, [categoryId]: '' }))
-    toastSuccess('Linha criada.')
+    try {
+      const res = await fetch('/api/v1/admin/plan-features/features', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: categoryId, label, sort_order: count }),
+      })
+      if (!res.ok) { toastError(await readApiError(res, 'Não foi possível criar a linha.')); return }
+      const { data } = (await res.json()) as { data: PlanFeature }
+      setFeatures((prev) => [...prev, data])
+      setNewFeatureLabel((prev) => ({ ...prev, [categoryId]: '' }))
+      toastSuccess('Linha criada.')
+    } catch {
+      toastError('Falha de conexão. Não foi possível criar a linha.')
+    }
   }
 
   async function deleteFeature(id: string) {
-    const res = await fetch(`/api/v1/admin/plan-features/features/${id}`, { method: 'DELETE' })
-    if (!res.ok) { toastError(await readApiError(res, 'Não foi possível remover a linha.')); return }
-    setFeatures((prev) => prev.filter((f) => f.id !== id))
+    try {
+      const res = await fetch(`/api/v1/admin/plan-features/features/${id}`, { method: 'DELETE' })
+      if (!res.ok) { toastError(await readApiError(res, 'Não foi possível remover a linha.')); return }
+      setFeatures((prev) => prev.filter((f) => f.id !== id))
+    } catch {
+      toastError('Falha de conexão. Não foi possível remover a linha.')
+    }
   }
 
   return (

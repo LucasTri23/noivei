@@ -329,21 +329,30 @@ export default function OnboardingPage() {
     // fica 'active' de fato quando o webhook confirmar o pagamento. Sem isso, dava
     // pra "assinar" um plano pago no onboarding sem nunca ser cobrado.
     if (paidPlan) {
-      const checkoutRes = await fetch('/api/v1/billing/checkout', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ plan_id: data.plan }),
-      })
-      const checkoutBody = (await checkoutRes.json().catch(() => null)) as { data?: { redirect_url: string }; error?: { message: string } } | null
+      // Casamento já foi criado (acima) — se o fetch em si falhar (rede offline, etc.),
+      // não pode deixar o botão travado em "Criando seu espaço…": cai no mesmo fallback
+      // de erro do checkout e manda pro dashboard, de onde dá pra tentar assinar de novo.
+      try {
+        const checkoutRes = await fetch('/api/v1/billing/checkout', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ plan_id: data.plan }),
+        })
+        const checkoutBody = (await checkoutRes.json().catch(() => null)) as { data?: { redirect_url: string }; error?: { message: string } } | null
 
-      if (!checkoutRes.ok || !checkoutBody?.data?.redirect_url) {
+        if (!checkoutRes.ok || !checkoutBody?.data?.redirect_url) {
+          toastError('Seu casamento foi criado! Não foi possível iniciar o pagamento agora — escolha o plano em Perfil > Planos quando quiser.')
+          router.push('/dashboard')
+          return
+        }
+
+        window.location.assign(checkoutBody.data.redirect_url)
+        return
+      } catch {
         toastError('Seu casamento foi criado! Não foi possível iniciar o pagamento agora — escolha o plano em Perfil > Planos quando quiser.')
         router.push('/dashboard')
         return
       }
-
-      window.location.assign(checkoutBody.data.redirect_url)
-      return
     }
 
     router.push('/dashboard')

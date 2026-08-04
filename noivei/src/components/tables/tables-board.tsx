@@ -270,25 +270,30 @@ export default function TablesBoard({ weddingId, initialTables, confirmedGuests 
     if (saving) return
     setSaving(true)
 
-    const res = await fetch(apiBase, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        label:    form.label.trim(),
-        capacity: Number(form.capacity),
-      }),
-    })
+    try {
+      const res = await fetch(apiBase, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label:    form.label.trim(),
+          capacity: Number(form.capacity),
+        }),
+      })
 
-    setSaving(false)
-    if (!res.ok) {
-      toastError(await readApiError(res, 'Não foi possível criar a mesa.'))
-      return
+      if (!res.ok) {
+        toastError(await readApiError(res, 'Não foi possível criar a mesa.'))
+        return
+      }
+
+      const { data } = (await res.json()) as { data: TableConfig }
+      setTables((prev) => [...prev, { ...data, guests: [] }])
+      setForm({ label: '', capacity: '8' })
+      setModalOpen(false)
+    } catch {
+      toastError('Erro de conexão com o servidor. Tente novamente.')
+    } finally {
+      setSaving(false)
     }
-
-    const { data } = (await res.json()) as { data: TableConfig }
-    setTables((prev) => [...prev, { ...data, guests: [] }])
-    setForm({ label: '', capacity: '8' })
-    setModalOpen(false)
   }
 
   function openEditModal(table: TableWithGuests) {
@@ -301,26 +306,31 @@ export default function TablesBoard({ weddingId, initialTables, confirmedGuests 
     if (!editingTable || editSaving) return
     setEditSaving(true)
 
-    const res = await fetch(`${apiBase}/${editingTable.id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        label:    editForm.label.trim(),
-        capacity: Number(editForm.capacity),
-      }),
-    })
+    try {
+      const res = await fetch(`${apiBase}/${editingTable.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label:    editForm.label.trim(),
+          capacity: Number(editForm.capacity),
+        }),
+      })
 
-    setEditSaving(false)
-    if (!res.ok) {
-      toastError(await readApiError(res, 'Não foi possível atualizar a mesa.'))
-      return
+      if (!res.ok) {
+        toastError(await readApiError(res, 'Não foi possível atualizar a mesa.'))
+        return
+      }
+
+      const { data } = (await res.json()) as { data: TableConfig }
+      setTables((prev) =>
+        prev.map((t) => (t.id === data.id ? { ...t, label: data.label, capacity: data.capacity } : t)),
+      )
+      setEditingTable(null)
+    } catch {
+      toastError('Erro de conexão com o servidor. Tente novamente.')
+    } finally {
+      setEditSaving(false)
     }
-
-    const { data } = (await res.json()) as { data: TableConfig }
-    setTables((prev) =>
-      prev.map((t) => (t.id === data.id ? { ...t, label: data.label, capacity: data.capacity } : t)),
-    )
-    setEditingTable(null)
   }
 
   async function handleDeleteTable(table: TableWithGuests) {
@@ -330,15 +340,20 @@ export default function TablesBoard({ weddingId, initialTables, confirmedGuests 
 
     setDeletingId(table.id)
 
-    const res = await fetch(`${apiBase}/${table.id}`, { method: 'DELETE' })
+    try {
+      const res = await fetch(`${apiBase}/${table.id}`, { method: 'DELETE' })
 
-    setDeletingId(null)
-    if (!res.ok) {
-      toastError(await readApiError(res, 'Não foi possível excluir a mesa.'))
-      return
+      if (!res.ok) {
+        toastError(await readApiError(res, 'Não foi possível excluir a mesa.'))
+        return
+      }
+
+      setTables((prev) => prev.filter((t) => t.id !== table.id))
+    } catch {
+      toastError('Erro de conexão com o servidor. Tente novamente.')
+    } finally {
+      setDeletingId(null)
     }
-
-    setTables((prev) => prev.filter((t) => t.id !== table.id))
   }
 
   return (

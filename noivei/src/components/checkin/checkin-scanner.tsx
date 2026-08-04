@@ -105,10 +105,18 @@ export default function CheckinScanner({ weddingId, initialConfirmedTotal, initi
 
     return () => {
       cancelled = true
-      scanner
-        .stop()
-        .catch(() => {})
-        .finally(() => scanner.clear())
+      // scanner.stop() lança SÍNCRONO (não só rejeita a promise) quando a câmera
+      // nunca chegou a iniciar de verdade (ex: permissão negada) — sem o try/catch
+      // aqui em volta, isso escapava do cleanup do useEffect durante a navegação
+      // (SPA, client-side) e derrubava a página inteira que o usuário estava indo.
+      try {
+        scanner
+          .stop()
+          .catch(() => {})
+          .finally(() => scanner.clear())
+      } catch {
+        scanner.clear()
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- câmera deve iniciar uma única vez, ao montar
   }, [])

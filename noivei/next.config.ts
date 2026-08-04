@@ -5,7 +5,11 @@ const securityHeaders = [
   { key: 'X-Frame-Options',           value: 'DENY' },
   { key: 'X-Content-Type-Options',    value: 'nosniff' },
   { key: 'Referrer-Policy',           value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy',        value: 'camera=(), microphone=(self), geolocation=()' },
+  // camera=(self): a Portaria (checkin-scanner.tsx) precisa da câmera pra ler o QR
+  // code do ingresso — "camera=()" bloqueava isso globalmente (nunca atualizado
+  // quando esse recurso foi criado), fazendo a câmera falhar sempre em produção.
+  // "self" ainda bloqueia qualquer iframe de terceiro pedir câmera nesse site.
+  { key: 'Permissions-Policy',        value: 'camera=(self), microphone=(self), geolocation=()' },
   {
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
