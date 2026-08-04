@@ -292,9 +292,17 @@ export default function GuestsManager({
   const [helpOpen, setHelpOpen]         = useState(false)
   const [previewCsv, setPreviewCsv]     = useState<string | null>(null)
   const [previewResult, setPreviewResult] = useState<ParseImportCsvResult | null>(null)
+  const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null)
+  const [deleting, setDeleting]         = useState(false)
   const fileInputRef                    = useRef<HTMLInputElement>(null)
   const showSaveSpinner                 = useDelayedLoading(saving)
   const showImportSpinner               = useDelayedLoading(importing)
+  const showDeleteSpinner               = useDelayedLoading(deleting)
+  // Guarda por ref (não só por state): dois cliques na mesma tick veem `deleting`
+  // ainda `false` (o setState do primeiro clique não commitou a re-render a tempo),
+  // então só o state não bastava pra impedir duas requisições DELETE em corrida —
+  // mesmo padrão de submittingRef em accept-invite-button.tsx.
+  const deletingRef                     = useRef(false)
 
   const apiBase = `/api/v1/weddings/${weddingId}/guests`
   const atLimit = guests.length >= guestLimit
@@ -533,17 +541,37 @@ export default function GuestsManager({
     window.open(url, '_blank')
   }
 
-  async function handleDelete(guest: Guest) {
-    if (!window.confirm(`Remover ${guest.name} da lista de convidados?`)) return
+  function openDeleteConfirm(guest: Guest) {
+    setDeletingGuest(guest)
+  }
 
+  function closeDeleteConfirm() {
+    if (deletingRef.current) return
+    setDeletingGuest(null)
+  }
+
+  async function handleConfirmDelete() {
+    if (!deletingGuest || deletingRef.current) return
+    deletingRef.current = true
+    setDeleting(true)
+
+    const guest    = deletingGuest
     const previous = guests
     setGuests((prev) => prev.filter((g) => g.id !== guest.id))
 
     const res = await fetch(`${apiBase}/${guest.id}`, { method: 'DELETE' })
+
     if (!res.ok) {
       setGuests(previous)
+      deletingRef.current = false
+      setDeleting(false)
       toastError(await readApiError(res, 'Não foi possível remover o convidado.'))
+      return
     }
+
+    deletingRef.current = false
+    setDeleting(false)
+    setDeletingGuest(null)
   }
 
   // Exporta exatamente o que está em `visible` (respeitando filter/groupFilter), não a
@@ -897,7 +925,7 @@ export default function GuestsManager({
                 <PencilIcon />
               </button>
               <button
-                onClick={() => handleDelete(guest)}
+                onClick={() => openDeleteConfirm(guest)}
                 title={`Remover ${guest.name}`}
                 aria-label={`Remover ${guest.name}`}
                 style={{
@@ -1209,6 +1237,45 @@ João Souza,,Amigos do trabalho,1`}
                 }}
               >
                 {showImportSpinner && <Spinner color="#fff" />} Confirmar importação
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de confirmação de remoção de convidado */}
+      <Modal open={deletingGuest !== null} onClose={closeDeleteConfirm} title="Remover convidado?">
+        {deletingGuest && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: 0 }}>
+              Você está prestes a remover <strong>{deletingGuest.name}</strong> da lista de convidados. Essa
+              ação não poderá ser desfeita.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={closeDeleteConfirm}
+                disabled={deleting}
+                style={{
+                  background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                  fontWeight: 600, fontSize: '14px', cursor: deleting ? 'not-allowed' : 'pointer', padding: '10px 14px',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: '#C0553F', color: '#fff', border: 'none',
+                  borderRadius: '12px', padding: '10px 18px',
+                  fontWeight: 600, fontSize: '14px',
+                  cursor: deleting ? 'wait' : 'pointer', opacity: deleting ? 0.7 : 1,
+                }}
+              >
+                {showDeleteSpinner && <Spinner color="#fff" />} {deleting ? 'Removendo…' : 'Remover convidado'}
               </button>
             </div>
           </div>
