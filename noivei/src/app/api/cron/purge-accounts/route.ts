@@ -18,7 +18,17 @@
 import { err, handleApiError, ok } from '@/lib/api/response'
 import { createSupabaseService } from '@/lib/supabase/service'
 
-const STORAGE_BUCKETS = ['wedding-files', 'wedding-photos', 'wedding-gift-photos'] as const
+// Todo bucket que guarda arquivo prefixado por "{wedding_id}/..." precisa estar
+// aqui (ver migrations em supabase/migrations para a lista completa de buckets
+// do projeto). "wedding-album-photos" (mural de fotos via QR code, migration
+// 20260803000001_add-album-module.sql) ficou de fora até aqui — bug real de
+// retenção: fotos de convidados nunca eram apagadas no expurgo definitivo.
+const STORAGE_BUCKETS = [
+  'wedding-files',
+  'wedding-photos',
+  'wedding-gift-photos',
+  'wedding-album-photos',
+] as const
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 
