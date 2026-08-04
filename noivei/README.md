@@ -151,8 +151,15 @@ final, que deve ser redigida pelo jurídico a partir destas informações.
 Documentos legais completos (Política de Privacidade, Política de Cookies, Termos
 de Uso), publicados em `/privacidade` e `/termos`, estão em
 [`docs/legal/`](./docs/legal/) — redigidos a partir da análise real do código,
-mas ainda como **rascunho pendente de revisão jurídica e de preenchimento dos
-dados da empresa** (ver aviso no início de cada arquivo).
+ainda pendentes de razão social/CNPJ (empresa não formalizada) e de revisão
+jurídica antes de qualquer mudança substancial de conteúdo.
+
+O texto do **banner de cookies e da central de preferências** também já está
+redigido (`docs/legal/banner-e-preferencias-de-cookies.md`), mas só o texto —
+o componente de verdade (o aviso que aparece no site, guarda a escolha do
+usuário etc.) ainda não foi implementado. Como hoje só há cookies estritamente
+necessários (ver acima), isso não é obrigatório por lei — vira obrigatório se
+uma ferramenta de analytics/marketing for adicionada no futuro.
 
 ### Segurança técnica relevante
 
@@ -160,12 +167,23 @@ dados da empresa** (ver aviso no início de cada arquivo).
   é a principal barreira de acesso, não só uma camada extra: várias operações vão
   direto do navegador ao banco.
 - **Controle de acesso por módulo**: o dono decide quais módulos cada colaborador
-  convidado pode ver/editar.
+  convidado pode ver/editar, e qual plano libera cada módulo (ver Painel administrativo).
 - Upload de arquivo com **lista de tipos permitidos (MIME)** e conferência do
   tamanho real gravado no Storage (não confia em valor enviado pelo navegador).
 - Rotas públicas (RSVP, aceite de convite, site) usam acesso de serviço restrito a
   funções dedicadas que só expõem os campos estritamente necessários — nunca
   telefone/e-mail de convidado, por exemplo.
+- **CAPTCHA (Cloudflare Turnstile)** no cadastro, login e recuperação de senha —
+  proteção contra criação de conta em massa e automação de login.
+- **Rate limiting** por IP/usuário nas rotas sensíveis (login, cadastro, checkout,
+  cupom, exportação de dados, ações administrativas etc.), com bloqueio temporário
+  após excesso de tentativas.
+- Auditoria de segurança conduzida em 2026-07 (RLS, autorização, injeção/upload,
+  API/dependências) — achados corrigidos incluem: policy de `subscriptions` que
+  permitia auto-concessão de plano pago (fechada, agora só o plano gratuito é
+  gravável direto pelo cliente), conexão da conta Mercado Pago de presentes restrita
+  ao dono/full_access, dependências desatualizadas, e mais — ver histórico de commits
+  `security(api)`/`security(lgpd)` para o detalhe de cada correção.
 
 ### Retenção e exclusão
 
@@ -237,5 +255,39 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 # Authentication > Attack Protection — não é uma env var deste projeto)
 ```
 
-Convenções de código, estrutura de pastas e padrões de banco de dados estão em
-[`CLAUDE.md`](./CLAUDE.md).
+### Migrations
+
+Não há CLI/CI de migration configurado — cada arquivo em `supabase/migrations/`
+(nomeado `YYYYMMDDHHMMSS_descricao.sql`, sempre append-only, nunca editado depois
+de criado) precisa ser aplicado manualmente, na ordem dos arquivos, colando o SQL
+no **SQL Editor** do painel do Supabase do projeto (produção e qualquer ambiente
+de teste/staging que você use).
+
+### Acessar o painel administrativo localmente
+
+O painel (`/admin/**`) é liberado por `profiles.role = 'admin'` — não tem nenhuma
+tela de "virar admin", é preciso rodar isto uma vez no SQL Editor do Supabase,
+com o seu próprio `id` de usuário (visível em Authentication > Users no painel):
+
+```sql
+UPDATE profiles SET role = 'admin' WHERE id = '<seu-user-id>';
+```
+
+### Testes
+
+```bash
+npm run test        # roda a suíte (Vitest) uma vez
+npm run test:watch  # modo watch
+npm run validate    # type-check + lint + test, tudo junto (recomendado antes de commitar)
+```
+
+## Documentação adicional
+
+- [`CLAUDE.md`](./CLAUDE.md) — convenções de código, estrutura de pastas e
+  padrões de banco de dados.
+- [`docs/checklist-rule-engine.md`](./docs/checklist-rule-engine.md) — design do
+  motor de regras que gera o Checklist/Timeline personalizado a partir das
+  respostas do onboarding (perguntas, categorias de tarefa, regras de prazo).
+- [`docs/legal/`](./docs/legal/) — Política de Privacidade, Política de Cookies,
+  Termos de Uso e texto do banner de cookies (ver seção "Dados pessoais
+  tratados" acima para o status de cada um).
