@@ -4,8 +4,9 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateGalleryPhotoSchema } from '@/lib/api/validation/gallery-photo.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkStorageLimit } from '@/lib/billing/check-limit'
+import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { WeddingGalleryPhoto } from '@/types/database'
+import type { SiteTemplate, WeddingGalleryPhoto } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ wid: string }>
@@ -73,6 +74,35 @@ export async function POST(req: Request, { params }: RouteContext) {
     // que a policy de storage.objects usa para checar posse do arquivo.
     if (!parsed.data.storage_path.startsWith(`${wid}/`)) {
       return err(400, 'VALIDATION_ERROR', 'Caminho de armazenamento inválido para este casamento.')
+    }
+
+    // Teto de fotos do estilo de site ATUAL (ver template-limits.ts) — cada template
+    // tem a grade da galeria desenhada para uma quantidade controlada. Sem template
+    // salvo ainda (site nunca configurado), trata como 'classic' (sem limite), mesmo
+    // fallback usado em get-public-site-by-slug.ts.
+    const { data: siteConfigRow } = await supabase
+      .from('site_config')
+      .select('template')
+      .eq('wedding_id', wid)
+      .maybeSingle()
+    const template = (siteConfigRow?.template as SiteTemplate | null) ?? 'classic'
+    const galleryLimit = GALLERY_PHOTO_LIMIT_BY_TEMPLATE[template]
+
+    if (galleryLimit !== null) {
+      const { count: currentPhotoCount, error: countError } = await supabase
+        .from('wedding_gallery_photos')
+        .select('id', { count: 'exact', head: true })
+        .eq('wedding_id', wid)
+
+      if (countError) return err(500, 'DB_ERROR', 'Erro ao verificar limite de fotos da galeria.')
+
+      if ((currentPhotoCount ?? 0) >= galleryLimit) {
+        return err(
+          403,
+          'GALLERY_LIMIT_REACHED',
+          `Este modelo de site aceita até ${galleryLimit} fotos na galeria. Remova uma foto antiga ou troque de modelo em Site do casal.`,
+        )
+      }
     }
 
     // `size_bytes` do body é o que o client alega, não o que foi de fato gravado no

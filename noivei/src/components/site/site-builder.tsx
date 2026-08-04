@@ -10,6 +10,7 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
+import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
 import type { SiteConfig, SiteTemplate } from '@/types/database'
 
 // Marcador do endpoint público do bucket "wedding-photos" — presente numa URL indica que
@@ -203,6 +204,173 @@ const TEMPLATE_OPTIONS: { id: SiteTemplate; label: string; description: string }
   { id: 'portfolio', label: 'Portfólio', description: 'Visual ousado e editorial, com grade assimétrica de fotos e o mural de fotos em destaque.' },
 ]
 
+// Maquete abstrata animada de cada estilo — não é um screenshot real (o projeto não tem
+// esse asset), é um wireframe desenhado em divs/gradientes que troca de "quadro" a cada
+// 2.5s em crossfade, só pra dar uma noção de disposição/paleta antes de escolher. As três
+// telinhas simuladas (capa, fotos, informações) usam SEMPRE as variáveis de tema do casal
+// (--wedding-color*), nunca uma cor fixa — a paleta muda dinamicamente por casamento.
+type PreviewFrameId = 'hero' | 'gallery' | 'info'
+const PREVIEW_FRAMES: PreviewFrameId[] = ['hero', 'gallery', 'info']
+const PREVIEW_FRAME_MS = 2500
+
+// Troca de quadro automática — respeita `prefers-reduced-motion` checando o `matchMedia`
+// antes de sequer criar o `setInterval` (a regra global em globals.css zera durações de
+// `animation`/`transition` do CSS, mas não interrompe timers em JS puro, então aqui a
+// checagem é manual).
+function useAutoAdvancingFrame(frameCount: number, intervalMs: number): number {
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const id = setInterval(() => {
+      setActive((prev) => (prev + 1) % frameCount)
+    }, intervalMs)
+    return () => clearInterval(id)
+  }, [frameCount, intervalMs])
+
+  return active
+}
+
+// Quadro "capa/hero": título centralizado sobre o gradiente escuro (clássico) ou título
+// grande + CTA em pílula (portfólio) — mesmo gradiente de fundo usado nos templates reais.
+function PreviewHeroFrame({ template }: { template: SiteTemplate }) {
+  return (
+    <div
+      style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: '6px',
+        background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
+      }}
+    >
+      <div style={{ width: '54px', height: '4px', borderRadius: '2px', background: 'rgba(250,240,230,0.55)' }} />
+      <div
+        style={{
+          width: template === 'portfolio' ? '118px' : '100px',
+          height: template === 'portfolio' ? '13px' : '9px',
+          borderRadius: '2px', background: 'rgba(250,240,230,0.94)',
+        }}
+      />
+      {template === 'portfolio' ? (
+        <div style={{ width: '58px', height: '13px', borderRadius: '99px', background: 'var(--wedding-color)', marginTop: '5px' }} />
+      ) : (
+        <div style={{ width: '56px', height: '4px', borderRadius: '2px', background: 'rgba(250,240,230,0.5)', marginTop: '2px' }} />
+      )}
+    </div>
+  )
+}
+
+// Quadro "fotos": polaroids levemente rotacionados (clássico) ou grade assimétrica sem
+// cantos arredondados (portfólio) — mesma lógica visual do PolaroidPhoto e do
+// StaticMasonryGrid dos templates reais, só que com blocos de cor no lugar de fotos.
+function PreviewGalleryFrame({ template }: { template: SiteTemplate }) {
+  if (template === 'portfolio') {
+    const columns: number[][] = [[34, 22], [20, 38], [40, 16]]
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', gap: '2px', padding: '4px' }}>
+        {columns.map((heights, col) => (
+          <div key={col} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {heights.map((h, i) => (
+              <div
+                key={i}
+                style={{ height: `${h}px`, background: (col + i) % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const rotations = [-6, 3, -3]
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+      {rotations.map((rot, i) => (
+        <div
+          key={i}
+          style={{
+            width: '26px', height: '32px', padding: '2px', borderRadius: '2px',
+            background: '#FFFCF6', boxShadow: '0 3px 6px rgba(60,40,24,0.18)', transform: `rotate(${rot}deg)`,
+          }}
+        >
+          <div style={{ width: '100%', height: '100%', borderRadius: '1px', background: i % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Quadro "informações": cartão pontilhado centralizado, no espírito da seção de RSVP
+// (clássico) ou duas colunas kicker+texto sem arredondamento (portfólio), no espírito
+// das seções "Cerimônia"/"Nossa história" editoriais.
+function PreviewInfoFrame({ template }: { template: SiteTemplate }) {
+  if (template === 'portfolio') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', gap: '8px', padding: '10px' }}>
+        <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '5px' }}>
+          <div style={{ width: '26px', height: '3px', background: 'var(--wedding-color-dark)' }} />
+          <div style={{ width: '68px', height: '8px', background: 'var(--fg)', opacity: 0.85 }} />
+          <div style={{ width: '58px', height: '3px', background: 'var(--muted-fg)', opacity: 0.5 }} />
+          <div style={{ width: '46px', height: '3px', background: 'var(--muted-fg)', opacity: 0.5 }} />
+        </div>
+        <div style={{ flex: 1, background: 'var(--wedding-color-secondary-subtle)' }} />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px' }}>
+      <div
+        style={{
+          width: '100%', height: '100%', borderRadius: '10px', border: '1.5px dashed var(--wedding-color-secondary)',
+          background: 'var(--wedding-color-subtle)', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: '5px',
+        }}
+      >
+        <div style={{ width: '66px', height: '6px', borderRadius: '2px', background: 'var(--wedding-color-dark)', opacity: 0.7 }} />
+        <div style={{ width: '86px', height: '4px', borderRadius: '2px', background: 'var(--muted-fg)', opacity: 0.5 }} />
+        <div style={{ width: '74px', height: '4px', borderRadius: '2px', background: 'var(--muted-fg)', opacity: 0.5 }} />
+      </div>
+    </div>
+  )
+}
+
+// Mockup de "janela de navegador" (barrinha com 3 bolinhas) por cima do quadro animado —
+// reforça a leitura de "isso é uma prévia de site", não um card decorativo qualquer.
+function MiniSitePreview({ template }: { template: SiteTemplate }) {
+  const active  = useAutoAdvancingFrame(PREVIEW_FRAMES.length, PREVIEW_FRAME_MS)
+  const rounded = template === 'classic'
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        borderRadius: rounded ? '10px' : '6px', overflow: 'hidden',
+        border: '1px solid #EBDDD0', marginBottom: '10px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 8px', background: 'var(--muted)', borderBottom: '1px solid #EBDDD0' }}>
+        {[0, 1, 2].map((i) => (
+          <span key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--muted-fg)', opacity: 0.4 }} />
+        ))}
+      </div>
+      <div style={{ position: 'relative', height: '96px', overflow: 'hidden' }}>
+        {PREVIEW_FRAMES.map((frame, index) => (
+          <div
+            key={frame}
+            style={{ position: 'absolute', inset: 0, opacity: index === active ? 1 : 0, transition: 'opacity 700ms ease' }}
+          >
+            {frame === 'hero'    && <PreviewHeroFrame template={template} />}
+            {frame === 'gallery' && <PreviewGalleryFrame template={template} />}
+            {frame === 'info'    && <PreviewInfoFrame template={template} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function TemplatePicker({ value, albumEnabled, onChange }: { value: SiteTemplate; albumEnabled: boolean; onChange: (t: SiteTemplate) => void }) {
   return (
     <div>
@@ -225,6 +393,8 @@ function TemplatePicker({ value, albumEnabled, onChange }: { value: SiteTemplate
                 opacity: locked ? 0.55 : 1,
               }}
             >
+              <MiniSitePreview template={opt.id} />
+
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)', marginBottom: '4px' }}>
                 {opt.label}
               </div>
@@ -620,6 +790,10 @@ interface GaleriaSectionProps {
   siteExists:        boolean
   storageLimitBytes: number
   usedBytes:         number
+  // Estilo do site ATUALMENTE selecionado na aba Capa (não necessariamente o publicado) —
+  // decide o teto de fotos exibido aqui via GALLERY_PHOTO_LIMIT_BY_TEMPLATE. `null` = sem
+  // teto (estilo clássico).
+  template:          SiteTemplate
   onUploadPhoto:     (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto:     (url: string) => Promise<boolean>
   onUpdatePhotoMeta: (url: string, patch: { position_y?: number; fit_contain?: boolean }) => void
@@ -628,7 +802,7 @@ interface GaleriaSectionProps {
 }
 
 function GaleriaSection({
-  galleryUrls, photoMeta, saving, siteExists, storageLimitBytes, usedBytes,
+  galleryUrls, photoMeta, saving, siteExists, storageLimitBytes, usedBytes, template,
   onUploadPhoto, onDeletePhoto, onUpdatePhotoMeta, onSave, onGoToCapa,
 }: GaleriaSectionProps) {
   const [urls, setUrls]           = useState<string[]>(galleryUrls)
@@ -647,7 +821,13 @@ function GaleriaSection({
 
   const usedPct = storageLimitBytes > 0 ? Math.min(100, (usedBytes / storageLimitBytes) * 100) : 0
 
+  // Teto de fotos do estilo escolhido — a grade do portfólio foi desenhada pra uma
+  // quantidade controlada de fotos (ver template-limits.ts). O clássico não tem teto.
+  const galleryLimit = GALLERY_PHOTO_LIMIT_BY_TEMPLATE[template]
+  const atGalleryLimit = galleryLimit !== null && urls.length >= galleryLimit
+
   function addUrl() {
+    if (atGalleryLimit) return
     const trimmed = newUrl.trim()
     if (!trimmed) return
     setUrls((prev) => [...prev, trimmed])
@@ -661,9 +841,15 @@ function GaleriaSection({
   // normalmente, e o resumo ao final avisa quantos não couberam (em vez de abortar o lote
   // inteiro no primeiro erro, o que descartaria uploads que já eram válidos).
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
+    const selected = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (files.length === 0 || uploading) return
+    if (selected.length === 0 || uploading || atGalleryLimit) return
+
+    // Corta o lote no que ainda cabe no teto do estilo atual — melhor enviar os primeiros
+    // arquivos válidos do que rejeitar o lote inteiro por causa dos últimos.
+    const remainingSlots = galleryLimit !== null ? Math.max(0, galleryLimit - urls.length) : selected.length
+    const files          = selected.slice(0, remainingSlots)
+    const skippedCount   = selected.length - files.length
 
     setUploading(true)
     let successCount = 0
@@ -695,6 +881,13 @@ function GaleriaSection({
     }
     if (failedNames.length > 0) {
       toastError(`Não foi possível enviar: ${failedNames.join(', ')}.`)
+    }
+    if (skippedCount > 0) {
+      toastError(
+        skippedCount === 1
+          ? '1 foto não foi enviada: limite de fotos do estilo atual atingido.'
+          : `${skippedCount} fotos não foram enviadas: limite de fotos do estilo atual atingido.`,
+      )
     }
   }
 
@@ -742,6 +935,28 @@ function GaleriaSection({
         </div>
       </div>
 
+      {/* Teto de fotos do estilo atual (só o portfólio tem um) — a grade dele foi desenhada
+          pra uma quantidade controlada, então o limite existe pra manter o equilíbrio visual,
+          não é uma cota de armazenamento (essa já aparece acima). */}
+      {galleryLimit !== null && (
+        <div
+          className="flex items-center justify-between rounded-2xl p-4"
+          style={{
+            background:  atGalleryLimit ? '#FBEEE6' : 'var(--wedding-color-subtle)',
+            border:      atGalleryLimit ? '1px solid #E0B89A' : '1px solid transparent',
+          }}
+        >
+          <span style={{ fontSize: '13px', fontWeight: 600, color: atGalleryLimit ? '#A87050' : 'var(--wedding-color-dark)' }}>
+            {urls.length} de {galleryLimit} fotos
+          </span>
+          {atGalleryLimit && (
+            <span style={{ fontSize: '12.5px', color: '#A87050' }}>
+              Limite do estilo Portfólio atingido — remova uma foto ou troque de estilo na aba Capa.
+            </span>
+          )}
+        </div>
+      )}
+
       <div>
         <label htmlFor="site-gallery-url" style={labelStyle}>Adicionar imagem (URL)</label>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -750,19 +965,22 @@ function GaleriaSection({
             type="url"
             maxLength={2048}
             value={newUrl}
+            disabled={atGalleryLimit}
             onChange={(e) => setNewUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addUrl() } }}
             placeholder="https://..."
-            style={inputStyle}
+            style={{ ...inputStyle, opacity: atGalleryLimit ? 0.6 : 1 }}
           />
           <button
             type="button"
             onClick={addUrl}
+            disabled={atGalleryLimit}
             aria-label="Adicionar imagem"
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: '46px', flexShrink: 0, border: 'none', borderRadius: '12px',
-              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', cursor: 'pointer',
+              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
+              cursor: atGalleryLimit ? 'not-allowed' : 'pointer', opacity: atGalleryLimit ? 0.6 : 1,
             }}
           >
             <PlusIcon />
@@ -774,19 +992,21 @@ function GaleriaSection({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={uploading}
+          disabled={uploading || atGalleryLimit}
+          title={atGalleryLimit ? `Limite de ${galleryLimit} fotos do estilo Portfólio atingido.` : undefined}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
             borderRadius: '12px', padding: '10px 16px',
-            fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
-            opacity: uploading ? 0.7 : 1,
+            fontWeight: 600, fontSize: '14px',
+            cursor: atGalleryLimit ? 'not-allowed' : uploading ? 'wait' : 'pointer',
+            opacity: uploading || atGalleryLimit ? 0.6 : 1,
           }}
         >
           {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
           {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Enviar do computador'}
         </button>
-        <input ref={inputRef} type="file" accept="image/*" multiple onChange={handleFileChange} style={{ display: 'none' }} />
+        <input ref={inputRef} type="file" accept="image/*" multiple disabled={atGalleryLimit} onChange={handleFileChange} style={{ display: 'none' }} />
       </div>
 
       {urls.length === 0 ? (
@@ -1251,6 +1471,7 @@ export default function SiteBuilder({
                 siteExists={siteExists}
                 storageLimitBytes={storageLimitBytes}
                 usedBytes={usedBytes}
+                template={template}
                 onUploadPhoto={uploadPhoto}
                 onDeletePhoto={deletePhoto}
                 onUpdatePhotoMeta={updateGalleryPhotoMeta}
