@@ -11,6 +11,10 @@ import PasswordInput from '@/components/auth/password-input'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
+interface LoginApiErrorBody {
+  error?: { code?: string; message?: string }
+}
+
 const LoginSchema = z.object({
   email:    z.string().email('E-mail inválido'),
   password: z.string().min(1, 'Senha obrigatória'),
@@ -54,31 +58,24 @@ function LoginForm() {
     setLoading(true)
     setServerError('')
 
-    const limitCheck = await fetch('/api/v1/auth/check-rate-limit', {
+    // Autenticação de verdade acontece no servidor (não aqui no browser) — é a
+    // mesma rota que verifica o limite de tentativas, no mesmo request que loga.
+    // A resposta grava a sessão como cookie; não há chamada a signInWithPassword
+    // no cliente neste fluxo.
+    const res = await fetch('/api/v1/auth/login', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'login', identifier: data.email }),
+      body:    JSON.stringify({ email: data.email, password: data.password, captchaToken }),
     })
-    if (!limitCheck.ok) {
-      const body = await limitCheck.json().catch(() => null)
-      setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as LoginApiErrorBody | null
+      setServerError(body?.error?.message ?? 'Não foi possível entrar agora. Tente novamente em instantes.')
       setLoading(false)
       resetCaptcha()
       return
     }
 
-    const supabase = createSupabaseBrowser()
-    const { error } = await supabase.auth.signInWithPassword({
-      email:    data.email,
-      password: data.password,
-      options: { captchaToken },
-    })
-    if (error) {
-      setServerError('E-mail ou senha incorretos.')
-      setLoading(false)
-      resetCaptcha()
-      return
-    }
     router.push(next)
     router.refresh()
   }

@@ -11,6 +11,10 @@ import PasswordInput from '@/components/auth/password-input'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
+interface SignupApiErrorBody {
+  error?: { code?: string; message?: string }
+}
+
 const SignupSchema = z.object({
   full_name:       z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email:           z.string().email('E-mail inválido'),
@@ -58,38 +62,25 @@ export default function SignupPage() {
     setLoading(true)
     setServerError('')
 
-    const limitCheck = await fetch('/api/v1/auth/check-rate-limit', {
+    // Cadastro acontece no servidor — mesma rota que verifica o limite de
+    // tentativas, no mesmo request que cria a conta.
+    const res = await fetch('/api/v1/auth/signup', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'signup', identifier: data.email }),
+      body:    JSON.stringify({
+        fullName: data.full_name, email: data.email, password: data.password,
+        terms: data.terms, captchaToken, origin: window.location.origin,
+      }),
     })
-    if (!limitCheck.ok) {
-      const body = await limitCheck.json().catch(() => null)
-      setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as SignupApiErrorBody | null
+      setServerError(body?.error?.message ?? 'Não foi possível criar a conta agora. Tente novamente em instantes.')
       setLoading(false)
       resetCaptcha()
       return
     }
 
-    const supabase = createSupabaseBrowser()
-    const { error } = await supabase.auth.signUp({
-      email:    data.email,
-      password: data.password,
-      options: {
-        data: { full_name: data.full_name },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        captchaToken,
-      },
-    })
-    if (error) {
-      // Nunca repassar error.message cru: mensagens como "User already registered"
-      // confirmam pra quem está atacando se um e-mail já tem conta (enumeração de
-      // usuário). Mostramos sempre uma mensagem genérica, sem confirmar nem negar.
-      setServerError('Não foi possível criar a conta. Se você já tem cadastro, tente entrar.')
-      setLoading(false)
-      resetCaptcha()
-      return
-    }
     router.push(`/verify?email=${encodeURIComponent(data.email)}`)
   }
 

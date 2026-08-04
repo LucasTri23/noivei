@@ -6,7 +6,10 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+
+interface ForgotPasswordApiErrorBody {
+  error?: { code?: string; message?: string }
+}
 
 const Schema = z.object({ email: z.string().email('E-mail inválido') })
 type Fields = z.infer<typeof Schema>
@@ -41,24 +44,22 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     setServerError('')
 
-    const limitCheck = await fetch('/api/v1/auth/check-rate-limit', {
+    // Envio do e-mail de recuperação acontece no servidor — mesma rota que
+    // verifica o limite de tentativas, no mesmo request que dispara o e-mail.
+    const res = await fetch('/api/v1/auth/forgot-password', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'forgot_password', identifier: data.email }),
+      body:    JSON.stringify({ email: data.email, captchaToken, origin: window.location.origin }),
     })
-    if (!limitCheck.ok) {
-      const body = await limitCheck.json().catch(() => null)
-      setServerError(body?.error?.message ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ForgotPasswordApiErrorBody | null
+      setServerError(body?.error?.message ?? 'Não foi possível concluir agora. Tente novamente em instantes.')
       setLoading(false)
       resetCaptcha()
       return
     }
 
-    const supabase = createSupabaseBrowser()
-    await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
-      captchaToken,
-    })
     setSent(true)
     setLoading(false)
   }
