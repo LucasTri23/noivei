@@ -34,8 +34,12 @@ interface RespondErrorBody {
 }
 
 interface CompanionForm {
-  name:  string
-  phone: string
+  name:      string
+  phone:     string
+  // Só usado quando o casal já nomeou os acompanhantes (ver hasNamedCompanions) —
+  // nesse caso o nome vem travado do cadastro do casal e o convidado só escolhe
+  // quem vai e informa o telefone de quem confirmar.
+  attending: boolean
 }
 
 interface CompanionFormError {
@@ -71,6 +75,24 @@ function validateCompanions(companions: CompanionForm[]): CompanionFormError[] {
   })
 }
 
+// Fluxo com acompanhantes nomeados pelo casal — nome já vem certo (travado), só
+// confere o telefone de quem foi marcado como "vai".
+function validateNamedCompanions(companions: CompanionForm[]): CompanionFormError[] {
+  return companions.map((companion) => {
+    if (!companion.attending) return {}
+
+    const parsedPhone = PhoneSchema.safeParse(companion.phone)
+    if (!parsedPhone.success) {
+      return {
+        phone: companion.phone.trim().length === 0
+          ? 'Informe o telefone do acompanhante.'
+          : (parsedPhone.error.issues[0]?.message ?? 'Telefone inválido.'),
+      }
+    }
+    return {}
+  })
+}
+
 export default function RsvpForm({ token, initialStatus, initialPartySize, initialCompanions, siteSlug }: RsvpFormProps) {
   const router = useRouter()
   const [status, setStatus]   = useState<GuestStatus>(initialStatus)
@@ -80,12 +102,20 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
   const [phone, setPhone]     = useState('')
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [attendingCount, setAttendingCount] = useState(1)
+  // Quando o casal já nomeou os acompanhantes (ver "nomear agregados" em Convidados),
+  // o nome de cada um fica travado — o convidado só confirma quem vai e informa o
+  // telefone de quem confirmar, não digita/edita nome nenhum. Só cai no fluxo antigo
+  // (quantidade + nome livre) quando o casal não nomeou ninguém.
+  const hasNamedCompanions = initialCompanions.length > 0
   // Começa com os nomes que o casal já cadastrou (se houver) — telefone sempre em
-  // branco, o acompanhante preenche o dele mesmo. Como attendingCount começa em 1,
-  // esses slots só aparecem de fato quando o convidado aumentar a quantidade (ver
-  // handleAttendingCountChange), mas já ficam prontos aqui pra não perder a ordem.
+  // branco, o acompanhante preenche o dele mesmo. Todo acompanhante nomeado começa
+  // marcado como "vai" (é a expectativa natural de quem o casal já nomeou); o
+  // convidado desmarca quem não puder ir. Como attendingCount começa em 1, no fluxo
+  // ANTIGO (sem nomeação) esses slots só aparecem de fato quando o convidado
+  // aumentar a quantidade (ver handleAttendingCountChange), mas já ficam prontos
+  // aqui pra não perder a ordem.
   const [companions, setCompanions] = useState<CompanionForm[]>(
-    () => initialCompanions.map((companion) => ({ name: companion.name, phone: '' })),
+    () => initialCompanions.map((companion) => ({ name: companion.name, phone: '', attending: true })),
   )
   const [companionErrors, setCompanionErrors] = useState<CompanionFormError[]>([])
   const [saving, setSaving]   = useState<Answer | null>(null)
@@ -103,15 +133,24 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
       // slot volta a mostrar o nome pré-cadastrado em vez de ficar vazio à toa.
       while (next.length < needed) {
         const prefillName = initialCompanions[next.length]?.name ?? ''
-        next.push({ name: prefillName, phone: '' })
+        next.push({ name: prefillName, phone: '', attending: true })
       }
       return next
     })
   }
 
-  function updateCompanion(index: number, field: keyof CompanionForm, value: string) {
+  function updateCompanion(index: number, field: 'name' | 'phone', value: string) {
     setCompanions((prev) => prev.map((companion, i) => (i === index ? { ...companion, [field]: value } : companion)))
     setCompanionErrors((prev) => prev.map((error, i) => (i === index ? { ...error, [field]: undefined } : error)))
+  }
+
+  // Só usado no fluxo com acompanhantes nomeados pelo casal — alterna se aquele
+  // acompanhante específico vai ou não, sem mexer no nome (travado) nem nos demais.
+  function toggleCompanionAttending(index: number, attending: boolean) {
+    setCompanions((prev) => prev.map((companion, i) => (i === index ? { ...companion, attending } : companion)))
+    if (attending) {
+      setCompanionErrors((prev) => prev.map((error, i) => (i === index ? { ...error, phone: undefined } : error)))
+    }
   }
 
   async function respond(answer: Answer) {
@@ -128,7 +167,12 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
 
     // Acompanhantes só valem pra confirmação — espelha a mesma regra do servidor
     // (ver UpdateRsvpSchema) pra dar feedback cedo, sem substituir a validação de lá.
-    if (answer === 'confirmado' && attendingCount > 1) {
+    // No fluxo com nomes travados, só quem foi marcado "vai" precisa de telefone.
+    if (answer === 'confirmado' && hasNamedCompanions) {
+      const errors = validateNamedCompanions(companions)
+      setCompanionErrors(errors)
+      if (errors.some((error) => error.phone)) return
+    } else if (answer === 'confirmado' && attendingCount > 1) {
       const errors = validateCompanions(companions)
       setCompanionErrors(errors)
       if (errors.some((error) => error.name || error.phone)) return
@@ -140,6 +184,8 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
     setSaving(answer)
     setSaved(false)
 
+    const attendingCompanions = companions.filter((companion) => companion.attending)
+
     const res = await fetch(`/api/v1/rsvp/${encodeURIComponent(token)}`, {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -147,12 +193,17 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
         status: answer,
         phone:  phone.trim() || null,
         ...(answer === 'confirmado'
-          ? {
-              attending_count: attendingCount,
-              companions: attendingCount > 1
-                ? companions.map((companion) => ({ name: companion.name.trim(), phone: companion.phone.trim() }))
-                : [],
-            }
+          ? hasNamedCompanions
+            ? {
+                attending_count: 1 + attendingCompanions.length,
+                companions: attendingCompanions.map((companion) => ({ name: companion.name.trim(), phone: companion.phone.trim() })),
+              }
+            : {
+                attending_count: attendingCount,
+                companions: attendingCount > 1
+                  ? companions.map((companion) => ({ name: companion.name.trim(), phone: companion.phone.trim() }))
+                  : [],
+              }
           : {}),
       }),
     })
@@ -227,68 +278,140 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
         )}
       </div>
 
-      {initialPartySize > 1 && (
-        <div style={{ marginBottom: '18px' }}>
-          <label htmlFor="rsvp-attending-count" style={labelStyle}>Quantos vão comparecer?</label>
-          <select
-            id="rsvp-attending-count"
-            value={attendingCount}
-            onChange={(e) => handleAttendingCountChange(Number(e.target.value))}
-            style={{ ...inputStyle, cursor: 'pointer' }}
-          >
-            {Array.from({ length: initialPartySize }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-          <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '6px 0 0' }}>
-            Este convite cobre até {initialPartySize} pessoa{initialPartySize > 1 ? 's' : ''}. Se for mais de
-            uma, informe os dados de quem vai com você.
-          </p>
-        </div>
-      )}
-
-      {initialPartySize > 1 && attendingCount > 1 && (
-        <div style={{ marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {hasNamedCompanions ? (
+        <div style={{ marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <span style={labelStyle}>Quem vai com você?</span>
+            <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: 0 }}>
+              Confirme quem vai comparecer e informe o telefone de cada um.
+            </p>
+          </div>
           {companions.map((companion, index) => (
-            <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div>
-                <label htmlFor={`rsvp-companion-name-${index}`} style={labelStyle}>
-                  Nome do acompanhante {index + 1}
-                </label>
-                <input
-                  id={`rsvp-companion-name-${index}`}
-                  type="text"
-                  maxLength={120}
-                  value={companion.name}
-                  onChange={(e) => updateCompanion(index, 'name', e.target.value)}
-                  placeholder="Nome completo"
-                  style={{ ...inputStyle, ...(companionErrors[index]?.name ? { borderColor: '#C0553F' } : {}) }}
-                />
-                {companionErrors[index]?.name && (
-                  <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.name}</p>
-                )}
+            <div
+              key={index}
+              style={{
+                display: 'flex', flexDirection: 'column', gap: '10px',
+                padding: '14px', borderRadius: '12px', border: '1.5px solid var(--border)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                <span style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--fg)' }}>{companion.name}</span>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleCompanionAttending(index, true)}
+                    style={{
+                      border: 'none', borderRadius: '99px', padding: '7px 14px', fontSize: '13px', fontWeight: 700,
+                      cursor: 'pointer',
+                      background: companion.attending ? 'var(--wedding-color)' : 'var(--border)',
+                      color: companion.attending ? '#fff' : 'var(--muted-fg)',
+                    }}
+                  >
+                    Vai
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleCompanionAttending(index, false)}
+                    style={{
+                      border: 'none', borderRadius: '99px', padding: '7px 14px', fontSize: '13px', fontWeight: 700,
+                      cursor: 'pointer',
+                      background: !companion.attending ? '#F6E4DE' : 'var(--border)',
+                      color: !companion.attending ? '#C0553F' : 'var(--muted-fg)',
+                    }}
+                  >
+                    Não vai
+                  </button>
+                </div>
               </div>
-              <div>
-                <label htmlFor={`rsvp-companion-phone-${index}`} style={labelStyle}>
-                  Telefone do acompanhante {index + 1}
-                </label>
-                <input
-                  id={`rsvp-companion-phone-${index}`}
-                  type="tel"
-                  minLength={8}
-                  maxLength={20}
-                  value={companion.phone}
-                  onChange={(e) => updateCompanion(index, 'phone', e.target.value)}
-                  placeholder="(11) 99999-9999"
-                  style={{ ...inputStyle, ...(companionErrors[index]?.phone ? { borderColor: '#C0553F' } : {}) }}
-                />
-                {companionErrors[index]?.phone && (
-                  <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.phone}</p>
-                )}
-              </div>
+              {companion.attending && (
+                <div>
+                  <label htmlFor={`rsvp-companion-phone-${index}`} style={labelStyle}>
+                    Telefone de {companion.name}
+                  </label>
+                  <input
+                    id={`rsvp-companion-phone-${index}`}
+                    type="tel"
+                    minLength={8}
+                    maxLength={20}
+                    value={companion.phone}
+                    onChange={(e) => updateCompanion(index, 'phone', e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    style={{ ...inputStyle, ...(companionErrors[index]?.phone ? { borderColor: '#C0553F' } : {}) }}
+                  />
+                  {companionErrors[index]?.phone && (
+                    <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.phone}</p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
+      ) : (
+        <>
+          {initialPartySize > 1 && (
+            <div style={{ marginBottom: '18px' }}>
+              <label htmlFor="rsvp-attending-count" style={labelStyle}>Quantos vão comparecer?</label>
+              <select
+                id="rsvp-attending-count"
+                value={attendingCount}
+                onChange={(e) => handleAttendingCountChange(Number(e.target.value))}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                {Array.from({ length: initialPartySize }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '6px 0 0' }}>
+                Este convite cobre até {initialPartySize} pessoa{initialPartySize > 1 ? 's' : ''}. Se for mais de
+                uma, informe os dados de quem vai com você.
+              </p>
+            </div>
+          )}
+
+          {initialPartySize > 1 && attendingCount > 1 && (
+            <div style={{ marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {companions.map((companion, index) => (
+                <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label htmlFor={`rsvp-companion-name-${index}`} style={labelStyle}>
+                      Nome do acompanhante {index + 1}
+                    </label>
+                    <input
+                      id={`rsvp-companion-name-${index}`}
+                      type="text"
+                      maxLength={120}
+                      value={companion.name}
+                      onChange={(e) => updateCompanion(index, 'name', e.target.value)}
+                      placeholder="Nome completo"
+                      style={{ ...inputStyle, ...(companionErrors[index]?.name ? { borderColor: '#C0553F' } : {}) }}
+                    />
+                    {companionErrors[index]?.name && (
+                      <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.name}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor={`rsvp-companion-phone-${index}`} style={labelStyle}>
+                      Telefone do acompanhante {index + 1}
+                    </label>
+                    <input
+                      id={`rsvp-companion-phone-${index}`}
+                      type="tel"
+                      minLength={8}
+                      maxLength={20}
+                      value={companion.phone}
+                      onChange={(e) => updateCompanion(index, 'phone', e.target.value)}
+                      placeholder="(11) 99999-9999"
+                      style={{ ...inputStyle, ...(companionErrors[index]?.phone ? { borderColor: '#C0553F' } : {}) }}
+                    />
+                    {companionErrors[index]?.phone && (
+                      <p style={{ fontSize: '12px', color: '#C0553F', margin: '6px 0 0' }}>{companionErrors[index]?.phone}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
