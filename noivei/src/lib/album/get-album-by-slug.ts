@@ -6,6 +6,9 @@ import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 export interface AlbumInfo {
   weddingId:    string
   coupleNames:  string
+  // yyyy-mm-dd (coluna DATE) ou null se o casal ainda não definiu a data —
+  // usado por isTodayWeddingDay pra travar cadastro/upload ao dia certo.
+  weddingDate:  string | null
   weddingColor: string
   // Personalização de cor é recurso pago — Gratuito nunca sobrescreve o
   // dourado padrão, mesmo critério já usado no RSVP público (ver
@@ -34,7 +37,7 @@ export async function getAlbumBySlug(
 ): Promise<AlbumInfo | null> {
   const { data: site, error } = await supabase
     .from('site_config')
-    .select('wedding_id, weddings!inner(id, couple_names, wedding_color, wedding_color_secondary, deleted_at)')
+    .select('wedding_id, weddings!inner(id, couple_names, wedding_date, wedding_color, wedding_color_secondary, deleted_at)')
     .eq('slug', slug)
     .eq('published', true)
     .is('weddings.deleted_at', null)
@@ -43,7 +46,7 @@ export async function getAlbumBySlug(
   if (error || !site) return null
 
   const wedding = site.weddings as unknown as {
-    id: string; couple_names: string; wedding_color: string; wedding_color_secondary: string
+    id: string; couple_names: string; wedding_date: string | null; wedding_color: string; wedding_color_secondary: string
   }
   const weddingId = wedding.id
 
@@ -65,6 +68,7 @@ export async function getAlbumBySlug(
   return {
     weddingId,
     coupleNames:  wedding.couple_names,
+    weddingDate:  wedding.wedding_date,
     weddingColor: wedding.wedding_color,
     weddingColorSecondary: isPaidPlan(planId)
       ? wedding.wedding_color_secondary

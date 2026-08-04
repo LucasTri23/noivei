@@ -9,8 +9,19 @@ import { toastError } from '@/store/toast.store'
 const emptySubscribe = () => () => {}
 
 interface AlbumMuralClientProps {
-  slug:        string
-  coupleNames: string
+  slug:         string
+  coupleNames:  string
+  // yyyy-mm-dd (coluna DATE) ou null se o casal ainda não definiu a data —
+  // só usada aqui pra formatar a mensagem "volte no dia X"; a decisão de
+  // liberar ou não o formulário já vem pronta em isWeddingDay.
+  weddingDate:  string | null
+  // Calculado no server (ver src/lib/album/wedding-day.ts) a partir do fuso
+  // America/Sao_Paulo — o client NUNCA recalcula isso sozinho. É só pra
+  // decidir o que MOSTRAR; a validação de verdade é sempre no servidor em
+  // cada POST (register/photos), então mesmo que este valor fique "stale"
+  // numa aba aberta desde a véspera, o pior caso é a UI mostrar o formulário
+  // e o POST devolver NOT_WEDDING_DAY.
+  isWeddingDay: boolean
 }
 
 interface ApiErrorBody {
@@ -34,6 +45,18 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
 
 function sessionKey(slug: string): string {
   return `album:${slug}:contributor_id`
+}
+
+// Mesmo parser/formatter de portfolio-site.tsx pra data do casamento — evita
+// depender de fuso ao montar o Date (ano/mês/dia explícitos, sem horário),
+// já que wedding_date é uma coluna DATE pura (yyyy-mm-dd).
+function formatWeddingDateLong(date: string | null): string | null {
+  if (!date) return null
+  const [y, m, d] = date.split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
 }
 
 function CameraIcon() {
@@ -60,7 +83,7 @@ function ArrowIcon() {
   )
 }
 
-export default function AlbumMuralClient({ slug, coupleNames }: AlbumMuralClientProps) {
+export default function AlbumMuralClient({ slug, coupleNames, weddingDate, isWeddingDay }: AlbumMuralClientProps) {
   // sessionStorage só existe no client — usar useSyncExternalStore (não um
   // useEffect com setState) evita tanto o mismatch de hidratação quanto o lint
   // de "setState síncrono dentro de efeito" (mesmo padrão de appearance-settings.tsx
@@ -94,6 +117,10 @@ export default function AlbumMuralClient({ slug, coupleNames }: AlbumMuralClient
   }, [previewUrl])
 
   function handleHeroCta() {
+    if (!isWeddingDay) {
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
     if (activeContributorId) {
       inputRef.current?.click()
       return
@@ -212,15 +239,30 @@ export default function AlbumMuralClient({ slug, coupleNames }: AlbumMuralClient
               boxShadow: '0 10px 26px color-mix(in srgb, var(--wedding-color) 40%, transparent)',
             }}
           >
-            {activeContributorId ? 'Enviar minha foto' : 'Quero participar'}
+            {!isWeddingDay ? 'Saiba mais' : activeContributorId ? 'Enviar minha foto' : 'Quero participar'}
             <ArrowIcon />
           </button>
         </div>
       </div>
 
-      {/* Formulário de cadastro / envio de foto */}
+      {/* Formulário de cadastro / envio de foto — só existe NO dia do
+          casamento; fora dele, nem quem já tinha se cadastrado num dia
+          anterior (contributor_id sobrevive no sessionStorage) consegue ver
+          o formulário de upload de novo. */}
       <div ref={formSectionRef} style={{ maxWidth: '480px', margin: '0 auto', padding: '40px 24px 8px' }}>
-        {!activeContributorId ? (
+        {!isWeddingDay ? (
+          <div
+            className="flex flex-col items-center gap-3"
+            style={{ padding: '40px 24px', background: 'var(--wedding-color-subtle)', textAlign: 'center', borderRadius: '20px' }}
+          >
+            <div style={{ fontSize: '32px' }}>📅</div>
+            <p style={{ fontSize: '14.5px', color: 'var(--fg)', margin: 0, lineHeight: 1.6, fontWeight: 600 }}>
+              {formatWeddingDateLong(weddingDate)
+                ? `O mural abre no dia do casamento — ${formatWeddingDateLong(weddingDate)}. Volte nesse dia pra postar suas fotos!`
+                : 'O mural ainda não está disponível — o casal não definiu a data do casamento.'}
+            </p>
+          </div>
+        ) : !activeContributorId ? (
           <>
             <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6, textAlign: 'center' }}>
               Se cadastre rapidinho pra poder enviar as fotos que você tirar no evento.

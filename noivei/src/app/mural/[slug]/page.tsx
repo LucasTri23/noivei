@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import AlbumMuralClient from '@/components/album/album-mural-client'
 import { getAlbumBySlug } from '@/lib/album/get-album-by-slug'
+import { isTodayWeddingDay } from '@/lib/album/wedding-day'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { deriveBrandDarkGradient, deriveWeddingColorScale } from '@/lib/theme/wedding-color'
 
@@ -93,7 +94,12 @@ export default async function MuralPage({ params }: MuralPageProps) {
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh', fontFamily: 'var(--font-body)', ...colorVars }}>
-      <AlbumMuralClient slug={decodedSlug} coupleNames={album.coupleNames} />
+      <AlbumMuralClient
+        slug={decodedSlug}
+        coupleNames={album.coupleNames}
+        weddingDate={album.weddingDate}
+        isWeddingDay={isTodayWeddingDay(album.weddingDate)}
+      />
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { AlbumSlugSchema, RegisterContributorSchema } from '@/lib/api/validation/album.schema'
 import { getAlbumBySlug } from '@/lib/album/get-album-by-slug'
+import { isTodayWeddingDay } from '@/lib/album/wedding-day'
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
 
@@ -41,6 +42,13 @@ export async function POST(req: Request, { params }: RouteContext) {
     // existe" de "recurso não contratado neste plano".
     if (!album || !album.moduleEnabled) {
       return err(404, 'ALBUM_NOT_FOUND', 'Mural não encontrado.')
+    }
+
+    // Cadastro só é aceito NO dia do casamento — sem isso, alguém poderia se
+    // cadastrar dias antes e só descobrir na hora do upload (POST photos, que
+    // faz a mesma checagem) que não vai conseguir postar nada.
+    if (!isTodayWeddingDay(album.weddingDate)) {
+      return err(403, 'NOT_WEDDING_DAY', 'O mural só recebe fotos no dia do casamento.')
     }
 
     const body = await parseJsonBody(req)
