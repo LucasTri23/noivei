@@ -95,6 +95,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
           template:             parsed.data.template ?? 'classic',
           cover_photo_url:      parsed.data.cover_photo_url ?? null,
           cover_photo_position: parsed.data.cover_photo_position ?? 50,
+          cover_photo_zoom:     parsed.data.cover_photo_zoom ?? 0,
           content:              parsed.data.content ?? {},
         })
         .select()

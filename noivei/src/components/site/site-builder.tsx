@@ -9,6 +9,7 @@ import { useOrigin } from '@/hooks/use-origin'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
+import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
 import type { SiteConfig, SiteTemplate } from '@/types/database'
@@ -123,6 +124,12 @@ function TrashIcon() {
 function CropIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
 }
+function ArrowUpIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+}
+function ArrowDownIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+}
 const SECTIONS: Section[] = [
   { id: 'capa',      label: 'Capa',              icon: <ImageIcon /> },
   { id: 'historia',  label: 'Nossa história',     icon: <HeartIcon /> },
@@ -189,13 +196,14 @@ interface CapaSectionProps {
   coverTitle:          string
   coverPhotoUrl:       string | null
   coverPhotoPosition:  number
+  coverPhotoZoom:      number
   publicUrl:           string | null
   saving:              boolean
   onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto: (url: string) => Promise<boolean>
   onSave: (values: {
     slug: string; published: boolean; template: SiteTemplate
-    coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
+    coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number; coverPhotoZoom: number
   }) => Promise<PatchResult>
 }
 
@@ -204,10 +212,13 @@ const TEMPLATE_OPTIONS: { id: SiteTemplate; label: string; description: string }
   { id: 'portfolio', label: 'Portfólio', description: 'Visual ousado e editorial, com grade assimétrica de fotos e o mural de fotos em destaque.' },
 ]
 
-// Maquete abstrata animada de cada estilo — não é um screenshot real (o projeto não tem
-// esse asset), é um wireframe desenhado em divs/gradientes que troca de "quadro" a cada
-// 2.5s em crossfade, só pra dar uma noção de disposição/paleta antes de escolher. As três
-// telinhas simuladas (capa, fotos, informações) usam SEMPRE as variáveis de tema do casal
+// Maquete animada de cada estilo — não é um screenshot real (o projeto não tem esse
+// asset, e nenhuma foto real existe no repo: blocos de cor seguem fazendo as vezes de
+// "foto"), mas reproduz em miniatura a estrutura de verdade de cada template (ver
+// ClassicSite/PortfolioSite) — mesmas proporções, formas e cantos, com texto de
+// demonstração fixo ("Ana & João") só pra ilustrar tipografia, nunca dado real do
+// casamento. Troca de "quadro" a cada 2.5s em crossfade. As três telinhas simuladas
+// (capa, fotos, informações) usam SEMPRE as variáveis de tema do casal
 // (--wedding-color*), nunca uma cor fixa — a paleta muda dinamicamente por casamento.
 type PreviewFrameId = 'hero' | 'gallery' | 'info'
 const PREVIEW_FRAMES: PreviewFrameId[] = ['hero', 'gallery', 'info']
@@ -233,77 +244,143 @@ function useAutoAdvancingFrame(frameCount: number, intervalMs: number): number {
   return active
 }
 
-// Quadro "capa/hero": título centralizado sobre o gradiente escuro (clássico) ou título
-// grande + CTA em pílula (portfólio) — mesmo gradiente de fundo usado nos templates reais.
+// Nomes de demonstração fixos — só decoram o card de seleção de estilo, nunca dado
+// real do casal (que só existe depois de logado, e este seletor pode aparecer antes
+// de qualquer preenchimento).
+const PREVIEW_DEMO_NAMES = 'Ana & João'
+const PREVIEW_DEMO_DATE  = '15 . 08 . 2026'
+
+// Quadro "capa/hero": no clássico, kicker + nome do casal em serifada + data, tudo
+// centralizado sobre o gradiente escuro — mesma composição de `ClassicSite` (ver
+// "Casamento de" / <h1 className="font-display"> / data+local). No portfólio, texto
+// editorial alinhado à esquerda/embaixo sobre um bloco "full-bleed" com overlay
+// diagonal, como a capa de `PortfolioSite` (eyebrow + h1 grande + CTA em pílula),
+// em vez de centralizado.
 function PreviewHeroFrame({ template }: { template: SiteTemplate }) {
-  return (
-    <div
-      style={{
-        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: '6px',
-        background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
-      }}
-    >
-      <div style={{ width: '54px', height: '4px', borderRadius: '2px', background: 'rgba(250,240,230,0.55)' }} />
+  if (template === 'portfolio') {
+    return (
       <div
         style={{
-          width: template === 'portfolio' ? '118px' : '100px',
-          height: template === 'portfolio' ? '13px' : '9px',
-          borderRadius: '2px', background: 'rgba(250,240,230,0.94)',
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'flex-start', justifyContent: 'flex-end', gap: '4px', padding: '10px 12px',
+          background: 'linear-gradient(to top right, rgba(10,6,2,0.8), rgba(10,6,2,0.15)), var(--wedding-color-secondary-light)',
         }}
-      />
-      {template === 'portfolio' ? (
-        <div style={{ width: '58px', height: '13px', borderRadius: '99px', background: 'var(--wedding-color)', marginTop: '5px' }} />
-      ) : (
-        <div style={{ width: '56px', height: '4px', borderRadius: '2px', background: 'rgba(250,240,230,0.5)', marginTop: '2px' }} />
-      )}
-    </div>
-  )
-}
-
-// Quadro "fotos": polaroids levemente rotacionados (clássico) ou grade assimétrica sem
-// cantos arredondados (portfólio) — mesma lógica visual do PolaroidPhoto e do
-// StaticMasonryGrid dos templates reais, só que com blocos de cor no lugar de fotos.
-function PreviewGalleryFrame({ template }: { template: SiteTemplate }) {
-  if (template === 'portfolio') {
-    const columns: number[][] = [[34, 22], [20, 38], [40, 16]]
-    return (
-      <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', gap: '2px', padding: '4px' }}>
-        {columns.map((heights, col) => (
-          <div key={col} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {heights.map((h, i) => (
-              <div
-                key={i}
-                style={{ height: `${h}px`, background: (col + i) % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }}
-              />
-            ))}
-          </div>
-        ))}
+      >
+        <div style={{ fontSize: '6px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
+          Sejam bem-vindos
+        </div>
+        <div className="font-display" style={{ fontWeight: 500, fontSize: '17px', lineHeight: 1, color: '#FAF0E6' }}>
+          {PREVIEW_DEMO_NAMES}
+        </div>
+        <div style={{ fontSize: '6.5px', fontStyle: 'italic', color: 'rgba(250,240,230,0.8)' }}>
+          nosso grande dia está chegando!
+        </div>
+        <div style={{ display: 'inline-flex', borderRadius: '99px', background: 'var(--wedding-color)', color: '#241708', fontSize: '6.5px', fontWeight: 700, padding: '3px 9px', marginTop: '3px' }}>
+          RSVP
+        </div>
       </div>
     )
   }
 
-  const rotations = [-6, 3, -3]
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+    <div
+      style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: '5px',
+        background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 22%, transparent) 1px, transparent 1.2px)',
+          backgroundSize: '13px 13px',
+        }}
+      />
+      <div style={{ position: 'relative', fontSize: '6px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
+        Casamento de
+      </div>
+      <div className="font-display" style={{ position: 'relative', fontWeight: 500, fontSize: '19px', lineHeight: 1, color: '#FAF0E6' }}>
+        {PREVIEW_DEMO_NAMES}
+      </div>
+      <div style={{ position: 'relative', fontSize: '6.5px', color: 'rgba(250,240,230,0.75)' }}>
+        {PREVIEW_DEMO_DATE}
+      </div>
+    </div>
+  )
+}
+
+// Linha curta e um pontinho em cada ponta — versão minúscula do `PhotoConnector` do
+// clássico (linha curva + círculo de junção ligando cada polaroid à "linha do tempo").
+function PreviewPhotoConnector({ flip }: { flip?: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      style={{ width: '16px', height: '16px', flexShrink: 0, transform: flip ? 'scaleY(-1)' : undefined }}
+    >
+      <path d="M 0 4 C 6 4, 8 12, 16 12" fill="none" stroke="var(--wedding-color-secondary)" strokeWidth="1.4" strokeLinecap="round" opacity="0.62" />
+      <circle cx="16" cy="12" r="1.8" fill="var(--bg)" stroke="var(--wedding-color-secondary)" strokeWidth="1" />
+    </svg>
+  )
+}
+
+// Quadro "fotos": polaroids de verdade — moldura branca grossa embaixo (mesma
+// proporção de `PolaroidPhoto`, padding assimétrico maior na base), levemente
+// rotacionadas e ligadas por uma linha fina com pontinho de junção, no espírito da
+// "linha do tempo" da história (clássico); grade em linhas de tamanho fixo 4/5/5
+// sem cantos arredondados, replicando a proporção real de `.pf-gallery-row`/
+// `PortfolioGalleryGrid` (portfólio).
+function PreviewGalleryFrame({ template }: { template: SiteTemplate }) {
+  if (template === 'portfolio') {
+    const rowA = [0, 1, 2, 3]
+    const rowB = [0, 1, 2, 3, 4]
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column', gap: '2px', padding: '5px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '2px', height: '34px' }}>
+          {rowA.map((i) => (
+            <div key={i} style={{ background: i % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }} />
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '2px', height: '20px' }}>
+          {rowB.map((i) => (
+            <div key={i} style={{ background: i % 2 === 0 ? 'var(--wedding-color-secondary-light)' : 'var(--wedding-color-light)' }} />
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '2px', height: '20px' }}>
+          {rowB.map((i) => (
+            <div key={i} style={{ background: i % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const rotations = [-7, 4, -3]
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {rotations.map((rot, i) => (
-        <div
-          key={i}
-          style={{
-            width: '26px', height: '32px', padding: '2px', borderRadius: '2px',
-            background: '#FFFCF6', boxShadow: '0 3px 6px rgba(60,40,24,0.18)', transform: `rotate(${rot}deg)`,
-          }}
-        >
-          <div style={{ width: '100%', height: '100%', borderRadius: '1px', background: i % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }} />
+        <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+          {i > 0 && <PreviewPhotoConnector flip={i % 2 === 0} />}
+          <div
+            style={{
+              width: '24px', height: '30px', padding: '3px 3px 10px', borderRadius: '2px',
+              background: '#FFFCF6', boxShadow: '0 3px 6px rgba(60,40,24,0.18)', transform: `rotate(${rot}deg)`,
+            }}
+          >
+            <div style={{ width: '100%', height: '100%', borderRadius: '1px', background: i % 2 === 0 ? 'var(--wedding-color-light)' : 'var(--wedding-color-secondary-light)' }} />
+          </div>
         </div>
       ))}
     </div>
   )
 }
 
-// Quadro "informações": cartão pontilhado centralizado, no espírito da seção de RSVP
-// (clássico) ou duas colunas kicker+texto sem arredondamento (portfólio), no espírito
-// das seções "Cerimônia"/"Nossa história" editoriais.
+// Quadro "informações": cartão pontilhado centralizado, já fiel à seção de RSVP real
+// do clássico (borda tracejada + fundo `--wedding-color-subtle`) — mantido como está.
+// No portfólio, duas colunas kicker+texto sem arredondamento ao lado de um bloco de
+// cor, no espírito das seções "Cerimônia"/"Nossa história" editoriais — também mantido.
 function PreviewInfoFrame({ template }: { template: SiteTemplate }) {
   if (template === 'portfolio') {
     return (
@@ -410,7 +487,7 @@ function TemplatePicker({ value, albumEnabled, onChange }: { value: SiteTemplate
 }
 
 function CapaSection({
-  coupleNames, slug, published, template, albumEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, publicUrl, saving,
+  coupleNames, slug, published, template, albumEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
   onUploadPhoto, onDeletePhoto, onSave,
 }: CapaSectionProps) {
   const [slugDraft, setSlugDraft]   = useState(slug)
@@ -419,6 +496,7 @@ function CapaSection({
   const [templateDraft, setTemplateDraft] = useState<SiteTemplate>(template)
   const [coverDraft, setCoverDraft] = useState<string | null>(coverPhotoUrl)
   const [positionDraft, setPositionDraft] = useState(coverPhotoPosition)
+  const [zoomDraft, setZoomDraft]   = useState(coverPhotoZoom)
   const [uploading, setUploading]   = useState(false)
   // Erro de validação do slug fica local ao campo — não é resultado de uma ação de rede
   const [error, setError]     = useState('')
@@ -437,7 +515,8 @@ function CapaSection({
     if (!uploaded) return
 
     setCoverDraft(uploaded.public_url)
-    setPositionDraft(50) // Foto nova: volta pro centro em vez de manter o ajuste da foto anterior
+    setPositionDraft(50) // Foto nova: volta pro centro/sem zoom, em vez de manter o ajuste da foto anterior
+    setZoomDraft(0)
   }
 
   async function handleRemoveCover() {
@@ -459,7 +538,7 @@ function CapaSection({
 
     const result = await onSave({
       slug: parsedSlug.data, published: publishedDraft, template: templateDraft,
-      coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft, coverPhotoPosition: positionDraft,
+      coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft, coverPhotoPosition: positionDraft, coverPhotoZoom: zoomDraft,
     })
     if (!result.ok) {
       toastError(result.message)
@@ -497,7 +576,12 @@ function CapaSection({
               <img
                 src={coverDraft}
                 alt="Foto de capa"
-                style={{ width: '100%', height: '150px', objectFit: 'cover', objectPosition: `center ${positionDraft}%`, display: 'block' }}
+                style={{
+                  width: '100%', height: '150px', objectFit: 'cover',
+                  objectPosition: `center ${positionDraft}%`, display: 'block',
+                  transform: `scale(${coverPhotoZoomScale(zoomDraft)})`,
+                  transformOrigin: `center ${positionDraft}%`,
+                }}
               />
               <button
                 type="button"
@@ -530,6 +614,26 @@ function CapaSection({
               <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
                 {positionDraft === 0 ? 'Topo' : positionDraft === 100 ? 'Base' : positionDraft === 50 ? 'Centro' : `${positionDraft}%`}
                 {' — '}ajuste se o casal ficar cortado na prévia acima.
+              </p>
+            </div>
+
+            <div style={{ marginTop: '12px' }}>
+              <label htmlFor="site-cover-zoom" style={{ ...labelStyle, marginBottom: '4px' }}>
+                Zoom da foto
+              </label>
+              <input
+                id="site-cover-zoom"
+                type="range"
+                min={0}
+                max={100}
+                value={zoomDraft}
+                onChange={(e) => setZoomDraft(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--wedding-color)' }}
+              />
+              <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+                {zoomDraft === 0 ? 'Sem zoom extra' : `${zoomDraft}%`}
+                {' — '}aumente se a foto estiver aparecendo pequena/afastada demais no estilo Portfólio
+                {templateDraft === 'portfolio' ? ' (capa em tela cheia).' : ' (também vale para o estilo Clássico, em fotos com composição ruim).'}
               </p>
             </div>
           </>
@@ -614,22 +718,53 @@ function CapaSection({
 interface HistoriaSectionProps {
   ourStory:      string
   customMessage: string
+  storyPhotoUrl: string | null
   saving:        boolean
   siteExists:    boolean
-  onSave:        (values: { our_story: string; custom_message: string }) => Promise<PatchResult>
+  onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
+  onDeletePhoto: (url: string) => Promise<boolean>
+  onSave:        (values: { our_story: string; custom_message: string; story_photo_url: string }) => Promise<PatchResult>
   onGoToCapa:    () => void
 }
 
-function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, onGoToCapa }: HistoriaSectionProps) {
+function HistoriaSection({
+  ourStory, customMessage, storyPhotoUrl, saving, siteExists, onUploadPhoto, onDeletePhoto, onSave, onGoToCapa,
+}: HistoriaSectionProps) {
   const [storyDraft, setStoryDraft]     = useState(ourStory)
   const [messageDraft, setMessageDraft] = useState(customMessage)
-  const showSpinner = useDelayedLoading(saving)
+  const [photoDraft, setPhotoDraft]     = useState<string | null>(storyPhotoUrl)
+  const [uploading, setUploading]       = useState(false)
+  const inputRef           = useRef<HTMLInputElement>(null)
+  const showSpinner        = useDelayedLoading(saving)
+  const showUploadSpinner  = useDelayedLoading(uploading)
 
   if (!siteExists) return <GuardNotice onGoToCapa={onGoToCapa} />
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploading) return
+
+    setUploading(true)
+    const uploaded = await onUploadPhoto(file)
+    setUploading(false)
+    if (!uploaded) return
+
+    setPhotoDraft(uploaded.public_url)
+  }
+
+  async function handleRemovePhoto() {
+    if (!photoDraft) return
+    const url = photoDraft
+    setPhotoDraft(null)
+    await onDeletePhoto(url)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = await onSave({ our_story: storyDraft.trim(), custom_message: messageDraft.trim() })
+    const result = await onSave({
+      our_story: storyDraft.trim(), custom_message: messageDraft.trim(), story_photo_url: photoDraft ?? '',
+    })
     if (!result.ok) {
       toastError(result.message)
       return
@@ -651,6 +786,54 @@ function HistoriaSection({ ourStory, customMessage, saving, siteExists, onSave, 
           style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
+
+      <div>
+        <label style={labelStyle}>Foto de destaque desta seção</label>
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '-2px 0 8px' }}>
+          Aparece ao lado da sua história no site — escolha a que mais representa vocês.
+        </p>
+        {photoDraft ? (
+          <div className="relative overflow-hidden rounded-2xl" style={{ border: '1.5px solid #EBDDD0' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
+            <img
+              src={photoDraft}
+              alt="Foto de destaque da história"
+              style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }}
+            />
+            <button
+              type="button"
+              onClick={handleRemovePhoto}
+              aria-label="Remover foto de destaque"
+              style={{
+                position: 'absolute', top: '10px', right: '10px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '30px', height: '30px', border: 'none', borderRadius: '10px',
+                background: 'rgba(20,12,4,0.55)', color: '#fff', cursor: 'pointer',
+              }}
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
+              borderRadius: '12px', padding: '10px 16px',
+              fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+              opacity: uploading ? 0.7 : 1,
+            }}
+          >
+            {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
+            {uploading ? 'Enviando…' : 'Enviar foto de destaque'}
+          </button>
+        )}
+        <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+      </div>
+
       <div>
         <label htmlFor="site-custom-message" style={labelStyle}>Mensagem para os convidados</label>
         <textarea
@@ -902,6 +1085,23 @@ function GaleriaSection({
     await onDeletePhoto(url)
   }
 
+  // Reordena localmente só trocando a posição no array — a ORDEM de `gallery_urls` é a
+  // única forma hoje de controlar onde cada foto aparece nos templates (as 8 primeiras
+  // viram "Nossa história" no clássico; a primeira vira o destaque em "Sobre os noivos"
+  // no portfólio quando não há `story_photo_url` definido). Só grava no servidor quando o
+  // formulário é submetido, como as outras mudanças desta seção.
+  function moveUrl(index: number, direction: -1 | 1) {
+    setUrls((prev) => {
+      const target = index + direction
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      const temp = next[index]
+      next[index] = next[target] as string
+      next[target] = temp as string
+      return next
+    })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const result = await onSave({ gallery_urls: urls })
@@ -1012,6 +1212,10 @@ function GaleriaSection({
       {urls.length === 0 ? (
         <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0 }}>Nenhuma imagem adicionada ainda.</p>
       ) : (
+        <>
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '0 0 -4px' }}>
+          Use as setas para reordenar — a ordem define quais fotos aparecem primeiro no site.
+        </p>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {urls.map((url, index) => {
             const meta       = photoMeta[url]
@@ -1034,6 +1238,30 @@ function GaleriaSection({
                   <span style={{ flex: 1, fontSize: '13px', color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {url}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => moveUrl(index, -1)}
+                    disabled={index === 0}
+                    aria-label="Mover foto para cima"
+                    style={{
+                      display: 'flex', border: 'none', cursor: index === 0 ? 'not-allowed' : 'pointer', padding: '6px', borderRadius: '8px',
+                      background: 'transparent', color: 'var(--wedding-color-dark)', opacity: index === 0 ? 0.35 : 1,
+                    }}
+                  >
+                    <ArrowUpIcon />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveUrl(index, 1)}
+                    disabled={index === urls.length - 1}
+                    aria-label="Mover foto para baixo"
+                    style={{
+                      display: 'flex', border: 'none', cursor: index === urls.length - 1 ? 'not-allowed' : 'pointer', padding: '6px', borderRadius: '8px',
+                      background: 'transparent', color: 'var(--wedding-color-dark)', opacity: index === urls.length - 1 ? 0.35 : 1,
+                    }}
+                  >
+                    <ArrowDownIcon />
+                  </button>
                   {meta && (
                     <button
                       type="button"
@@ -1094,6 +1322,7 @@ function GaleriaSection({
             )
           })}
         </ul>
+        </>
       )}
 
       <button type="submit" disabled={saving} style={saveButtonStyle(saving)}>
@@ -1113,6 +1342,7 @@ export default function SiteBuilder({
   const [template, setTemplate]   = useState<SiteTemplate>(initialSite?.template ?? 'classic')
   const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(initialSite?.cover_photo_url ?? null)
   const [coverPhotoPosition, setCoverPhotoPosition] = useState(initialSite?.cover_photo_position ?? 50)
+  const [coverPhotoZoom, setCoverPhotoZoom] = useState(initialSite?.cover_photo_zoom ?? 0)
   const [content, setContent]     = useState<SiteContent>(() => parseSiteContent(initialSite?.content))
   const [saving, setSaving]       = useState(false)
   const origin                    = useOrigin()
@@ -1256,7 +1486,7 @@ export default function SiteBuilder({
   async function patchSite(
     body: {
       slug?: string; published?: boolean; template?: SiteTemplate; cover_photo_url?: string | null
-      cover_photo_position?: number; content?: SiteContent
+      cover_photo_position?: number; cover_photo_zoom?: number; content?: SiteContent
     },
   ): Promise<PatchResult> {
     setSaving(true)
@@ -1278,6 +1508,7 @@ export default function SiteBuilder({
     setTemplate(data.template)
     setCoverPhotoUrl(data.cover_photo_url)
     setCoverPhotoPosition(data.cover_photo_position)
+    setCoverPhotoZoom(data.cover_photo_zoom)
     setContent(parseSiteContent(data.content))
     return { ok: true, message: '' }
   }
@@ -1285,7 +1516,7 @@ export default function SiteBuilder({
   async function saveCapa(
     values: {
       slug: string; published: boolean; template: SiteTemplate
-      coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
+      coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number; coverPhotoZoom: number
     },
   ): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
@@ -1294,14 +1525,14 @@ export default function SiteBuilder({
 
     return patchSite({
       slug: values.slug, published: values.published, template: values.template, cover_photo_url: values.coverPhotoUrl,
-      cover_photo_position: values.coverPhotoPosition, content: nextContent,
+      cover_photo_position: values.coverPhotoPosition, cover_photo_zoom: values.coverPhotoZoom, content: nextContent,
     })
   }
 
   async function saveContentPatch(patch: Partial<SiteContent>): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
 
-    const textKeys = ['cover_title', 'our_story', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code'] as const
+    const textKeys = ['cover_title', 'our_story', 'story_photo_url', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code'] as const
     for (const key of textKeys) {
       if (!(key in patch)) continue
       const value = patch[key]
@@ -1433,6 +1664,7 @@ export default function SiteBuilder({
                 coverTitle={content.cover_title ?? ''}
                 coverPhotoUrl={coverPhotoUrl}
                 coverPhotoPosition={coverPhotoPosition}
+                coverPhotoZoom={coverPhotoZoom}
                 publicUrl={publicUrl}
                 saving={saving}
                 onUploadPhoto={uploadPhoto}
@@ -1444,8 +1676,11 @@ export default function SiteBuilder({
               <HistoriaSection
                 ourStory={content.our_story ?? ''}
                 customMessage={content.custom_message ?? ''}
+                storyPhotoUrl={content.story_photo_url ?? null}
                 saving={saving}
                 siteExists={siteExists}
+                onUploadPhoto={uploadPhoto}
+                onDeletePhoto={deletePhoto}
                 onSave={saveContentPatch}
                 onGoToCapa={() => setActive('capa')}
               />

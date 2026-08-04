@@ -1,6 +1,7 @@
 import GiftPaymentButton from '@/components/gifts/gift-payment-button'
 import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast'
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
+import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo, PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
 
 interface ClassicSiteProps {
@@ -184,35 +185,64 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
   const consumedPhotos   = storyPhotos.length
   const remainingPhotos  = galleryPhotos.slice(consumedPhotos)
 
-  // Sem foto de capa, mantém o gradiente escuro atual; com foto, aplica um overlay
-  // escuro semi-transparente por cima pra manter o texto legível.
-  const coverBackground = site.cover_photo_url
-    ? `linear-gradient(rgba(20,12,4,0.6), rgba(20,12,4,0.6)), url(${site.cover_photo_url})`
-    : 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))'
   // Posição vertical ajustável pelo casal no editor (0=topo, 50=centro, 100=base) —
   // evita que o "cover" corte o casal fora do quadro em fotos com composição diferente.
   const coverBackgroundPositionY = site.cover_photo_position
+  // Fator de zoom extra (ver cover-photo-zoom.ts) — aplicado via transform: scale por
+  // cima do background-size: cover, já que o CSS puro não permite combinar "cover
+  // automático" (calculado em runtime a partir do aspect ratio real da imagem) com um
+  // "+N% de zoom" explícito.
+  const coverPhotoScale = coverPhotoZoomScale(site.cover_photo_zoom)
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
       {/* Capa */}
       <div
         className="relative overflow-hidden"
-        style={{
-          background:        coverBackground,
-          backgroundSize:     'cover',
-          backgroundPosition: `center ${coverBackgroundPositionY}%`,
-          color: '#FAF0E6', padding: '96px 24px', textAlign: 'center',
-        }}
+        style={{ color: '#FAF0E6', padding: '96px 24px', textAlign: 'center' }}
       >
+        {/* Camada de fundo — só a foto (ou o gradiente de marca da capa, sem foto). O
+            zoom é aplicado num filho interno; o frame com overflow:hidden é quem recorta
+            o excesso (aplicar o scale direto num elemento com overflow:hidden não
+            funciona — a própria transformação não é recortada por seu próprio overflow). */}
+        <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
+          {site.cover_photo_url ? (
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                backgroundImage: `url(${site.cover_photo_url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: `center ${coverBackgroundPositionY}%`,
+                transform: `scale(${coverPhotoScale})`,
+                transformOrigin: `center ${coverBackgroundPositionY}%`,
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
+              }}
+            />
+          )}
+        </div>
+
+        {/* Overlay escuro (legibilidade do texto sobre a foto) + conteúdo — camada
+            própria, por cima da foto, SEM o transform de zoom (senão o texto também
+            ficaria ampliado/distorcido). */}
+        {site.cover_photo_url && (
+          <div aria-hidden className="pointer-events-none absolute inset-0" style={{ zIndex: 1, background: 'rgba(20,12,4,0.6)' }} />
+        )}
         <div
+          aria-hidden
           className="pointer-events-none absolute inset-0"
           style={{
+            zIndex: 1,
             backgroundImage: 'radial-gradient(color-mix(in srgb, var(--wedding-color) 18%, transparent) 1.3px, transparent 1.5px)',
             backgroundSize: '26px 26px',
           }}
         />
-        <div className="relative">
+        <div className="relative" style={{ zIndex: 1 }}>
           <div style={{ fontSize: '12px', letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
             Casamento de
           </div>

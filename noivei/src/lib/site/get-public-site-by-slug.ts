@@ -29,6 +29,7 @@ export interface PublicSiteInfo {
   galleryPhotos:        PublicGalleryPhoto[]
   cover_photo_url:      string | null
   cover_photo_position: number
+  cover_photo_zoom:     number
   // Estilo EFETIVO a renderizar — já com o fail-safe de plano aplicado (nunca é
   // 'portfolio' se o plano ATUAL não libera mais o módulo 'album', mesmo que o
   // valor salvo em site_config.template seja 'portfolio'; ver comentário abaixo).
@@ -56,7 +57,7 @@ export async function getPublicSiteBySlug(
 ): Promise<PublicSiteInfo | null> {
   const { data: site, error } = await supabase
     .from('site_config')
-    .select('wedding_id, content, cover_photo_url, cover_photo_position, template')
+    .select('wedding_id, content, cover_photo_url, cover_photo_position, cover_photo_zoom, template')
     .eq('slug', slug)
     .eq('published', true)
     .maybeSingle()
@@ -122,6 +123,7 @@ export async function getPublicSiteBySlug(
     galleryPhotos,
     cover_photo_url:      (site.cover_photo_url as string | null) ?? null,
     cover_photo_position: (site.cover_photo_position as number | null) ?? 50,
+    cover_photo_zoom:     (site.cover_photo_zoom as number | null) ?? 0,
     template,
     albumEnabled,
     gifts:                resolvedGifts,

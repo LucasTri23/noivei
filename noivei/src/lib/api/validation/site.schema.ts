@@ -21,6 +21,7 @@ export const UpdateSiteConfigSchema = z
     template:             SiteTemplateSchema,
     cover_photo_url:      z.url('URL inválida.').nullable(),
     cover_photo_position: z.number().int().min(0).max(100),
+    cover_photo_zoom:     z.number().int().min(0).max(100),
     content:              z.record(z.string(), z.unknown()),
   })
   .partial()

@@ -146,6 +146,7 @@ export interface SiteConfig {
   template:              SiteTemplate
   cover_photo_url:       string | null
   cover_photo_position:  number
+  cover_photo_zoom:      number
   content:               Record<string, Json | undefined>
   created_at:            string
 }

@@ -1,6 +1,7 @@
 import GiftPaymentButton from '@/components/gifts/gift-payment-button'
 import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast'
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
+import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo, PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
 import PortfolioCountdown from './portfolio-countdown'
 
@@ -319,11 +320,16 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   const hasGallery       = galleryPhotos.length > 0
   const hasGifts         = site.gifts.length > 0
 
-  // Foto de destaque da seção "Nossa história" — reaproveita a primeira foto da galeria
-  // curada pelo casal (a mesma lista usada, por completo, na seção "Galeria" mais abaixo;
-  // reutilizar a primeira foto em dois lugares já era o comportamento do template antes
-  // deste redesenho).
-  const aboutPhoto = galleryPhotos[0]
+  // Foto de destaque da seção "Nossa história" — usa `content.story_photo_url` quando o
+  // casal escolheu explicitamente uma foto pra essa seção (ver HistoriaSection no editor).
+  // Se a mesma URL também estiver na galeria, reaproveita o recorte/posição já configurado
+  // lá (metaByUrl); senão cai no padrão (centro, sem "contain"). Sites publicados antes
+  // desse campo existir (ou que nunca o preencheram) mantêm o comportamento antigo:
+  // reaproveitar a primeira foto da galeria curada pelo casal.
+  const aboutPhoto = site.content.story_photo_url
+    ? (galleryPhotos.find((photo) => photo.url === site.content.story_photo_url) ??
+        { url: site.content.story_photo_url, position_y: 50, fit_contain: false })
+    : galleryPhotos[0]
 
   const scheduleNodes: ScheduleNode[] = [
     site.content.ceremony_info && { key: 'ceremony', label: 'Cerimônia', text: site.content.ceremony_info },
@@ -357,9 +363,13 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
     { href: '#rsvp', icon: <MailLineIcon />, title: 'Confirmação de Presença', desc: 'Confirme sua presença pelo seu link pessoal.' },
   ]
 
-  const coverBackground = site.cover_photo_url
-    ? `linear-gradient(to top right, rgba(10,6,2,0.86), rgba(10,6,2,0.22)), url(${site.cover_photo_url})`
-    : 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))'
+  // Fator de zoom extra (ver cover-photo-zoom.ts) — aplicado via transform: scale por
+  // cima do background-size: cover, já que o CSS puro não permite combinar "cover
+  // automático" (calculado em runtime a partir do aspect ratio real da imagem) com um
+  // "+N% de zoom" explícito. A capa deste template é tela cheia (minHeight: 100vh), bem
+  // mais alta que a do clássico — o mesmo cover_photo_position pode precisar de mais
+  // zoom aqui para não deixar a foto "afastada demais".
+  const coverPhotoScale = coverPhotoZoomScale(site.cover_photo_zoom)
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -367,13 +377,46 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
       <header
         id="hero"
         className="relative flex flex-col"
-        style={{
-          minHeight: '100vh',
-          background:         coverBackground,
-          backgroundSize:     'cover',
-          backgroundPosition: `center ${site.cover_photo_position}%`,
-        }}
+        style={{ minHeight: '100vh' }}
       >
+        {/* Camada de fundo — só a foto (ou o gradiente de marca da capa, sem foto).
+            Mesma lógica de ClassicSite: frame com overflow:hidden recorta o excesso do
+            filho com o transform de zoom (aplicar o scale direto no frame não
+            funcionaria, já que overflow:hidden não recorta a própria transformação do
+            elemento que o define). */}
+        <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
+          {site.cover_photo_url ? (
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                backgroundImage: `url(${site.cover_photo_url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: `center ${site.cover_photo_position}%`,
+                transform: `scale(${coverPhotoScale})`,
+                transformOrigin: `center ${site.cover_photo_position}%`,
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
+              }}
+            />
+          )}
+        </div>
+
+        {/* Overlay escuro (legibilidade da nav/título sobre a foto) — camada própria,
+            por cima da foto, SEM o transform de zoom (senão nav/título também ficariam
+            ampliados/distorcidos). */}
+        {site.cover_photo_url && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ zIndex: 1, background: 'linear-gradient(to top right, rgba(10,6,2,0.86), rgba(10,6,2,0.22))' }}
+          />
+        )}
+
         <nav className="relative z-10 flex items-center justify-between gap-4 px-5 py-5 sm:px-8 lg:px-12">
           <a href="#hero" style={{ display: 'flex', alignItems: 'center', gap: '9px', color: '#FAF0E6', textDecoration: 'none', minWidth: 0 }}>
             <RingsIcon />

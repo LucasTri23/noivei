@@ -185,7 +185,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
         .eq('tables_config.wedding_id', wid),
       supabase
         .from('site_config')
-        .select('id, wedding_id, slug, published, cover_photo_url, cover_photo_position, content, created_at')
+        .select('id, wedding_id, slug, published, cover_photo_url, cover_photo_position, cover_photo_zoom, content, created_at')
         .eq('wedding_id', wid)
         .maybeSingle(),
       // Só metadados — nunca o binário nem um link assinado do Storage.
