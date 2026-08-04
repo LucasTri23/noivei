@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import DatePicker from '@/components/ui/date-picker'
@@ -125,6 +125,19 @@ const inputStyle = {
   background: '#FFFFFF',
 } as React.CSSProperties
 
+// Mesmo estilo já usado nos textos-legenda existentes (ex.: "Quando será o casamento?")
+// e no label do campo de cupom — reaproveitado para todo <label> visível do onboarding,
+// pra manter a aparência idêntica ao que já existia antes de virarem <label> de verdade.
+const labelStyle: React.CSSProperties = {
+  fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '8px', display: 'block',
+}
+
+// Mesmo tom de erro usado no resto do app (ex.: errors.email em login/page.tsx e
+// phoneError em rsvp-form.tsx).
+const errorTextStyle: React.CSSProperties = {
+  fontSize: '12px', color: '#C0553F', margin: '6px 0 0',
+}
+
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep]       = useState(0)
@@ -154,6 +167,13 @@ export default function OnboardingPage() {
   const [couponCode, setCouponCode] = useState('')
   const [redeeming, setRedeeming]   = useState(false)
   const [couponPreview, setCouponPreview] = useState<CouponPreviewLine[]>([])
+
+  // Quantidade de convidados é opcional, mas se preenchida precisa ser um inteiro
+  // entre 1 e 2000 — os atributos min/max do <input type="number"> não bloqueiam
+  // nada sozinhos (não há <form> com submit nativo nem .reportValidity() aqui), então
+  // a validação real acontece ao tentar avançar deste passo (ver validateGuestsStep).
+  const [guestsError, setGuestsError] = useState<string | null>(null)
+  const guestsInputRef = useRef<HTMLInputElement>(null)
 
   function set<K extends keyof FormData>(key: K, val: FormData[K]) {
     setData((d) => ({ ...d, [key]: val }))
@@ -248,6 +268,32 @@ export default function OnboardingPage() {
     checkExistingWedding()
     return () => { cancelled = true }
   }, [router])
+
+  // Vazio é válido (campo opcional) — só bloqueia quando preenchido com algo que não
+  // seja um inteiro entre 1 e 2000. Foca o campo pra leitor de tela e usuário de
+  // teclado caírem direto nele quando o avanço é bloqueado.
+  function validateGuestsStep(): boolean {
+    const trimmed = data.guests.trim()
+    if (trimmed === '') {
+      setGuestsError(null)
+      return true
+    }
+
+    const parsed = Number(trimmed)
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 2000) {
+      setGuestsError('Informe uma quantidade entre 1 e 2.000 convidados.')
+      guestsInputRef.current?.focus()
+      return false
+    }
+
+    setGuestsError(null)
+    return true
+  }
+
+  function handleGuestsNext() {
+    if (!validateGuestsStep()) return
+    setStep(6)
+  }
 
   const selectedPlanRow = billingPlans.find((p) => p.id === data.plan)
   const paidPlan = Boolean(selectedPlanRow && selectedPlanRow.price_brl > 0)
@@ -401,24 +447,36 @@ export default function OnboardingPage() {
         <div>
           <StepTitle title="Quem são os noivos?" subtitle="Vamos personalizar o seu espaço no Wednest." />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-            <div style={inputStyle}>
-              <HeartIcon />
-              <input
-                value={data.brideName}
-                onChange={(e) => set('brideName', e.target.value)}
-                placeholder="Nome da noiva"
-                style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
+            <div>
+              <label htmlFor="onboarding-bride-name" style={labelStyle}>Nome da noiva</label>
+              <div style={inputStyle}>
+                <HeartIcon />
+                <input
+                  id="onboarding-bride-name"
+                  name="brideName"
+                  value={data.brideName}
+                  onChange={(e) => set('brideName', e.target.value)}
+                  placeholder="Ex: Ana Silva"
+                  autoComplete="given-name"
+                  style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
+                />
+              </div>
             </div>
-            <div style={inputStyle}>
-              <HeartIcon />
-              <input
-                value={data.groomName}
-                onChange={(e) => set('groomName', e.target.value)}
-                placeholder="Nome do noivo"
-                style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
-              />
+            <div>
+              <label htmlFor="onboarding-groom-name" style={labelStyle}>Nome do noivo</label>
+              <div style={inputStyle}>
+                <HeartIcon />
+                <input
+                  id="onboarding-groom-name"
+                  name="groomName"
+                  value={data.groomName}
+                  onChange={(e) => set('groomName', e.target.value)}
+                  placeholder="Ex: João Silva"
+                  autoComplete="given-name"
+                  style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
+                />
+              </div>
             </div>
           </div>
 
@@ -433,10 +491,11 @@ export default function OnboardingPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '8px' }}>
+              <label htmlFor="onboarding-date" style={labelStyle}>
                 Quando será o casamento? (deixe em branco se ainda não decidiram)
-              </div>
+              </label>
               <DatePicker
+                id="onboarding-date"
                 value={data.date}
                 onChange={(value) => set('date', value)}
                 placeholder="Data do casamento"
@@ -444,16 +503,19 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#3C2818', marginBottom: '8px' }}>
+              <label htmlFor="onboarding-city" style={labelStyle}>
                 Em qual cidade?
-              </div>
+              </label>
               <div style={inputStyle}>
                 <MapPinIcon />
                 <input
+                  id="onboarding-city"
+                  name="city"
                   list="cities-list"
                   value={data.city}
                   onChange={(e) => set('city', e.target.value)}
-                  placeholder="Cidade do casamento"
+                  placeholder="Ex: São Paulo - SP"
+                  autoComplete="address-level2"
                   style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
                 />
                 <datalist id="cities-list">
@@ -527,21 +589,33 @@ export default function OnboardingPage() {
           <StepTitle title="Quantos convidados?" subtitle="Uma estimativa já ajuda a dimensionar tudo." />
 
           <div style={{ marginBottom: '24px' }}>
-            <div style={inputStyle}>
+            <label htmlFor="onboarding-guest-count" style={labelStyle}>Quantidade de convidados</label>
+            <div style={{ ...inputStyle, ...(guestsError ? { borderColor: '#C0553F' } : {}) }}>
               <UsersIcon />
               <input
+                ref={guestsInputRef}
+                id="onboarding-guest-count"
+                name="guestCount"
                 type="number"
                 min="1"
                 max="2000"
                 value={data.guests}
-                onChange={(e) => set('guests', e.target.value)}
+                onChange={(e) => {
+                  set('guests', e.target.value)
+                  if (guestsError) setGuestsError(null)
+                }}
                 placeholder="Ex: 150"
+                aria-invalid={guestsError !== null}
+                aria-describedby={guestsError ? 'onboarding-guest-count-error' : undefined}
                 style={{ border: 'none', outline: 'none', fontSize: '15px', color: '#3C2818', width: '100%', background: 'transparent' }}
               />
             </div>
+            {guestsError && (
+              <p id="onboarding-guest-count-error" role="alert" style={errorTextStyle}>{guestsError}</p>
+            )}
           </div>
 
-          <NextButton onClick={() => setStep(6)} />
+          <NextButton onClick={handleGuestsNext} />
         </div>
       )}
 
