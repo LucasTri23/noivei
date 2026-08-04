@@ -12,7 +12,7 @@ export default async function NotificacoesPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('notify_timeline, notify_rsvp')
+    .select('notify_timeline, notify_rsvp, notify_members, notify_milestones')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -35,8 +35,10 @@ export default async function NotificacoesPage() {
         <NotificationSettings
           userId={user.id}
           initial={{
-            notify_timeline: profile?.notify_timeline ?? true,
-            notify_rsvp:     profile?.notify_rsvp ?? true,
+            notify_timeline:   profile?.notify_timeline ?? true,
+            notify_rsvp:       profile?.notify_rsvp ?? true,
+            notify_members:    profile?.notify_members ?? true,
+            notify_milestones: profile?.notify_milestones ?? true,
           }}
         />
       </div>

@@ -9,8 +9,10 @@ import Spinner from '@/components/ui/spinner'
 interface NotificationSettingsProps {
   userId: string
   initial: {
-    notify_timeline: boolean
-    notify_rsvp:     boolean
+    notify_timeline:   boolean
+    notify_rsvp:       boolean
+    notify_members:    boolean
+    notify_milestones: boolean
   }
 }
 
@@ -61,9 +63,9 @@ function ToggleRow({ title, description, checked, disabled, saving, onChange }: 
 
 export default function NotificationSettings({ userId, initial }: NotificationSettingsProps) {
   const [prefs, setPrefs]         = useState(initial)
-  const [savingKey, setSavingKey] = useState<'notify_timeline' | 'notify_rsvp' | null>(null)
+  const [savingKey, setSavingKey] = useState<'notify_timeline' | 'notify_rsvp' | 'notify_members' | 'notify_milestones' | null>(null)
 
-  async function save(key: 'notify_timeline' | 'notify_rsvp', value: boolean) {
+  async function save(key: 'notify_timeline' | 'notify_rsvp' | 'notify_members' | 'notify_milestones', value: boolean) {
     const previous = prefs
     setPrefs((p) => ({ ...p, [key]: value }))
     setSavingKey(key)
@@ -100,8 +102,26 @@ export default function NotificationSettings({ userId, initial }: NotificationSe
         saving={savingKey === 'notify_rsvp'}
         onChange={(v) => save('notify_rsvp', v)}
       />
+      <div style={{ height: '1px', background: '#F8F3EE' }} />
+      <ToggleRow
+        title="Novos membros"
+        description="Avisos quando alguém aceitar um convite e entrar como membro do casamento."
+        checked={prefs.notify_members}
+        disabled={savingKey !== null}
+        saving={savingKey === 'notify_members'}
+        onChange={(v) => save('notify_members', v)}
+      />
+      <div style={{ height: '1px', background: '#F8F3EE' }} />
+      <ToggleRow
+        title="Datas importantes do casamento"
+        description="Lembretes conforme a data do casamento se aproxima e no dia."
+        checked={prefs.notify_milestones}
+        disabled={savingKey !== null}
+        saving={savingKey === 'notify_milestones'}
+        onChange={(v) => save('notify_milestones', v)}
+      />
       <p style={{ fontSize: '12.5px', color: '#C8B4A0', marginTop: '14px', lineHeight: 1.5 }}>
-        Os envios de e-mail e push chegam em breve — suas preferências já ficam salvas.
+        Suas preferências são salvas automaticamente.
       </p>
     </div>
   )

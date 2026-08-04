@@ -1,7 +1,10 @@
+import { after } from 'next/server'
+
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { AcceptInviteBodySchema, AcceptInviteSchema } from '@/lib/api/validation/invite.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkMemberLimit } from '@/lib/billing/check-limit'
+import { notifyMemberJoined } from '@/lib/invites/notify-member-joined'
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
@@ -177,6 +180,21 @@ export async function POST(req: Request, { params }: RouteContext) {
         .eq('id', invite.id)
 
       if (updateError) return err(500, 'DB_ERROR', 'Erro ao aceitar o convite.')
+
+      // E-mail de aviso pro dono é best-effort e não pode atrasar nem quebrar a
+      // resposta de aceite: agendado via after() pra rodar só depois da resposta
+      // HTTP já ter sido enviada (mesmo padrão de notifyRsvpResponse — erros só logam).
+      after(async () => {
+        const { data: accepterProfile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        const memberName = (accepterProfile?.full_name as string | null) || user.email || 'Um novo membro'
+
+        await notifyMemberJoined({ supabase, weddingId, memberName })
+      })
     }
 
     return ok({ wedding_id: weddingId })

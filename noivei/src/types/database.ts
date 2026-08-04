@@ -312,10 +312,12 @@ export interface Profile {
   full_name:       string | null
   avatar_url:      string | null
   role:            UserRole
-  notify_timeline: boolean
-  notify_rsvp:     boolean
-  created_at:      string
-  updated_at:      string
+  notify_timeline:   boolean
+  notify_rsvp:       boolean
+  notify_members:    boolean
+  notify_milestones: boolean
+  created_at:        string
+  updated_at:        string
 }
 
 export type WeddingMemberRole = 'owner' | 'member'
