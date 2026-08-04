@@ -1,5 +1,5 @@
-import PageLoading from '@/components/ui/page-loading'
+import GuestsListSkeleton from '@/components/guests/guests-list-skeleton'
 
 export default function Loading() {
-  return <PageLoading />
+  return <GuestsListSkeleton />
 }
