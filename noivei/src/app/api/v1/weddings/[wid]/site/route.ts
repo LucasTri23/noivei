@@ -3,8 +3,28 @@ import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { UpdateSiteConfigSchema } from '@/lib/api/validation/site.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { SiteConfig } from '@/types/database'
+
+// O template 'portfolio' reaproveita o mesmo módulo 'album' do mural de fotos
+// (plan_module_access) — mesmo critério usado em getAlbumBySlug. Checado aqui
+// como defesa em profundidade: o site-builder.tsx já esconde a opção quando o
+// plano não libera, mas a Route Handler nunca confia só na UI.
+async function planAllowsPortfolioTemplate(
+  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
+  wid: string,
+): Promise<boolean> {
+  const planId = await resolveWeddingPlanId(supabase, wid)
+  const { data: accessRow } = await supabase
+    .from('plan_module_access')
+    .select('enabled')
+    .eq('plan_id', planId)
+    .eq('module', 'album')
+    .maybeSingle()
+
+  return (accessRow?.enabled as boolean | undefined) ?? true
+}
 
 interface RouteContext {
   params: Promise<{ wid: string }>
@@ -49,6 +69,10 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsed.error.flatten())
     }
 
+    if (parsed.data.template === 'portfolio' && !(await planAllowsPortfolioTemplate(supabase, wid))) {
+      return err(403, 'TEMPLATE_NOT_AVAILABLE', 'O modelo "portfolio" está disponível apenas no plano que libera o álbum de fotos.')
+    }
+
     const { data: existingData, error: fetchError } = await supabase
       .from('site_config')
       .select('id')
@@ -68,6 +92,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
           wedding_id:           wid,
           slug:                 parsed.data.slug,
           published:            parsed.data.published ?? false,
+          template:             parsed.data.template ?? 'classic',
           cover_photo_url:      parsed.data.cover_photo_url ?? null,
           cover_photo_position: parsed.data.cover_photo_position ?? 50,
           content:              parsed.data.content ?? {},

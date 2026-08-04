@@ -55,10 +55,6 @@ export interface Wedding {
   style:          WeddingStyle | null
   wedding_color:  string
   wedding_color_secondary: string
-  // Identificador estável e imprevisível do link/QR público do mural de fotos
-  // (/mural/[album_token]) — não depende de site_config.slug (nem todo
-  // casamento tem site publicado).
-  album_token:    string
   rsvp_message_template: string | null
   wedding_score:  number
   score_calculated_at: string | null
@@ -135,11 +131,19 @@ export interface TableAssignment {
   created_at:  string
 }
 
+// Estilo visual do site público do casal. 'portfolio' só é selecionável (e só
+// renderiza como tal em /[slug]) quando o plano ATUAL do casamento libera o
+// módulo 'album' — mesmo módulo que libera o mural de fotos (ver
+// plan_module_access, checado em tempo de leitura, nunca confiando cegamente
+// no valor salvo aqui — ver src/lib/site/get-public-site-by-slug.ts).
+export type SiteTemplate = 'classic' | 'portfolio'
+
 export interface SiteConfig {
   id:                    string
   wedding_id:            string
   slug:                  string
   published:             boolean
+  template:              SiteTemplate
   cover_photo_url:       string | null
   cover_photo_position:  number
   content:               Record<string, Json | undefined>

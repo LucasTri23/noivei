@@ -12,33 +12,41 @@ export interface AlbumInfo {
   // src/lib/rsvp/get-rsvp-by-token.ts).
   weddingColorSecondary: string | null
   // false tanto pra "módulo nunca contratado" quanto pra "admin desligou" —
-  // as rotas de escrita (register/photos) tratam isso IDENTICAMENTE a token
-  // inexistente (mesmo 404 genérico); só a página pública distingue pra
+  // as rotas de escrita (register/photos/gallery) tratam isso IDENTICAMENTE a
+  // slug inexistente (mesmo 404 genérico); só a página pública distingue pra
   // mostrar "recurso não disponível" em vez de "mural não encontrado".
   moduleEnabled: boolean
 }
 
 /**
- * Resolve o casamento a partir do album_token (weddings.album_token, UUID
- * único) — requer client service role, RLS não cobre acesso anônimo. Retorna
- * null só quando o token não existe/casamento foi soft-deletado; módulo
- * desabilitado é retornado como `moduleEnabled: false`, não como null (ver
- * comentário em AlbumInfo).
+ * Resolve o casamento a partir do slug do SITE PÚBLICO do casal (site_config.slug,
+ * o mesmo usado em /[slug]) — requer client service role, RLS não cobre acesso
+ * anônimo. O mural depende do casal já ter publicado o site (published = true):
+ * diferente do antigo album_token (removido, nunca chegou a existir em produção —
+ * ver migration 20260803000001), este identificador é compartilhado com o site,
+ * não é mais gerado à parte. Retorna null quando o slug não existe, o site não
+ * está publicado, ou o casamento foi soft-deletado; módulo desabilitado é
+ * retornado como `moduleEnabled: false`, não como null (ver comentário em AlbumInfo).
  */
-export async function getAlbumByToken(
+export async function getAlbumBySlug(
   supabase: SupabaseClient,
-  token:    string,
+  slug:     string,
 ): Promise<AlbumInfo | null> {
-  const { data: wedding, error } = await supabase
-    .from('weddings')
-    .select('id, couple_names, wedding_color, wedding_color_secondary')
-    .eq('album_token', token)
-    .is('deleted_at', null)
+  const { data: site, error } = await supabase
+    .from('site_config')
+    .select('wedding_id, weddings!inner(id, couple_names, wedding_color, wedding_color_secondary, deleted_at)')
+    .eq('slug', slug)
+    .eq('published', true)
+    .is('weddings.deleted_at', null)
     .maybeSingle()
 
-  if (error || !wedding) return null
+  if (error || !site) return null
 
-  const weddingId = wedding.id as string
+  const wedding = site.weddings as unknown as {
+    id: string; couple_names: string; wedding_color: string; wedding_color_secondary: string
+  }
+  const weddingId = wedding.id
+
   const planId = await resolveWeddingPlanId(supabase, weddingId)
 
   const { data: accessRow } = await supabase
@@ -56,10 +64,10 @@ export async function getAlbumByToken(
 
   return {
     weddingId,
-    coupleNames:  wedding.couple_names as string,
-    weddingColor: wedding.wedding_color as string,
+    coupleNames:  wedding.couple_names,
+    weddingColor: wedding.wedding_color,
     weddingColorSecondary: isPaidPlan(planId)
-      ? (wedding.wedding_color_secondary as string | null)
+      ? wedding.wedding_color_secondary
       : null,
     moduleEnabled,
   }

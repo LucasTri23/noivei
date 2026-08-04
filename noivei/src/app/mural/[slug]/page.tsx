@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 import AlbumMuralClient from '@/components/album/album-mural-client'
-import { getAlbumByToken } from '@/lib/album/get-album-by-token'
+import { getAlbumBySlug } from '@/lib/album/get-album-by-slug'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { deriveBrandDarkGradient, deriveWeddingColorScale } from '@/lib/theme/wedding-color'
 
@@ -11,14 +11,14 @@ export const metadata: Metadata = {
 }
 
 interface MuralPageProps {
-  params: Promise<{ token: string }>
+  params: Promise<{ slug: string }>
 }
 
-function MuralShell({ children, colorVars }: { children: React.ReactNode; colorVars?: React.CSSProperties }) {
+function MuralMessageShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="flex min-h-screen items-center justify-center"
-      style={{ background: 'var(--bg)', fontFamily: 'var(--font-body)', padding: '24px', ...colorVars }}
+      style={{ background: 'var(--bg)', fontFamily: 'var(--font-body)', padding: '24px' }}
     >
       <div
         className="w-full overflow-hidden rounded-3xl bg-[var(--surface)]"
@@ -32,7 +32,7 @@ function MuralShell({ children, colorVars }: { children: React.ReactNode; colorV
 
 function MuralMessage({ emoji, title, message }: { emoji: string; title: string; message: string }) {
   return (
-    <MuralShell>
+    <MuralMessageShell>
       <div style={{ padding: '48px 36px', textAlign: 'center' }}>
         <div style={{ fontSize: '40px', marginBottom: '10px' }}>{emoji}</div>
         <h1 className="font-display" style={{ fontWeight: 500, fontSize: '28px', color: 'var(--fg)', margin: '0 0 10px' }}>
@@ -42,18 +42,18 @@ function MuralMessage({ emoji, title, message }: { emoji: string; title: string;
           {message}
         </p>
       </div>
-    </MuralShell>
+    </MuralMessageShell>
   )
 }
 
 export default async function MuralPage({ params }: MuralPageProps) {
-  const { token } = await params
-  const decodedToken = decodeURIComponent(token)
+  const { slug } = await params
+  const decodedSlug = decodeURIComponent(slug)
 
-  let album: Awaited<ReturnType<typeof getAlbumByToken>> = null
+  let album: Awaited<ReturnType<typeof getAlbumBySlug>> = null
   try {
     const supabase = createSupabaseService()
-    album = await getAlbumByToken(supabase, decodedToken)
+    album = await getAlbumBySlug(supabase, decodedSlug)
   } catch {
     // Ambiente sem service role configurado — trata como mural indisponível
     album = null
@@ -64,7 +64,7 @@ export default async function MuralPage({ params }: MuralPageProps) {
       <MuralMessage
         emoji="📷"
         title="Mural não encontrado"
-        message="Este link é inválido. Confira o QR code ou o link recebido dos noivos."
+        message="Este link é inválido, ou o site deste casamento ainda não foi publicado. Confira o QR code ou o link recebido dos noivos."
       />
     )
   }
@@ -92,8 +92,8 @@ export default async function MuralPage({ params }: MuralPageProps) {
   } as React.CSSProperties
 
   return (
-    <MuralShell colorVars={colorVars}>
-      <AlbumMuralClient token={decodedToken} coupleNames={album.coupleNames} />
-    </MuralShell>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', fontFamily: 'var(--font-body)', ...colorVars }}>
+      <AlbumMuralClient slug={decodedSlug} coupleNames={album.coupleNames} />
+    </div>
   )
 }

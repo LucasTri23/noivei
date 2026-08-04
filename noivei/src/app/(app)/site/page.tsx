@@ -1,7 +1,7 @@
 import PaywallGate from '@/components/billing/paywall-gate'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
 import SiteBuilder from '@/components/site/site-builder'
-import { checkStorageLimit } from '@/lib/billing/check-limit'
+import { checkStorageLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { SiteConfig } from '@/types/database'
 
@@ -29,14 +29,27 @@ async function SiteContent() {
 
   const weddingId = wedding.id as string
 
-  const [{ data: site }, limitCheck] = await Promise.all([
+  const [{ data: site }, limitCheck, planId] = await Promise.all([
     supabase
       .from('site_config')
       .select('*')
       .eq('wedding_id', weddingId)
       .maybeSingle(),
     checkStorageLimit(supabase, weddingId, 0),
+    resolveWeddingPlanId(supabase, weddingId),
   ])
+
+  // Mesma lógica/fail-open do PaywallGate (linha ausente em plan_module_access =
+  // liberado) — decide só se o template "portfolio" aparece selecionável no
+  // seletor de estilo; o fail-safe de verdade (nunca confiar no valor salvo)
+  // mora na leitura pública (ver get-public-site-by-slug.ts).
+  const { data: albumAccessRow } = await supabase
+    .from('plan_module_access')
+    .select('enabled')
+    .eq('plan_id', planId)
+    .eq('module', 'album')
+    .maybeSingle()
+  const albumEnabled = albumAccessRow?.enabled ?? true
 
   return (
     <SiteBuilder
@@ -45,6 +58,7 @@ async function SiteContent() {
       initialSite={site as SiteConfig | null}
       storageLimitBytes={limitCheck.limit}
       storageUsedBytes={limitCheck.current}
+      albumEnabled={albumEnabled}
     />
   )
 }

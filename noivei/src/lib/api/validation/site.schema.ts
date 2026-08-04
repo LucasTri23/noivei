@@ -8,10 +8,17 @@ export const SiteSlugSchema = z
   .max(60)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug deve conter apenas letras minúsculas, números e hífens.')
 
+// 'portfolio' só é gravável quando o plano ATUAL do casamento libera o módulo
+// 'album' (mesmo módulo do mural de fotos) — checado na Route Handler, não
+// aqui (Zod valida forma, não regra de negócio/plano). Ver PATCH
+// /api/v1/weddings/[wid]/site.
+export const SiteTemplateSchema = z.enum(['classic', 'portfolio'])
+
 export const UpdateSiteConfigSchema = z
   .object({
     slug:                 SiteSlugSchema,
     published:            z.boolean(),
+    template:             SiteTemplateSchema,
     cover_photo_url:      z.url('URL inválida.').nullable(),
     cover_photo_position: z.number().int().min(0).max(100),
     content:              z.record(z.string(), z.unknown()),

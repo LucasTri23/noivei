@@ -1,8 +1,11 @@
 import { z } from 'zod'
 
-// Token do mural é um UUID de verdade (weddings.album_token), diferente do token
-// de RSVP (guests.rsvp_token, TEXT) — validado como UUID antes de qualquer query.
-export const AlbumTokenSchema = z.uuid()
+import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
+
+// O identificador público do mural é o MESMO slug do site do casal
+// (site_config.slug, ver SiteSlugSchema) — não existe mais um token próprio
+// (weddings.album_token foi removido, ver migration 20260803000001).
+export const AlbumSlugSchema = SiteSlugSchema
 
 // Mesmo formato frouxo de telefone do RSVP público (PhoneSchema em rsvp.schema.ts)
 // — aceita formatos brasileiros comuns, sem validar internacionalização.

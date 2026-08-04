@@ -10,7 +10,7 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
-import type { SiteConfig } from '@/types/database'
+import type { SiteConfig, SiteTemplate } from '@/types/database'
 
 // Marcador do endpoint público do bucket "wedding-photos" — presente numa URL indica que
 // ela veio de um upload (não de uma URL externa colada manualmente), e o que vem depois
@@ -72,6 +72,12 @@ interface SiteBuilderProps {
   initialSite:       SiteConfig | null
   storageLimitBytes: number
   storageUsedBytes:  number
+  // Se o plano do casamento libera o módulo Álbum de fotos (plan_module_access,
+  // module='album') — mesmo módulo que libera o mural. Controla só se o estilo
+  // "portfolio" aparece SELECIONÁVEL aqui; a Route Handler PATCH /site
+  // reforça a mesma regra do lado do servidor, e a renderização pública em
+  // /[slug] nunca confia no valor salvo (sempre reavalia o plano atual).
+  albumEnabled:      boolean
 }
 
 interface ApiErrorBody {
@@ -177,6 +183,8 @@ interface CapaSectionProps {
   coupleNames:         string
   slug:                string
   published:           boolean
+  template:            SiteTemplate
+  albumEnabled:        boolean
   coverTitle:          string
   coverPhotoUrl:       string | null
   coverPhotoPosition:  number
@@ -185,16 +193,60 @@ interface CapaSectionProps {
   onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto: (url: string) => Promise<boolean>
   onSave: (values: {
-    slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
+    slug: string; published: boolean; template: SiteTemplate
+    coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
   }) => Promise<PatchResult>
 }
 
+const TEMPLATE_OPTIONS: { id: SiteTemplate; label: string; description: string }[] = [
+  { id: 'classic',   label: 'Clássico',  description: 'O estilo atual: capa elegante, história em polaroids, seções tradicionais.' },
+  { id: 'portfolio', label: 'Portfólio', description: 'Visual ousado e editorial, com grade assimétrica de fotos e o mural de fotos em destaque.' },
+]
+
+function TemplatePicker({ value, albumEnabled, onChange }: { value: SiteTemplate; albumEnabled: boolean; onChange: (t: SiteTemplate) => void }) {
+  return (
+    <div>
+      <label style={labelStyle}>Estilo do site</label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {TEMPLATE_OPTIONS.map((opt) => {
+          const locked   = opt.id === 'portfolio' && !albumEnabled
+          const selected = value === opt.id
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              disabled={locked}
+              onClick={() => !locked && onChange(opt.id)}
+              style={{
+                textAlign: 'left', padding: '14px 16px', borderRadius: '14px',
+                border: selected ? '1.5px solid var(--wedding-color)' : '1.5px solid #EBDDD0',
+                background: selected ? 'var(--wedding-color-subtle)' : 'var(--surface)',
+                cursor: locked ? 'not-allowed' : 'pointer',
+                opacity: locked ? 0.55 : 1,
+              }}
+            >
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)', marginBottom: '4px' }}>
+                {opt.label}
+              </div>
+              <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', lineHeight: 1.5 }}>
+                {locked ? 'Disponível no plano que libera o álbum de fotos.' : opt.description}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function CapaSection({
-  coupleNames, slug, published, coverTitle, coverPhotoUrl, coverPhotoPosition, publicUrl, saving, onUploadPhoto, onDeletePhoto, onSave,
+  coupleNames, slug, published, template, albumEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, publicUrl, saving,
+  onUploadPhoto, onDeletePhoto, onSave,
 }: CapaSectionProps) {
   const [slugDraft, setSlugDraft]   = useState(slug)
   const [titleDraft, setTitleDraft] = useState(coverTitle)
   const [publishedDraft, setPublishedDraft] = useState(published)
+  const [templateDraft, setTemplateDraft] = useState<SiteTemplate>(template)
   const [coverDraft, setCoverDraft] = useState<string | null>(coverPhotoUrl)
   const [positionDraft, setPositionDraft] = useState(coverPhotoPosition)
   const [uploading, setUploading]   = useState(false)
@@ -236,8 +288,8 @@ function CapaSection({
     }
 
     const result = await onSave({
-      slug: parsedSlug.data, published: publishedDraft, coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft,
-      coverPhotoPosition: positionDraft,
+      slug: parsedSlug.data, published: publishedDraft, template: templateDraft,
+      coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft, coverPhotoPosition: positionDraft,
     })
     if (!result.ok) {
       toastError(result.message)
@@ -248,6 +300,8 @@ function CapaSection({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <TemplatePicker value={templateDraft} albumEnabled={albumEnabled} onChange={setTemplateDraft} />
+
       <div>
         <label htmlFor="site-cover-title" style={labelStyle}>Título da capa</label>
         <input
@@ -830,12 +884,13 @@ function GaleriaSection({
 }
 
 export default function SiteBuilder({
-  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes,
+  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes, albumEnabled,
 }: SiteBuilderProps) {
   const [active, setActive]       = useState<SectionId>('capa')
   const [siteId, setSiteId]       = useState<string | null>(initialSite?.id ?? null)
   const [slug, setSlug]           = useState(initialSite?.slug ?? '')
   const [published, setPublished] = useState(initialSite?.published ?? false)
+  const [template, setTemplate]   = useState<SiteTemplate>(initialSite?.template ?? 'classic')
   const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(initialSite?.cover_photo_url ?? null)
   const [coverPhotoPosition, setCoverPhotoPosition] = useState(initialSite?.cover_photo_position ?? 50)
   const [content, setContent]     = useState<SiteContent>(() => parseSiteContent(initialSite?.content))
@@ -980,7 +1035,7 @@ export default function SiteBuilder({
 
   async function patchSite(
     body: {
-      slug?: string; published?: boolean; cover_photo_url?: string | null
+      slug?: string; published?: boolean; template?: SiteTemplate; cover_photo_url?: string | null
       cover_photo_position?: number; content?: SiteContent
     },
   ): Promise<PatchResult> {
@@ -1000,6 +1055,7 @@ export default function SiteBuilder({
     setSiteId(data.id)
     setSlug(data.slug)
     setPublished(data.published)
+    setTemplate(data.template)
     setCoverPhotoUrl(data.cover_photo_url)
     setCoverPhotoPosition(data.cover_photo_position)
     setContent(parseSiteContent(data.content))
@@ -1008,7 +1064,8 @@ export default function SiteBuilder({
 
   async function saveCapa(
     values: {
-      slug: string; published: boolean; coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
+      slug: string; published: boolean; template: SiteTemplate
+      coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number
     },
   ): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
@@ -1016,7 +1073,7 @@ export default function SiteBuilder({
     else delete nextContent.cover_title
 
     return patchSite({
-      slug: values.slug, published: values.published, cover_photo_url: values.coverPhotoUrl,
+      slug: values.slug, published: values.published, template: values.template, cover_photo_url: values.coverPhotoUrl,
       cover_photo_position: values.coverPhotoPosition, content: nextContent,
     })
   }
@@ -1151,6 +1208,8 @@ export default function SiteBuilder({
                 coupleNames={coupleNames}
                 slug={slug}
                 published={published}
+                template={template}
+                albumEnabled={albumEnabled}
                 coverTitle={content.cover_title ?? ''}
                 coverPhotoUrl={coverPhotoUrl}
                 coverPhotoPosition={coverPhotoPosition}

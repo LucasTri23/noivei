@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
+import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import Spinner from '@/components/ui/spinner'
 import { toastError } from '@/store/toast.store'
 
 const emptySubscribe = () => () => {}
 
 interface AlbumMuralClientProps {
-  token:       string
+  slug:        string
   coupleNames: string
 }
 
@@ -18,7 +19,7 @@ interface ApiErrorBody {
 
 // Mesmo teto do bucket "wedding-album-photos" — checagem no client é só pra
 // feedback rápido (evita subir 4MB pra descobrir que passou do limite); a
-// aplicação de verdade é sempre no servidor (ver /api/v1/album/[token]/photos).
+// aplicação de verdade é sempre no servidor (ver /api/v1/album/[slug]/photos).
 const MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024
 const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic']
 
@@ -31,8 +32,8 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
   }
 }
 
-function sessionKey(token: string): string {
-  return `album:${token}:contributor_id`
+function sessionKey(slug: string): string {
+  return `album:${slug}:contributor_id`
 }
 
 function CameraIcon() {
@@ -50,8 +51,16 @@ function CheckIcon() {
     </svg>
   )
 }
+function ArrowIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </svg>
+  )
+}
 
-export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClientProps) {
+export default function AlbumMuralClient({ slug, coupleNames }: AlbumMuralClientProps) {
   // sessionStorage só existe no client — usar useSyncExternalStore (não um
   // useEffect com setState) evita tanto o mismatch de hidratação quanto o lint
   // de "setState síncrono dentro de efeito" (mesmo padrão de appearance-settings.tsx
@@ -63,7 +72,7 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
   // sessionStorage (abaixo) teria prioridade e nunca mostraria o formulário
   // de novo mesmo depois de registrar.
   const [contributorId, setContributorId] = useState<string | null>(null)
-  const storedContributorId = mounted ? sessionStorage.getItem(sessionKey(token)) : null
+  const storedContributorId = mounted ? sessionStorage.getItem(sessionKey(slug)) : null
   const activeContributorId = contributorId ?? storedContributorId
 
   // Formulário de cadastro
@@ -77,17 +86,28 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
   const [uploadedCount, setUploadedCount] = useState(0)
   const [previewUrl, setPreviewUrl]       = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const formSectionRef = useRef<HTMLDivElement>(null)
+  const nameInputRef    = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     return () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }
   }, [previewUrl])
+
+  function handleHeroCta() {
+    if (activeContributorId) {
+      inputRef.current?.click()
+      return
+    }
+    formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    nameInputRef.current?.focus({ preventScroll: true })
+  }
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     if (registering) return
     setRegistering(true)
 
-    const res = await fetch(`/api/v1/album/${token}/register`, {
+    const res = await fetch(`/api/v1/album/${slug}/register`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ name, relationship, phone }),
@@ -100,7 +120,7 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
     }
 
     const { data } = (await res.json()) as { data: { contributor_id: string } }
-    sessionStorage.setItem(sessionKey(token), data.contributor_id)
+    sessionStorage.setItem(sessionKey(slug), data.contributor_id)
     setContributorId(data.contributor_id)
   }
 
@@ -130,7 +150,7 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
     formData.append('file', file)
     formData.append('contributor_id', activeContributorId as string)
 
-    const res = await fetch(`/api/v1/album/${token}/photos`, { method: 'POST', body: formData })
+    const res = await fetch(`/api/v1/album/${slug}/photos`, { method: 'POST', body: formData })
 
     setUploading(false)
     if (!res.ok) {
@@ -143,7 +163,7 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
 
   if (!mounted) {
     return (
-      <div style={{ padding: '60px 36px', textAlign: 'center' }}>
+      <div style={{ padding: '120px 36px', textAlign: 'center' }}>
         <Spinner size={22} color="var(--wedding-color)" />
       </div>
     )
@@ -151,12 +171,13 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
 
   return (
     <div>
-      {/* Cabeçalho decorativo */}
+      {/* Hero em tela cheia — mesma direção visual do template "portfolio" do site
+          (fundo escuro derivado da cor do casal, título bold, CTA em pílula). */}
       <div
         className="relative overflow-hidden"
         style={{
           background: 'linear-gradient(150deg, var(--brand-dark-gradient-from), var(--brand-dark-gradient-to))',
-          color: '#FAF0E6', padding: '38px 36px', textAlign: 'center',
+          color: '#FAF0E6', padding: '72px 24px 56px', textAlign: 'center',
         }}
       >
         <div
@@ -166,24 +187,42 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
             backgroundSize: '26px 26px',
           }}
         />
-        <div className="relative">
-          <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
+        <div className="relative" style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <div style={{ fontSize: '11px', letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--wedding-color-light)', fontWeight: 700 }}>
             Mural de fotos
           </div>
           <h1
             className="font-display"
-            style={{ fontWeight: 500, fontSize: 'clamp(28px,6vw,36px)', margin: '6px 0 0', lineHeight: 1.1 }}
+            style={{ fontWeight: 500, fontSize: 'clamp(38px,8vw,64px)', margin: '10px 0 0', lineHeight: 1.02 }}
           >
             {coupleNames}
           </h1>
+          <p style={{ fontSize: '14.5px', color: 'rgba(250,240,230,0.72)', margin: '16px 0 0', lineHeight: 1.6 }}>
+            Tire fotos no evento e envie aqui — todo mundo vê o mural crescer ao vivo.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleHeroCta}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '10px',
+              background: 'var(--wedding-color)', color: '#241708', border: 'none',
+              borderRadius: '99px', padding: '14px 24px', fontWeight: 700, fontSize: '14.5px',
+              cursor: 'pointer', marginTop: '28px',
+              boxShadow: '0 10px 26px color-mix(in srgb, var(--wedding-color) 40%, transparent)',
+            }}
+          >
+            {activeContributorId ? 'Enviar minha foto' : 'Quero participar'}
+            <ArrowIcon />
+          </button>
         </div>
       </div>
 
-      {/* Corpo */}
-      <div style={{ padding: '34px 36px 38px' }}>
+      {/* Formulário de cadastro / envio de foto */}
+      <div ref={formSectionRef} style={{ maxWidth: '480px', margin: '0 auto', padding: '40px 24px 8px' }}>
         {!activeContributorId ? (
           <>
-            <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6, textAlign: 'center' }}>
               Se cadastre rapidinho pra poder enviar as fotos que você tirar no evento.
             </p>
             <form onSubmit={handleRegister} className="flex flex-col gap-4">
@@ -193,6 +232,7 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
                 </label>
                 <input
                   id="name"
+                  ref={nameInputRef}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -246,13 +286,13 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
           </>
         ) : (
           <>
-            <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6, textAlign: 'center' }}>
               Tire uma foto ou escolha uma da galeria pra enviar pro casal.
             </p>
 
             <div
-              className="flex flex-col items-center gap-3 rounded-2xl"
-              style={{ padding: '32px 20px', background: 'var(--wedding-color-subtle)', textAlign: 'center' }}
+              className="flex flex-col items-center gap-3"
+              style={{ padding: '32px 20px', background: 'var(--wedding-color-subtle)', textAlign: 'center', borderRadius: '20px' }}
             >
               {previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- preview local (object URL), nunca enviado a nenhum domínio
@@ -270,7 +310,7 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                   background: 'var(--wedding-color)', color: '#fff', border: 'none',
-                  borderRadius: '12px', padding: '13px 22px', fontWeight: 700, fontSize: '14.5px',
+                  borderRadius: '99px', padding: '13px 22px', fontWeight: 700, fontSize: '14.5px',
                   cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1,
                 }}
               >
@@ -299,11 +339,29 @@ export default function AlbumMuralClient({ token, coupleNames }: AlbumMuralClien
             </div>
           </>
         )}
-
-        <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '26px', textAlign: 'center' }}>
-          Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest
-        </p>
       </div>
+
+      {/* Galeria ao vivo — todas as fotos já enviadas por qualquer convidado deste
+          casamento, não só as do visitante atual. */}
+      <div style={{ maxWidth: '1180px', margin: '48px auto 0', padding: '0 4px' }}>
+        <div style={{ padding: '0 20px 16px', textAlign: 'center' }}>
+          <h2 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(22px,3.6vw,30px)', color: 'var(--fg)', margin: 0 }}>
+            Mural ao vivo
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '4px' }}>
+            Todas as fotos enviadas pelos convidados até agora
+          </p>
+        </div>
+        <LivePhotoGallery
+          slug={slug}
+          emptyTitle="O mural ainda está vazio"
+          emptyMessage="Assim que os convidados começarem a enviar fotos, elas aparecem aqui."
+        />
+      </div>
+
+      <p style={{ fontSize: '12px', color: 'var(--muted-fg)', margin: '32px 0 40px', textAlign: 'center' }}>
+        Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest
+      </p>
     </div>
   )
 }

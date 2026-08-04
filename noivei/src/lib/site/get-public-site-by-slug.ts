@@ -1,8 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { toGiftPhotoPublicUrl } from '@/lib/gifts/gift-photo-storage'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
-import type { GiftRegistryType, Json } from '@/types/database'
+import type { GiftRegistryType, Json, SiteTemplate } from '@/types/database'
 
 // Foto da galeria com metadados de recorte já resolvidos — position_y/fit_contain vêm de
 // wedding_gallery_photos (fotos enviadas do computador); URLs coladas manualmente não têm
@@ -28,6 +29,14 @@ export interface PublicSiteInfo {
   galleryPhotos:        PublicGalleryPhoto[]
   cover_photo_url:      string | null
   cover_photo_position: number
+  // Estilo EFETIVO a renderizar — já com o fail-safe de plano aplicado (nunca é
+  // 'portfolio' se o plano ATUAL não libera mais o módulo 'album', mesmo que o
+  // valor salvo em site_config.template seja 'portfolio'; ver comentário abaixo).
+  template:             SiteTemplate
+  // Se o plano atual libera o módulo 'album' — controla a seção/preview do
+  // mural de fotos em AMBOS os templates (ver /[slug]/page.tsx), não só o
+  // template em si.
+  albumEnabled:         boolean
   gifts: {
     id:           string
     name:         string
@@ -47,7 +56,7 @@ export async function getPublicSiteBySlug(
 ): Promise<PublicSiteInfo | null> {
   const { data: site, error } = await supabase
     .from('site_config')
-    .select('wedding_id, content, cover_photo_url, cover_photo_position')
+    .select('wedding_id, content, cover_photo_url, cover_photo_position, template')
     .eq('slug', slug)
     .eq('published', true)
     .maybeSingle()
@@ -65,6 +74,22 @@ export async function getPublicSiteBySlug(
     .maybeSingle()
 
   if (!wedding) return null
+
+  // Fail-safe de plano: NUNCA confia cegamente no template salvo. Se o casal
+  // escolheu 'portfolio' num plano que liberava 'album' e depois fez downgrade,
+  // o site público volta a renderizar 'classic' automaticamente — o valor salvo
+  // fica intacto (não sobrescrevemos site_config.template aqui), então se o
+  // plano voltar a liberar o módulo, o estilo "portfolio" volta sozinho.
+  const planId = await resolveWeddingPlanId(supabase, weddingId)
+  const { data: albumAccessRow } = await supabase
+    .from('plan_module_access')
+    .select('enabled')
+    .eq('plan_id', planId)
+    .eq('module', 'album')
+    .maybeSingle()
+  const albumEnabled = (albumAccessRow?.enabled as boolean | undefined) ?? true
+  const storedTemplate = (site.template as SiteTemplate | null) ?? 'classic'
+  const template: SiteTemplate = storedTemplate === 'portfolio' && albumEnabled ? 'portfolio' : 'classic'
 
   const { data: gifts } = await supabase
     .from('gift_registry_items')
@@ -97,6 +122,8 @@ export async function getPublicSiteBySlug(
     galleryPhotos,
     cover_photo_url:      (site.cover_photo_url as string | null) ?? null,
     cover_photo_position: (site.cover_photo_position as number | null) ?? 50,
+    template,
+    albumEnabled,
     gifts:                resolvedGifts,
   }
 }

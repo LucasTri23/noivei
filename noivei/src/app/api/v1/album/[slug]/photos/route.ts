@@ -1,13 +1,13 @@
 import { ok, err, handleApiError } from '@/lib/api/response'
-import { AlbumTokenSchema } from '@/lib/api/validation/album.schema'
+import { AlbumSlugSchema } from '@/lib/api/validation/album.schema'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
-import { getAlbumByToken } from '@/lib/album/get-album-by-token'
+import { getAlbumBySlug } from '@/lib/album/get-album-by-slug'
 import { checkStorageLimit } from '@/lib/billing/check-limit'
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 interface RouteContext {
-  params: Promise<{ token: string }>
+  params: Promise<{ slug: string }>
 }
 
 // Mesmo teto do bucket "wedding-album-photos" (ver migration) — checado de novo
@@ -34,10 +34,10 @@ function sanitizeFileName(name: string): string {
 // bucket sem NENHUMA policy pra anon/authenticated).
 export async function POST(req: Request, { params }: RouteContext) {
   try {
-    const { token } = await params
+    const { slug } = await params
 
-    const parsedToken = AlbumTokenSchema.safeParse(decodeURIComponent(token))
-    if (!parsedToken.success) {
+    const parsedSlug = AlbumSlugSchema.safeParse(decodeURIComponent(slug))
+    if (!parsedSlug.success) {
       return err(404, 'ALBUM_NOT_FOUND', 'Mural não encontrado.')
     }
 
@@ -48,8 +48,8 @@ export async function POST(req: Request, { params }: RouteContext) {
       return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
     }
 
-    const album = await getAlbumByToken(supabase, parsedToken.data)
-    // Mesmo erro genérico de token inexistente — ver register/route.ts.
+    const album = await getAlbumBySlug(supabase, parsedSlug.data)
+    // Mesmo erro genérico de slug inexistente — ver register/route.ts.
     if (!album || !album.moduleEnabled) {
       return err(404, 'ALBUM_NOT_FOUND', 'Mural não encontrado.')
     }
@@ -79,7 +79,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
 
     // Confirma que o contributor_id pertence a ESTE casamento (o resolvido pelo
-    // token) — sem isso, alguém poderia reusar um contributor_id capturado no
+    // slug) — sem isso, alguém poderia reusar um contributor_id capturado no
     // cadastro de OUTRO casamento pra enviar fotos aqui.
     const { data: contributor, error: contributorError } = await supabase
       .from('album_contributors')

@@ -4,7 +4,9 @@
 -- É a superfície pública e anônima de maior risco do app — todo acesso de
 -- escrita/leitura de arquivo passa por rotas com service role (nunca RLS de
 -- anon/authenticated direto pro Storage), com rate limit por IP e por
--- casamento/token (ver checkRateLimit nas rotas de /api/v1/album/[token]/*).
+-- casamento/slug (ver checkRateLimit nas rotas de /api/v1/album/[slug]/*).
+-- O identificador público é o slug do site do casal (site_config.slug) — o
+-- mural só existe para casamentos com site publicado (ver getAlbumBySlug).
 
 -- =========================================================
 -- 'album' como módulo restringível — mesmo padrão dinâmico da migration
@@ -79,19 +81,25 @@ END;
 $$;
 
 -- =========================================================
--- weddings.album_token — identificador estável e imprevisível do link/QR
--- público do álbum. Não reaproveita site_config.slug de propósito: nem todo
--- casamento tem site publicado, e este recurso não pode depender disso.
--- =========================================================
+-- weddings.album_token — REVERTIDO. A primeira versão desta migration criava
+-- um token próprio (UUID) para o link/QR público do álbum, independente do
+-- site do casal. Essa migration rodou contra o banco de produção e FALHOU
+-- (bug não relacionado, corrigido em outro trecho deste mesmo arquivo) — a
+-- transação inteira foi revertida, então album_token NUNCA chegou a existir
+-- em produção. O produto decidiu reaproveitar site_config.slug (o mesmo slug
+-- do site público do casal) como identificador do mural em vez de manter um
+-- token separado — ver /mural/[slug] e getAlbumBySlug. O DROP COLUMN abaixo é
+-- só uma rede de segurança defensiva, para o caso de algum ambiente ter
+-- rodado uma versão intermediária deste arquivo com sucesso antes desta edição.
 ALTER TABLE weddings
-  ADD COLUMN album_token UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE;
+  DROP COLUMN IF EXISTS album_token;
 
 -- =========================================================
 -- album_contributors — quem se "cadastrou" no mural. Não é uma conta de
 -- verdade (nunca passa por auth.signUp): é só uma linha nomeada, usada pra
 -- creditar as fotos enviadas ao nome/relação informados.
 -- =========================================================
-CREATE TABLE album_contributors (
+CREATE TABLE IF NOT EXISTS album_contributors (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   wedding_id   UUID NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
@@ -100,12 +108,12 @@ CREATE TABLE album_contributors (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_album_contributors_wedding_id ON album_contributors(wedding_id);
+CREATE INDEX IF NOT EXISTS idx_album_contributors_wedding_id ON album_contributors(wedding_id);
 
 ALTER TABLE album_contributors ENABLE ROW LEVEL SECURITY;
 
 -- De propósito, SEM policy de INSERT/SELECT pra anon/authenticated: o cadastro
--- público (POST /api/v1/album/[token]/register) sempre escreve via service
+-- público (POST /api/v1/album/[slug]/register) sempre escreve via service
 -- role, que ignora RLS — não existe sessão alguma pro visitante anônimo. A
 -- única policy daqui é pro TIME DO CASAL ler os nomes na tela de gestão
 -- autenticada, mesmo critério de acesso a módulo já usado no resto do app.
@@ -116,7 +124,7 @@ CREATE POLICY "wedding team can read album contributors"
 -- =========================================================
 -- album_photos — uma linha por foto enviada por um contribuidor.
 -- =========================================================
-CREATE TABLE album_photos (
+CREATE TABLE IF NOT EXISTS album_photos (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   wedding_id     UUID NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
   contributor_id UUID NOT NULL REFERENCES album_contributors(id) ON DELETE CASCADE,
@@ -126,12 +134,12 @@ CREATE TABLE album_photos (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_album_photos_wedding_id ON album_photos(wedding_id);
+CREATE INDEX IF NOT EXISTS idx_album_photos_wedding_id ON album_photos(wedding_id);
 
 ALTER TABLE album_photos ENABLE ROW LEVEL SECURITY;
 
 -- De propósito, SEM policy de INSERT pra anon/authenticated: o upload público
--- (POST /api/v1/album/[token]/photos) sempre passa por service role. SELECT e
+-- (POST /api/v1/album/[slug]/photos) sempre passa por service role. SELECT e
 -- DELETE ficam liberados pro time do casal (moderação/curadoria na tela
 -- autenticada), mesmo critério de fn_has_module_access do resto do app.
 CREATE POLICY "wedding team can read album photos"
@@ -148,7 +156,7 @@ CREATE POLICY "wedding team can delete album photos"
 -- 4 MB por foto: diferente de wedding-files/wedding-gift-photos (upload direto
 -- do browser autenticado pro Storage, sob RLS), aqui não existe sessão nenhuma
 -- — o visitante é anônimo, então o upload é sempre PROXIED pela nossa própria
--- Route Handler com service role (ver POST /api/v1/album/[token]/photos).
+-- Route Handler com service role (ver POST /api/v1/album/[slug]/photos).
 -- Serverless Functions da Vercel têm um teto de corpo de requisição em torno
 -- de 4.5 MB; 4 MB deixa margem de segurança pro multipart/form-data inteiro
 -- (bytes da foto + overhead do form) não estourar esse teto.
@@ -161,8 +169,10 @@ ON CONFLICT (id) DO NOTHING;
 
 -- De propósito, NENHUMA policy de storage.objects pra anon/authenticated neste
 -- bucket (nem SELECT, nem INSERT/DELETE) — toda leitura (grid de curadoria do
--- casal) e toda escrita (upload do convidado, remoção pelo casal) passam por
--- rota com service role, que ignora RLS. Mais restritivo que wedding-files
--- (que libera SELECT pro dono autenticado): aqui não há "dono" confiável no
--- upload (é anônimo), então nem o lado autenticado do casal lê o objeto
--- direto — sempre via signed URL de 60s gerada pela nossa API.
+-- casal, e o mural público em /mural/[slug]) e toda escrita (upload do
+-- convidado, remoção pelo casal) passam por rota com service role, que ignora
+-- RLS. Mais restritivo que wedding-files (que libera SELECT pro dono
+-- autenticado): aqui não há "dono" confiável no upload (é anônimo), então nem
+-- o lado autenticado do casal lê o objeto direto — sempre via signed URL de
+-- curta duração gerada pela nossa API (60s na gestão autenticada, alguns
+-- minutos no mural público — ver GET /api/v1/album/[slug]/gallery).
