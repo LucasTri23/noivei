@@ -4,6 +4,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import type { PlanId } from '@/constants/plans'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import PlanSelector from '@/components/perfil/plan-selector'
+import PlanComparisonRich from '@/components/marketing/plan-comparison-rich'
 import type { PlanFeature, PlanFeatureCategory, PlanFeatureValue } from '@/types/database'
 
 export const metadata = { title: 'Planos' }
@@ -99,6 +100,15 @@ export default async function PlanosPage() {
         features={(features ?? []) as PlanFeature[]}
         values={(values ?? []) as PlanFeatureValue[]}
       />
+
+      <div className="mt-2">
+        <PlanComparisonRich
+          plans={plansData ?? []}
+          categories={(categories ?? []) as PlanFeatureCategory[]}
+          features={(features ?? []) as PlanFeature[]}
+          values={(values ?? []) as PlanFeatureValue[]}
+        />
+      </div>
     </div>
   )
 }

@@ -198,6 +198,24 @@ input:-webkit-autofill:focus {
   }
 }
 
+/* ── SCROLL REVEAL (marketing) ────────────────────────────────────
+ * Fade-in leve ao entrar na viewport (ver ScrollRevealInit, ativado via
+ * atributo `data-reveal`). A classe `.reveal-pending` só é aplicada pelo
+ * próprio JS ao montar — se o script não rodar por qualquer motivo, o
+ * elemento nunca some (progressive enhancement, sem flash de conteúdo
+ * invisível). A regra de MOVIMENTO REDUZIDO acima já zera a duração da
+ * transition pra quem pediu, então não precisa de outro guard aqui.
+ */
+[data-reveal].reveal-pending {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+[data-reveal].reveal-pending.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* ── SITE PÚBLICO: GALERIA DO TEMPLATE PORTFÓLIO ─────────────────
  * Grade em linhas de contagem fixa (ver PortfolioGalleryGrid em
  * portfolio-site.tsx): um ciclo de 3 linhas — 4 fotos maiores, depois 5 e 5

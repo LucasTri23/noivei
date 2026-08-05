@@ -86,6 +86,19 @@ export default function LandingHero() {
               Criar conta grátis
             </Link>
             <Link
+              href="/planos"
+              className="inline-flex items-center justify-center rounded-full font-semibold"
+              style={{
+                border: '1.5px solid color-mix(in srgb, var(--wedding-color) 40%, transparent)',
+                color: 'var(--wedding-color-dark)',
+                padding: '12.5px 28px',
+                fontSize: '15px',
+                textDecoration: 'none',
+              }}
+            >
+              Conhecer planos
+            </Link>
+            <Link
               href="/login"
               className="inline-flex items-center justify-center font-semibold"
               style={{ color: 'var(--fg)', padding: '14px 18px', fontSize: '15px', textDecoration: 'none' }}
