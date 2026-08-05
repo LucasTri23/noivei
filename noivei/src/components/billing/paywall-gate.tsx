@@ -21,6 +21,7 @@ const FEATURE_DESCRIPTIONS: Record<WeddingModuleKey, string> = {
   padrinhos:  'Organize padrinhos, madrinhas e a ordem de entrada da cerimônia.',
   checkin:    'Gere o ingresso com QR code de cada convidado confirmado e valide a entrada deles no dia do casamento.',
   album:      'Compartilhe um QR code no salão para os convidados enviarem fotos do casamento em tempo real, direto do celular.',
+  wedding_score: 'Acompanhe o Wedding Score: uma nota de 0 a 100 de quão avançado está o planejamento, com histórico e detalhamento por área.',
 }
 
 interface PaywallGateProps {

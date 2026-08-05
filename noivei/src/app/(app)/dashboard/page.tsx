@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import CountdownCard from '@/components/dashboard/countdown-card'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { isPaidPlan, type PlanId } from '@/constants/plans'
+import type { PlanId } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { recalculateWeddingScore } from '@/lib/wedding-score/recalculate'
+import type { WeddingScoreResult } from '@/lib/wedding-score/calculator'
 
 function CheckIcon({ size }: { size: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -34,15 +35,35 @@ interface WeddingScoreMeta {
   bg:          string
 }
 
-// Faixas do Wedding Score: <40 início de jornada, 40-70 andamento, 70+ reta final
-function weddingScoreMeta(score: number): WeddingScoreMeta {
+interface WeddingScoreConfig {
+  enabled:          boolean
+  title:            string
+  description:      string
+  label_low:        string
+  description_low:  string
+  label_mid:        string
+  description_mid:  string
+  label_high:       string
+  description_high: string
+}
+
+interface WeddingScoreHistoryPoint {
+  recorded_date: string
+  score:         number
+}
+
+// Faixas do Wedding Score: <40 início de jornada, 40-70 andamento, 70+ reta final —
+// os LIMIARES ficam fixos em código de propósito (fora do escopo deste roadmap
+// item); só os textos exibidos vêm de `wedding_score_config` agora, editável em
+// /admin/wedding-score.
+function weddingScoreMeta(score: number, config: WeddingScoreConfig): WeddingScoreMeta {
   if (score >= 70) {
-    return { label: 'Quase lá', description: 'Seu planejamento está bem encaminhado.', color: '#5E8B6A', bg: '#E9EFE6' }
+    return { label: config.label_high, description: config.description_high, color: '#5E8B6A', bg: '#E9EFE6' }
   }
   if (score >= 40) {
-    return { label: 'No caminho', description: 'Vocês estão avançando bem, continue assim.', color: '#9A7020', bg: '#FBF0E0' }
+    return { label: config.label_mid, description: config.description_mid, color: '#9A7020', bg: '#FBF0E0' }
   }
-  return { label: 'Início de jornada', description: 'Ainda no começo — cada passo conta.', color: '#C0553F', bg: '#F6E4DE' }
+  return { label: config.label_low, description: config.description_low, color: '#C0553F', bg: '#F6E4DE' }
 }
 
 export default async function DashboardPage() {
@@ -81,13 +102,19 @@ export default async function DashboardPage() {
   let notifyRsvp     = true
   let planId: PlanId = 'free'
 
-  // Perfil de notificações (depende de user) e plano do casamento (depende de wedding)
-  // não dependem um do outro — rodam em paralelo em vez de sequenciais.
-  const [profileResult, resolvedPlanId] = await Promise.all([
+  // Perfil de notificações (depende de user), plano do casamento (depende de wedding)
+  // e a config global do Wedding Score não dependem uma da outra — rodam em
+  // paralelo em vez de sequenciais.
+  const [profileResult, resolvedPlanId, weddingScoreConfigResult] = await Promise.all([
     user
       ? supabase.from('profiles').select('notify_timeline, notify_rsvp').eq('id', user.id).maybeSingle()
       : Promise.resolve({ data: null }),
     wedding?.id ? resolveWeddingPlanId(supabase, wedding.id) : Promise.resolve('free' as PlanId),
+    supabase
+      .from('wedding_score_config')
+      .select('enabled, title, description, label_low, description_low, label_mid, description_mid, label_high, description_high')
+      .eq('id', true)
+      .maybeSingle(),
   ])
 
   const profile = profileResult.data
@@ -95,10 +122,60 @@ export default async function DashboardPage() {
   notifyRsvp     = (profile?.notify_rsvp as boolean | undefined) ?? true
   planId         = resolvedPlanId
 
-  // Wedding Score é recurso pago: recalcula a cada carregamento (barato, poucas queries agregadas)
-  const weddingScore = wedding?.id && isPaidPlan(planId)
-    ? await recalculateWeddingScore(supabase, wedding.id)
+  // Kill switch global do admin — quando desligado, some pra todo mundo, mesmo
+  // quem tem plano/permissão. Fallback (config ausente) é o mesmo default seedado
+  // pela migration, pra nunca quebrar antes do primeiro carregamento.
+  const weddingScoreConfig: WeddingScoreConfig = weddingScoreConfigResult.data as WeddingScoreConfig | null ?? {
+    enabled: true,
+    title: 'Wedding Score',
+    description: 'Descubra o quanto o planejamento do casamento já está avançado.',
+    label_low: 'Início de jornada', description_low: 'Ainda no começo — cada passo conta.',
+    label_mid: 'No caminho', description_mid: 'Vocês estão avançando bem, continue assim.',
+    label_high: 'Quase lá', description_high: 'Seu planejamento está bem encaminhado.',
+  }
+
+  // Wedding Score completo é exclusivo do(s) plano(s) que liberarem o módulo
+  // 'wedding_score' em plan_module_access (por padrão, só o plano ativo mais caro —
+  // ver migration 20260805000006), parametrizável em /admin/planos/modulos. Some
+  // uma segunda checagem de permissão por MEMBRO (fn_has_module_access, mesmo padrão
+  // de ModuleAccessGate/ requireModuleAccess usado no resto do app): dono sempre
+  // passa, membro convidado só se tiver full_access ou o módulo liberado explicitamente.
+  let weddingScoreAllowed = false
+  if (weddingScoreConfig.enabled && wedding?.id && user) {
+    const [{ data: planAccessRow }, { data: memberAllowed }] = await Promise.all([
+      supabase
+        .from('plan_module_access')
+        .select('enabled')
+        .eq('plan_id', planId)
+        .eq('module', 'wedding_score')
+        .maybeSingle(),
+      supabase.rpc('fn_has_module_access', {
+        p_wedding_id: wedding.id, p_user_id: user.id, p_module: 'wedding_score',
+      }),
+    ])
+    // Sem linha em plan_module_access = liberado (fail-open), mesmo critério do
+    // PaywallGate — evita travar todo mundo por acidente se o seed faltar.
+    const planAllowed = (planAccessRow?.enabled as boolean | undefined) ?? true
+    weddingScoreAllowed = planAllowed && Boolean(memberAllowed)
+  }
+
+  // Recalcula a cada carregamento (barato, poucas queries agregadas) só quando o
+  // módulo está liberado — não processa o que não vai ser mostrado.
+  // `recalculateWeddingScore` confere `fn_has_module_access` de novo por dentro
+  // (defesa em profundidade), então retorna null com segurança mesmo se este
+  // gate acima algum dia divergir do dela.
+  const weddingScoreResult: WeddingScoreResult | null = weddingScoreAllowed && wedding?.id && user
+    ? await recalculateWeddingScore(supabase, wedding.id, user.id)
     : null
+
+  const weddingScoreHistory: WeddingScoreHistoryPoint[] = weddingScoreResult && wedding?.id
+    ? ((await supabase
+        .from('wedding_score_history')
+        .select('recorded_date, score')
+        .eq('wedding_id', wedding.id)
+        .order('recorded_date', { ascending: true })
+        .limit(14)).data ?? []) as WeddingScoreHistoryPoint[]
+    : []
 
   if (wedding?.id) {
     const today = new Date(now).toLocaleDateString('sv-SE') // yyyy-mm-dd local
@@ -255,53 +332,123 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Wedding Score — recurso pago (grátis vê só o teaser) */}
-        {weddingScore !== null ? (
-          (() => {
-            const meta = weddingScoreMeta(weddingScore)
-            return (
-              <div className="flex flex-col items-center justify-center rounded-3xl bg-[var(--surface)] p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
-                <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--muted-fg)' }}>
-                  Wedding Score
+        {/* Wedding Score — módulo exclusivo por plano (kill switch global do admin
+            some por completo, inclusive o teaser, via weddingScoreConfig.enabled) */}
+        {weddingScoreConfig.enabled && (
+          weddingScoreResult ? (
+            (() => {
+              const meta = weddingScoreMeta(weddingScoreResult.total, weddingScoreConfig)
+              // Círculo de progresso: mesma técnica do card "Planejamento" acima
+              // (circunferência ≈ 339 (r=54)), aplicada ao score total 0-100.
+              const scoreDashOffset = Math.round(339 - (339 * weddingScoreResult.total) / 100)
+              return (
+                <div className="flex flex-col items-center justify-center rounded-3xl bg-[var(--surface)] p-7 text-center" style={{ boxShadow: '0 12px 30px rgba(60,40,24,0.07)' }}>
+                  <div style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--muted-fg)' }}>
+                    {weddingScoreConfig.title}
+                  </div>
+                  <div className="relative mt-2" style={{ width: '130px', height: '130px' }}>
+                    <svg width="130" height="130" viewBox="0 0 130 130">
+                      <circle cx="65" cy="65" r="54" fill="none" stroke="#EBDDD0" strokeWidth="13" />
+                      <circle
+                        cx="65" cy="65" r="54" fill="none" stroke={meta.color} strokeWidth="13"
+                        strokeLinecap="round" strokeDasharray="339" strokeDashoffset={scoreDashOffset}
+                        transform="rotate(-90 65 65)" style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="font-display" style={{ fontWeight: 600, fontSize: '36px', color: 'var(--fg)' }}>
+                        {weddingScoreResult.total}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', marginTop: '10px',
+                      padding: '4px 12px', borderRadius: '99px',
+                      background: meta.bg, color: meta.color,
+                      fontSize: '12px', fontWeight: 700,
+                    }}
+                  >
+                    {meta.label}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '8px' }}>
+                    {meta.description}
+                  </div>
                 </div>
-                <span className="font-display" style={{ fontWeight: 600, fontSize: '52px', color: meta.color, marginTop: '4px', lineHeight: 1 }}>
-                  {weddingScore}
-                </span>
-                <div
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', marginTop: '10px',
-                    padding: '4px 12px', borderRadius: '99px',
-                    background: meta.bg, color: meta.color,
-                    fontSize: '12px', fontWeight: 700,
-                  }}
-                >
-                  {meta.label}
-                </div>
-                <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '8px' }}>
-                  {meta.description}
-                </div>
+              )
+            })()
+          ) : (
+            <Link
+              href="/perfil/planos"
+              className="flex flex-col items-center justify-center gap-2 rounded-3xl p-7 text-center transition-colors"
+              style={{ background: 'var(--wedding-color-subtle)', border: '1.5px dashed #D8C6A6', textDecoration: 'none' }}
+            >
+              <span style={{ color: 'var(--wedding-color)' }}><LockIcon size={24} /></span>
+              <div className="font-display" style={{ fontWeight: 500, fontSize: '20px', color: 'var(--fg)' }}>
+                {weddingScoreConfig.title}
               </div>
-            )
-          })()
-        ) : (
-          <Link
-            href="/perfil/planos"
-            className="flex flex-col items-center justify-center gap-2 rounded-3xl p-7 text-center transition-colors"
-            style={{ background: 'var(--wedding-color-subtle)', border: '1.5px dashed #D8C6A6', textDecoration: 'none' }}
-          >
-            <span style={{ color: 'var(--wedding-color)' }}><LockIcon size={24} /></span>
-            <div className="font-display" style={{ fontWeight: 500, fontSize: '20px', color: 'var(--fg)' }}>
-              Wedding Score
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0, maxWidth: '220px' }}>
-              Descubra o quanto o planejamento do casamento já está avançado.
-            </p>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--wedding-color)', textDecoration: 'underline' }}>
-              Disponível no Premium
-            </span>
-          </Link>
+              <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0, maxWidth: '220px' }}>
+                {weddingScoreConfig.description}
+              </p>
+              <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--wedding-color)', textDecoration: 'underline' }}>
+                Disponível no Premium
+              </span>
+            </Link>
+          )
         )}
       </div>
+
+      {/* Wedding Score — detalhamento por módulo + evolução recente (só quando liberado) */}
+      {weddingScoreResult && (
+        <div className="mb-4 rounded-[22px] bg-[var(--surface)] p-6" style={{ boxShadow: '0 10px 26px rgba(60,40,24,0.06)' }}>
+          <h3 className="font-display mb-4" style={{ fontWeight: 500, fontSize: '24px', color: 'var(--fg)' }}>
+            {weddingScoreConfig.title} por área
+          </h3>
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+            {weddingScoreResult.breakdown.map((item) => {
+              const pct = Math.round(item.pct)
+              return (
+                <div key={item.module}>
+                  <div className="flex items-center justify-between" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)' }}>
+                    <span>{item.label}</span>
+                    <span style={{ color: 'var(--muted-fg)' }}>{pct}%</span>
+                  </div>
+                  <div className="mt-1.5 overflow-hidden rounded-full" style={{ height: '6px', background: '#EBDDD0' }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct}%`, background: 'var(--wedding-color)', transition: 'width 0.6s ease' }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {weddingScoreHistory.length > 1 && (
+            <div className="mt-6">
+              <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-fg)', marginBottom: '8px' }}>
+                Evolução recente
+              </div>
+              <div className="flex items-end gap-1.5" style={{ height: '52px' }}>
+                {weddingScoreHistory.map((point) => (
+                  <div
+                    key={point.recorded_date}
+                    title={`${new Date(`${point.recorded_date}T00:00:00`).toLocaleDateString('pt-BR')}: ${point.score}`}
+                    className="rounded-t"
+                    style={{
+                      flex: 1, minWidth: '6px',
+                      height: `${Math.max(4, Math.round((point.score / 100) * 52))}px`,
+                      background: 'var(--wedding-color)',
+                      opacity: 0.35 + (point.score / 100) * 0.65,
+                      transition: 'height 0.6s ease',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Próximas tarefas */}
       {upcomingTasks.length > 0 && (

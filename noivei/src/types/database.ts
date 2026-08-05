@@ -105,15 +105,20 @@ export interface WeddingPreferences {
 }
 
 export interface FinancialEntry {
-  id:           string
-  wedding_id:   string
-  category:     string
-  vendor:       string | null
-  description:  string | null
-  total_amount: number
-  paid_amount:  number
-  due_date:     string | null
-  created_at:   string
+  id:               string
+  wedding_id:       string
+  category:         string
+  vendor:           string | null
+  description:      string | null
+  total_amount:     number
+  paid_amount:      number
+  due_date:         string | null
+  attached_file_id: string | null
+  created_at:       string
+  // Só presente quando a consulta faz o embed de wedding_files (ex.: carga inicial da
+  // página de Financeiro) ou quando o client mescla localmente logo após o upload do
+  // anexo — nunca é gravado no banco, é só uma conveniência de exibição.
+  attached_file?: { id: string; file_name: string } | null
 }
 
 export interface TableConfig {
@@ -267,6 +272,8 @@ export interface Subscription {
   updated_at:      string
 }
 
+export type WeddingFileCategory = 'geral' | 'contrato'
+
 export interface WeddingFile {
   id:           string
   wedding_id:   string
@@ -274,6 +281,7 @@ export interface WeddingFile {
   storage_path: string
   size_bytes:   number
   mime_type:    string | null
+  category:     WeddingFileCategory
   uploaded_by:  string
   created_at:   string
 }
@@ -340,6 +348,7 @@ export type WeddingModuleKey =
   | 'padrinhos'
   | 'checkin'
   | 'album'
+  | 'wedding_score'
 
 export interface WeddingMemberPermissions {
   full_access: boolean

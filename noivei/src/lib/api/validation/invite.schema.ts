@@ -16,6 +16,7 @@ export const AcceptInviteBodySchema = z
 // só o contrário; mantenha as duas listas em sincronia se um módulo for adicionado.
 export const WEDDING_MODULE_KEYS = [
   'checklist', 'convidados', 'financeiro', 'mesas', 'site', 'arquivos', 'presentes', 'padrinhos', 'checkin', 'album',
+  'wedding_score',
 ] as const
 
 export const WeddingMemberPermissionsSchema = z.object({

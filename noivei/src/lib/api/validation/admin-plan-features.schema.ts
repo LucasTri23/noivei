@@ -39,7 +39,7 @@ export const UpsertPlanFeatureValueSchema = z.object({
 // módulos do casamento são um conjunto fechado, ao contrário de group_key acima.
 export const WeddingModuleKeySchema = z.enum([
   'checklist', 'convidados', 'financeiro', 'mesas',
-  'site', 'arquivos', 'presentes', 'padrinhos', 'checkin', 'album',
+  'site', 'arquivos', 'presentes', 'padrinhos', 'checkin', 'album', 'wedding_score',
 ])
 
 export const UpsertPlanModuleAccessSchema = z.object({

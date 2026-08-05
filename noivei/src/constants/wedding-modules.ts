@@ -15,4 +15,5 @@ export const WEDDING_MODULE_LABELS: Record<WeddingModuleKey, string> = {
   padrinhos:  'Padrinhos & Entradas',
   checkin:    'Portaria',
   album:      'Álbum de fotos',
+  wedding_score: 'Wedding Score',
 }
