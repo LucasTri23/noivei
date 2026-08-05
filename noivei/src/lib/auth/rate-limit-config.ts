@@ -14,6 +14,22 @@ export const AUTH_RATE_LIMITS = {
     ip:         { max: 5, windowSeconds: 3600 },
     identifier: { max: 3, windowSeconds: 3600 },
   },
+  // Código curto (força bruta é viável em poucas tentativas) — limite um pouco
+  // mais generoso que login porque digitar errado por engano é comum, mas ainda
+  // assim baixo o bastante pra inviabilizar adivinhação.
+  verify_otp: {
+    ip:         { max: 10, windowSeconds: 900 },
+    identifier: { max: 6,  windowSeconds: 900 },
+  },
+  // Ação mais restrita do fluxo: dispara e-mail de verdade pra qualquer endereço
+  // informado, sem provar posse antes do envio — abusável como spam pra terceiro.
+  // `cooldown` é uma segunda chave própria (não consome as tentativas de
+  // `identifier`) só pra impedir cliques repetidos em sequência no mesmo e-mail.
+  resend_otp: {
+    ip:         { max: 5, windowSeconds: 3600 },
+    identifier: { max: 3, windowSeconds: 3600 },
+    cooldown:   { max: 1, windowSeconds: 60 },
+  },
 } as const
 
 export type AuthRateLimitAction = keyof typeof AUTH_RATE_LIMITS
