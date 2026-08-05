@@ -2,7 +2,7 @@ import Link from 'next/link'
 import DashboardPreview from '@/components/marketing/dashboard-preview'
 
 const FEATURES = [
-  'Timeline & checklist inteligente',
+  'Timeline & checklist personalizado',
   'Convidados, RSVP e mesas',
   'Orçamento sob controle',
 ]
