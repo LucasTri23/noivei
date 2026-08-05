@@ -11,9 +11,24 @@ import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 import DatePicker from '@/components/ui/date-picker'
 import CurrencyInput from '@/components/ui/currency-input'
+import Modal from '@/components/ui/modal'
 import { DEFAULT_RSVP_MESSAGE_TEMPLATE, fillRsvpMessageTemplate } from '@/lib/rsvp/build-whatsapp-link'
 import { recalculateChecklistDueDates } from '@/lib/checklist/generate'
 import type { WeddingStyle } from '@/types/database'
+
+// Limite de alterações de wedding_date, forçado de verdade no banco (trigger
+// fn_enforce_wedding_date_change_limit, ver migration 20260805000016) — este
+// formulário grava direto no Supabase via RLS, sem Route Handler no meio, então
+// qualquer trava só aqui seria cosmética. O que este componente faz é só
+// refletir o estado (contador, campo desabilitado, aviso na penúltima troca)
+// pra dar um feedback melhor do que deixar o usuário descobrir o limite só
+// quando o UPDATE for rejeitado pelo trigger.
+const WEDDING_DATE_CHANGE_LIMIT = 3
+
+// Precisa bater com a mensagem exata que o trigger levanta (RAISE EXCEPTION) —
+// usado só pra reconhecer ESSE erro específico e trocar por um toastError
+// específico, distinto do fallback genérico usado pra qualquer outra falha.
+const WEDDING_DATE_LIMIT_ERROR_MARKER = 'Limite de alterações da data do casamento'
 
 const STYLE_OPTIONS: { value: WeddingStyle; label: string }[] = [
   { value: 'rustico',     label: 'Rústico' },
@@ -48,6 +63,7 @@ interface WeddingDataFormProps {
     budget:       number | null
     style:        WeddingStyle | null
     rsvp_message_template: string | null
+    wedding_date_changed_count: number
   }
 }
 
@@ -71,6 +87,11 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
   const [loading, setLoading]         = useState(false)
   const showSpinner = useDelayedLoading(loading)
 
+  // Dados aguardando confirmação no modal de "última alteração" — só existe entre o
+  // usuário clicar "Salvar alterações" (interceptado, ver onValidSubmit) e ele
+  // confirmar ou cancelar no modal. null quando o modal está fechado.
+  const [pendingData, setPendingData] = useState<WeddingDataFields | null>(null)
+
   const { register, handleSubmit, control, formState: { errors } } = useForm<WeddingDataFields>({
     resolver: zodResolver(WeddingDataSchema),
     defaultValues: {
@@ -87,7 +108,13 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
 
   const messageTemplate = useWatch({ control, name: 'rsvp_message_template' })
 
-  async function onSubmit(data: WeddingDataFields) {
+  const changedCount = initial.wedding_date_changed_count
+  const dateLimitReached = changedCount >= WEDDING_DATE_CHANGE_LIMIT
+  // A PRÓXIMA troca (se acontecer) seria a última permitida — é quando vale
+  // avisar antes de gravar, não depois.
+  const isLastAllowedChange = changedCount === WEDDING_DATE_CHANGE_LIMIT - 1
+
+  async function saveWedding(data: WeddingDataFields) {
     setLoading(true)
 
     const brideName = data.bride_name?.trim() || null
@@ -112,7 +139,15 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
 
     if (error) {
       setLoading(false)
-      toastError('Não foi possível salvar. Tente novamente.')
+      // O trigger fn_enforce_wedding_date_change_limit (migration 20260805000016) só
+      // deveria disparar aqui numa corrida rara — o campo já vem desabilitado quando
+      // dateLimitReached. Reconhece essa mensagem específica pra dar um aviso amigável
+      // em vez de deixar vazar o erro cru do Postgres via toastError.
+      if (error.message.includes(WEDDING_DATE_LIMIT_ERROR_MARKER)) {
+        toastError('Você já usou as 3 alterações permitidas para a data do casamento.')
+      } else {
+        toastError('Não foi possível salvar. Tente novamente.')
+      }
       return
     }
 
@@ -142,8 +177,33 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
     router.refresh()
   }
 
+  // Gate de submit: se esta seria a ÚLTIMA troca permitida da data E a data
+  // realmente mudou em relação ao valor inicial, intercepta e pede confirmação
+  // antes de gravar — depois de confirmar, não tem mais volta (o trigger passa a
+  // rejeitar qualquer troca seguinte).
+  async function onValidSubmit(data: WeddingDataFields) {
+    const dateChanged = (data.wedding_date || null) !== (initial.wedding_date || null)
+    if (isLastAllowedChange && dateChanged) {
+      setPendingData(data)
+      return
+    }
+    await saveWedding(data)
+  }
+
+  async function handleConfirmDateChange() {
+    if (!pendingData) return
+    const data = pendingData
+    setPendingData(null)
+    await saveWedding(data)
+  }
+
+  function handleCancelDateChange() {
+    setPendingData(null)
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <>
+    <form onSubmit={handleSubmit(onValidSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))' }}>
         <div style={fieldWrapStyle}>
           <label style={labelStyle} htmlFor="bride_name">Nome da noiva</label>
@@ -169,9 +229,15 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
                 value={field.value ?? ''}
                 onChange={field.onChange}
                 placeholder="Selecione a data"
+                disabled={dateLimitReached}
               />
             )}
           />
+          <p style={{ fontSize: '12px', color: dateLimitReached ? '#C0553F' : 'var(--muted-fg)', margin: 0 }}>
+            {dateLimitReached
+              ? 'Você já usou as 3 alterações permitidas para a data do casamento.'
+              : `Alterações usadas: ${changedCount} de ${WEDDING_DATE_CHANGE_LIMIT}`}
+          </p>
         </div>
         <div style={fieldWrapStyle}>
           <label style={labelStyle} htmlFor="style">Estilo do casamento</label>
@@ -251,5 +317,42 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
         {loading ? 'Salvando…' : 'Salvar alterações'}
       </button>
     </form>
+
+    <Modal open={pendingData !== null} onClose={handleCancelDateChange} title="Última alteração de data">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: 0 }}>
+          Esta será sua última alteração possível para a data do casamento. Depois de confirmar, você não
+          poderá mais alterá-la. Deseja continuar?
+        </p>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={handleCancelDateChange}
+            disabled={loading}
+            style={{
+              background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+              fontWeight: 600, fontSize: '14px', cursor: loading ? 'not-allowed' : 'pointer', padding: '10px 14px',
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmDateChange}
+            disabled={loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--wedding-color)', color: '#fff', border: 'none',
+              borderRadius: '12px', padding: '10px 18px',
+              fontWeight: 600, fontSize: '14px',
+              cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {showSpinner && <Spinner size={15} color="#fff" />} {loading ? 'Salvando…' : 'Confirmar alteração'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+    </>
   )
 }

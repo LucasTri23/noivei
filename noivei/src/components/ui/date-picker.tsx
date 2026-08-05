@@ -7,6 +7,7 @@ interface DatePickerProps {
   value:        string // 'YYYY-MM-DD' ou ''
   onChange:     (value: string) => void
   placeholder?: string
+  disabled?:    boolean
 }
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -54,7 +55,7 @@ const navBtnStyle: React.CSSProperties = {
   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
 
-export default function DatePicker({ id, value, onChange, placeholder }: DatePickerProps) {
+export default function DatePicker({ id, value, onChange, placeholder, disabled }: DatePickerProps) {
   const selected = parseIso(value)
   const [open, setOpen]         = useState(false)
   const [viewDate, setViewDate] = useState(() => selected ?? new Date())
@@ -80,6 +81,7 @@ export default function DatePicker({ id, value, onChange, placeholder }: DatePic
   const POPOVER_WIDTH = 272
 
   function toggleOpen() {
+    if (disabled) return
     if (!open) {
       setViewDate(selected ?? new Date())
       const rect = wrapRef.current?.getBoundingClientRect()
@@ -101,7 +103,19 @@ export default function DatePicker({ id, value, onChange, placeholder }: DatePic
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <button type="button" id={id} onClick={toggleOpen} style={triggerStyle}>
+      <button
+        type="button"
+        id={id}
+        onClick={toggleOpen}
+        disabled={disabled}
+        aria-disabled={disabled}
+        style={{
+          ...triggerStyle,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.6 : 1,
+          background: disabled ? 'var(--wedding-color-subtle)' : triggerStyle.background,
+        }}
+      >
         <span style={{ color: selected ? 'var(--fg)' : '#B8A48E' }}>
           {selected
             ? selected.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })

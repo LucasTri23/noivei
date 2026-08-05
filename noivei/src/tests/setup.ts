@@ -11,7 +11,7 @@ vi.mock('@/lib/integrations/posthog/server', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  useRouter:     vi.fn(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() })),
+  useRouter:     vi.fn(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), refresh: vi.fn() })),
   usePathname:   vi.fn(() => '/'),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }))

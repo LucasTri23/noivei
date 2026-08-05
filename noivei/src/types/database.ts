@@ -48,6 +48,7 @@ export interface Wedding {
   groom_entrance_position: number
   bride_entrance_position: number
   wedding_date:   string
+  wedding_date_changed_count: number
   venue:          string | null
   city:           string | null
   guest_limit:    number
@@ -378,6 +379,10 @@ export interface WeddingInvite {
   accepted_by: string | null
   accepted_at: string | null
   permissions: WeddingMemberPermissions
+  // NULL = qualquer conta autenticada pode aceitar (convite legado ou dono optou por
+  // não restringir). Preenchido = só a conta com este e-mail (normalizado) pode
+  // aceitar (SEC-003, ver accept/route.ts).
+  invited_email: string | null
   created_at:  string
 }
 

@@ -16,7 +16,7 @@ export default async function DadosDoCasamentoPage() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id, bride_name, groom_name, wedding_date, venue, city, budget, style, rsvp_message_template')
+    .select('id, bride_name, groom_name, wedding_date, venue, city, budget, style, rsvp_message_template, wedding_date_changed_count')
     .eq('id', userWedding.id)
     .maybeSingle()
 
@@ -49,6 +49,7 @@ export default async function DadosDoCasamentoPage() {
             budget:       wedding.budget,
             style:        wedding.style,
             rsvp_message_template: wedding.rsvp_message_template,
+            wedding_date_changed_count: wedding.wedding_date_changed_count,
           }}
         />
       </div>
