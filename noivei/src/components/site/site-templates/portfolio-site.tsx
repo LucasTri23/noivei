@@ -692,7 +692,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
             <LivePhotoGallery
               slug={slug}
               emptyTitle="O mural ainda está vazio"
-              emptyMessage="Volte no dia do casamento — os convidados poderão enviar fotos ao vivo pelo QR code."
+              emptyMessage="Volte no dia do casamento (ou no dia seguinte) — os convidados poderão enviar fotos ao vivo pelo QR code."
             />
             <div style={{ textAlign: 'center', marginTop: '22px' }}>
               <a href={`/mural/${slug}`} style={{ ...pillOutlineButtonStyle, border: 'none', background: 'none', padding: 0, color: 'var(--wedding-color-dark)' }}>

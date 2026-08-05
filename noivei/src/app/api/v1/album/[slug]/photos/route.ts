@@ -2,7 +2,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { AlbumSlugSchema } from '@/lib/api/validation/album.schema'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
 import { getAlbumBySlug } from '@/lib/album/get-album-by-slug'
-import { isTodayWeddingDay } from '@/lib/album/wedding-day'
+import { isAlbumUploadWindowOpen } from '@/lib/album/wedding-day'
 import { checkStorageLimit } from '@/lib/billing/check-limit'
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
 import { createSupabaseService } from '@/lib/supabase/service'
@@ -56,10 +56,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
 
     // Nunca confia no client pra isso: mesmo que a UI só mostre o formulário
-    // no dia do casamento, alguém poderia chamar esta rota direto fora da
-    // janela (antes ou depois) com um contributor_id capturado antes.
-    if (!isTodayWeddingDay(album.weddingDate)) {
-      return err(403, 'NOT_WEDDING_DAY', 'O mural só recebe fotos no dia do casamento.')
+    // dentro da janela (dia do casamento + dia seguinte), alguém poderia
+    // chamar esta rota direto fora dela (antes ou depois) com um
+    // contributor_id capturado antes.
+    if (!isAlbumUploadWindowOpen(album.weddingDate)) {
+      return err(403, 'NOT_WEDDING_DAY', 'O mural só recebe fotos no dia do casamento e no dia seguinte.')
     }
 
     const weddingLimit = await checkRateLimit(supabase, `album-photo:wedding:${album.weddingId}`, 300, 3600)

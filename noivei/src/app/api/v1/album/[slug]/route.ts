@@ -1,7 +1,7 @@
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { AlbumSlugSchema } from '@/lib/api/validation/album.schema'
 import { getAlbumBySlug } from '@/lib/album/get-album-by-slug'
-import { isTodayWeddingDay } from '@/lib/album/wedding-day'
+import { isAlbumUploadWindowOpen } from '@/lib/album/wedding-day'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 interface RouteContext {
@@ -31,10 +31,11 @@ export async function GET(_req: Request, { params }: RouteContext) {
     return ok({
       couple_names:             album.coupleNames,
       wedding_date:             album.weddingDate,
-      // Só o dia do casamento (fuso America/Sao_Paulo) recebe cadastro/upload
-      // — ver checagem de verdade em POST register/photos; isto aqui é só pro
-      // client decidir o que mostrar sem precisar tentar postar pra descobrir.
-      is_wedding_day:           isTodayWeddingDay(album.weddingDate),
+      // Só o dia do casamento e o dia seguinte (fuso America/Sao_Paulo) recebem
+      // cadastro/upload — ver checagem de verdade em POST register/photos;
+      // isto aqui é só pro client decidir o que mostrar sem precisar tentar
+      // postar pra descobrir.
+      is_wedding_day:           isAlbumUploadWindowOpen(album.weddingDate),
       wedding_color:            album.weddingColor,
       wedding_color_secondary:  album.weddingColorSecondary,
       module_enabled:           album.moduleEnabled,

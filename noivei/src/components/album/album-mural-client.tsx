@@ -15,12 +15,13 @@ interface AlbumMuralClientProps {
   // só usada aqui pra formatar a mensagem "volte no dia X"; a decisão de
   // liberar ou não o formulário já vem pronta em isWeddingDay.
   weddingDate:  string | null
-  // Calculado no server (ver src/lib/album/wedding-day.ts) a partir do fuso
-  // America/Sao_Paulo — o client NUNCA recalcula isso sozinho. É só pra
-  // decidir o que MOSTRAR; a validação de verdade é sempre no servidor em
-  // cada POST (register/photos), então mesmo que este valor fique "stale"
-  // numa aba aberta desde a véspera, o pior caso é a UI mostrar o formulário
-  // e o POST devolver NOT_WEDDING_DAY.
+  // Calculado no server (isAlbumUploadWindowOpen, ver src/lib/album/wedding-day.ts)
+  // a partir do fuso America/Sao_Paulo — verdadeiro no dia do casamento E no dia
+  // seguinte. O client NUNCA recalcula isso sozinho. É só pra decidir o que
+  // MOSTRAR; a validação de verdade é sempre no servidor em cada POST
+  // (register/photos), então mesmo que este valor fique "stale" numa aba aberta
+  // desde a véspera, o pior caso é a UI mostrar o formulário e o POST devolver
+  // NOT_WEDDING_DAY.
   isWeddingDay: boolean
 }
 
@@ -245,10 +246,10 @@ export default function AlbumMuralClient({ slug, coupleNames, weddingDate, isWed
         </div>
       </div>
 
-      {/* Formulário de cadastro / envio de foto — só existe NO dia do
-          casamento; fora dele, nem quem já tinha se cadastrado num dia
-          anterior (contributor_id sobrevive no sessionStorage) consegue ver
-          o formulário de upload de novo. */}
+      {/* Formulário de cadastro / envio de foto — só existe no dia do
+          casamento e no dia seguinte; fora dessa janela, nem quem já tinha se
+          cadastrado num dia anterior (contributor_id sobrevive no
+          sessionStorage) consegue ver o formulário de upload de novo. */}
       <div ref={formSectionRef} style={{ maxWidth: '480px', margin: '0 auto', padding: '40px 24px 8px' }}>
         {!isWeddingDay ? (
           <div
@@ -258,7 +259,7 @@ export default function AlbumMuralClient({ slug, coupleNames, weddingDate, isWed
             <div style={{ fontSize: '32px' }}>📅</div>
             <p style={{ fontSize: '14.5px', color: 'var(--fg)', margin: 0, lineHeight: 1.6, fontWeight: 600 }}>
               {formatWeddingDateLong(weddingDate)
-                ? `O mural abre no dia do casamento — ${formatWeddingDateLong(weddingDate)}. Volte nesse dia pra postar suas fotos!`
+                ? `O mural fica disponível no dia do casamento — ${formatWeddingDateLong(weddingDate)} — e no dia seguinte. Volte nessa janela pra postar suas fotos!`
                 : 'O mural ainda não está disponível — o casal não definiu a data do casamento.'}
             </p>
           </div>

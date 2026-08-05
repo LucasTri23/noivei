@@ -7,7 +7,8 @@ export interface AlbumInfo {
   weddingId:    string
   coupleNames:  string
   // yyyy-mm-dd (coluna DATE) ou null se o casal ainda não definiu a data —
-  // usado por isTodayWeddingDay pra travar cadastro/upload ao dia certo.
+  // usado por isAlbumUploadWindowOpen pra travar cadastro/upload à janela certa
+  // (dia do casamento + dia seguinte).
   weddingDate:  string | null
   weddingColor: string
   // Personalização de cor é recurso pago — Gratuito nunca sobrescreve o

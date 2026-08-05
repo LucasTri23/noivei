@@ -492,7 +492,7 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
                 limit={8}
                 columnsClassName="columns-2 sm:columns-4"
                 emptyTitle="O mural ainda está vazio"
-                emptyMessage="Volte no dia do casamento — os convidados poderão enviar fotos ao vivo pelo QR code."
+                emptyMessage="Volte no dia do casamento (ou no dia seguinte) — os convidados poderão enviar fotos ao vivo pelo QR code."
               />
             </div>
             <div style={{ textAlign: 'center', marginTop: '18px' }}>
