@@ -33,11 +33,51 @@ precisar criar conta.
 - **Contas sincronizadas** — o dono do casamento pode convidar outras pessoas
   (cerimonialista, familiares etc.) para colaborar, com permissão configurável por
   módulo.
-- **Planos e cobrança** — Gratuito, Premium e Premium Plus, com limites de
-  convidados/armazenamento/entradas e módulos liberados por plano (ambos
-  configuráveis pelo admin, sem deploy). Cobrança recorrente ou única via Mercado
-  Pago, com cupom de desconto (percentual, fixo ou dias grátis) e cancelamento de
-  assinatura pelo próprio casal.
+- **Planos e cobrança** — Gratuito, Premium e Exclusivo (nome real em `plans.name`;
+  "Premium Plus" é só o `plan_id` interno), com limites de convidados/armazenamento/
+  entradas e módulos liberados por plano (ambos configuráveis pelo admin, sem
+  deploy — ver tabela abaixo). Cobrança recorrente ou única via Mercado Pago, com
+  cupom de desconto (percentual, fixo ou dias grátis) e cancelamento de assinatura
+  pelo próprio casal.
+
+#### Diferença real entre os planos
+
+Valores extraídos diretamente de `plan_limits`/`plan_module_access` (não da vitrine
+de marketing) — são os números que o produto de fato aplica hoje. Preço e nomes
+exatos, catálogo completo de recursos numéricos e liberação de módulo são sempre
+editáveis sem deploy em `/admin/planos` e `/admin/planos/modulos`; a tabela abaixo
+reflete a configuração de fábrica (seed das migrations), que pode já ter sido
+alterada pelo admin.
+
+| Recurso | Gratuito | Premium | Exclusivo |
+|---|---|---|---|
+| Preço | R$ 0 | R$ 29,90/mês ou R$ 99,90 único | R$ 49,90/mês ou R$ 149,90 único |
+| Convidados | até 100 | até 500 | até 999 |
+| Colaboradores (contas sincronizadas) | 1 (só o dono) | até 5 | até 10 |
+| Armazenamento (Central de Arquivos) | 100 MB | 5 GB | 20 GB |
+| Lançamentos financeiros | até 15 | ilimitado | ilimitado |
+| Cotação de fornecedores / meta de gastos por categoria (Financeiro) | ❌ | ✅ | ✅ |
+| Padrinhos/madrinhas cadastráveis | até 2 | ilimitado | ilimitado |
+| Checklist, Timeline, Convidados, Padrinhos | ✅ | ✅ | ✅ |
+| Site do casal (`/[slug]`), Lista de presentes, Mesas | ❌ | ✅ | ✅ |
+| Estilo de site "Portfólio" (alternativa ao Clássico) | ❌ | ❌ | ✅¹ |
+| Álbum de fotos (mural via QR code) | ❌ | ❌ | ✅¹ |
+| Check-in no dia (Portaria/QR) | ❌ | ❌ | ✅¹ |
+| Wedding Score | ❌ | ✅ | ✅ |
+| Exportação completa de dados (LGPD) | ✅ | ✅ | ✅ |
+
+¹ Módulo opt-in: por padrão de fábrica só o plano ativo mais caro o recebe
+(`premium_plus_once`, especificamente — não o `premium_plus_monthly` — a menos que
+o admin libere manualmente para outros planos em `/admin/planos/modulos`).
+
+Recursos que aparecem na vitrine de marketing (`plan_feature_*`, editável em
+`/admin/planos`) mas que **não têm implementação correspondente no código hoje** —
+revisar antes de anunciar como diferencial real: sugestões/assistente de IA
+(nenhum código de IA está em produção — `src/lib/ai/` é reservado pra uma fase
+futura), backup automático/avançado, notificações push, exportação em PDF/Excel
+(a exportação real é um JSON completo, disponível pra qualquer plano, não uma
+distinção paga), e "distribuição automática" de mesas (a organização de mesas é
+manual, por arrastar-e-soltar ou seletor).
 
 ### Área pública (sem login)
 
@@ -57,13 +97,20 @@ precisar criar conta.
   destaque) e limites numéricos por plano (convidados, armazenamento etc.), tudo
   editável sem deploy.
 - **Módulos por plano** — matriz que define quais módulos (checklist, convidados,
-  financeiro, mesas, site, arquivos, presentes, padrinhos) cada plano libera de
-  verdade — não é só a vitrine de comparação, é o controle de acesso em si.
+  financeiro, mesas, site, arquivos, presentes, padrinhos, checkin, album) cada
+  plano libera de verdade — não é só a vitrine de comparação, é o controle de
+  acesso em si. `checkin` e `album` são opt-in por natureza: nunca liberados
+  automaticamente por preço, mesmo em plano pago (ver seed em
+  `supabase/migrations/20260801000001_add-checkin-module.sql` e
+  `20260803000001_add-album-module.sql`).
 - **Tabela de comparação** — o conteúdo de marketing exibido lado a lado em
-  `/perfil/planos`.
+  `/perfil/planos`. É texto livre editável pelo admin, então pode divergir do que
+  o código de fato aplica — ver a ressalva na seção "Diferença real entre os
+  planos" acima antes de tratar essa tabela como fonte da verdade.
 - **Cupons** — percentual, valor fixo ou dias grátis de um plano.
-- **Configurações** — parâmetros globais, hoje a comissão da plataforma sobre
-  presente pago pelo app (0–10%).
+- **Configurações** — parâmetros globais: comissão da plataforma sobre presente
+  pago pelo app (0–10%) e prazo de expurgo definitivo de conta após exclusão
+  (padrão 30 dias, configurável entre 7 e 365).
 - **Usuários** — listagem/gestão de contas.
 
 ## Stack técnica
@@ -188,12 +235,14 @@ uma ferramenta de analytics/marketing for adicionada no futuro.
 ### Retenção e exclusão
 
 - Exclusão de conta é **soft delete** (`weddings.deleted_at`): os dados somem do
-  produto na hora, mas ficam recuperáveis por até 30 dias mediante contato com o
-  suporte.
-- Após 30 dias, a rota agendada `/api/cron/purge-accounts` (Vercel Cron, diária)
-  primeiro apaga os **arquivos de verdade no Storage** (fotos, documentos,
-  contratos — `storage.objects` não tem cascade com as tabelas da aplicação, então
-  isso precisa ser feito à parte) e só depois chama
+  produto na hora, mas ficam recuperáveis por um prazo mediante contato com o
+  suporte — hoje 30 dias por padrão, configurável em `/admin/configuracoes`
+  (`app_settings.account_purge_days`, entre 7 e 365 dias).
+- Depois desse prazo, a rota agendada `/api/cron/purge-accounts` (Vercel Cron,
+  diária) primeiro apaga os **arquivos de verdade no Storage** de todos os buckets
+  do casamento (fotos de capa/galeria, arquivos da Central de Arquivos, fotos de
+  presente e fotos do álbum/mural — `storage.objects` não tem cascade com as
+  tabelas da aplicação, então isso precisa ser feito à parte) e só depois chama
   `fn_purge_soft_deleted_accounts()` pra apagar o usuário em `auth.users`; como
   toda tabela do casamento referencia essa conta em cascata (`ON DELETE CASCADE`),
   o restante (checklist, convidados, financeiro, site, lista de presentes etc.) é
