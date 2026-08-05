@@ -9,12 +9,15 @@
 // configurar a env var CRON_SECRET no projeto, nenhum código extra é necessário
 // pro agendamento em si.
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { err, handleApiError, ok } from '@/lib/api/response'
 import { isPaidPlan } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
-import { sendEmail } from '@/lib/email/send-email'
+import { sendEmail, type SendEmailAttachment } from '@/lib/email/send-email'
 import { weddingMilestoneTemplate, type WeddingMilestone } from '@/lib/email/templates/wedding-milestone-template'
+import { renderWeddingSummaryPdf, type WeddingSummaryPdfData, type WeddingSummaryScore } from '@/lib/pdf/wedding-summary-pdf'
 import { createSupabaseService } from '@/lib/supabase/service'
+import type { GuestStatus } from '@/types/database'
 
 // yyyy-mm-dd, yyyy-mm-dd → diferença inteira de dias (toISO - fromISO) usando
 // Date.UTC pros dois lados — as strings já são datas puras (America/Sao_Paulo,
@@ -37,6 +40,130 @@ function resolveMilestone(daysUntilWedding: number): WeddingMilestone | null {
     case 0:  return 'wedding_day'
     case -1: return 'day_after'
     default: return null
+  }
+}
+
+// Módulos do Wedding Score, na ordem exibida no PDF — mesma ordem de
+// `wedding-score/calculator.ts` (checklist, financeiro, convidados, rsvp, mesas,
+// presentes, arquivos), pra o resumo bater com o que o casal vê no Dashboard.
+const SCORE_MODULE_ORDER = ['checklist', 'financeiro', 'convidados', 'rsvp', 'mesas', 'presentes', 'arquivos'] as const
+
+// Busca os dados "crus" do resumo do casamento (checklist, convidados, financeiro,
+// presentes, arquivos) pro PDF anexado no e-mail do marco `day_after`. Se o módulo
+// Wedding Score estiver liberado (`fn_has_module_access`) e já tiver sido
+// calculado alguma vez, reaproveita o resultado já persistido em
+// `weddings.wedding_score` / `wedding_score_history` — não recalcula aqui, isso é
+// responsabilidade de `wedding-score/recalculate.ts` (chamado pelo Dashboard).
+// Sempre filtrado por `weddingId`: nunca mistura dado de outro casamento.
+async function buildWeddingSummaryPdfData(
+  supabase:       SupabaseClient,
+  weddingId:      string,
+  userId:         string,
+  coupleNames:    string,
+  weddingDateISO: string,
+): Promise<WeddingSummaryPdfData> {
+  const [
+    { data: checklistItems },
+    { data: guests },
+    { data: wedding },
+    { data: financialEntries },
+    { data: giftItems },
+    { count: filesCount },
+    { data: hasScoreAccess },
+  ] = await Promise.all([
+    supabase
+      .from('checklist_items')
+      .select('completed')
+      .eq('wedding_id', weddingId)
+      .eq('is_archived', false)
+      .eq('is_dismissed', false),
+    supabase
+      .from('guests')
+      .select('status')
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('weddings')
+      .select('budget, wedding_score, score_calculated_at')
+      .eq('id', weddingId)
+      .maybeSingle(),
+    supabase
+      .from('financial_entries')
+      .select('total_amount')
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('gift_registry_items')
+      .select('is_purchased')
+      .eq('wedding_id', weddingId),
+    supabase
+      .from('wedding_files')
+      .select('id', { count: 'exact', head: true })
+      .eq('wedding_id', weddingId),
+    supabase.rpc('fn_has_module_access', { p_wedding_id: weddingId, p_user_id: userId, p_module: 'wedding_score' }),
+  ])
+
+  const checklist = (checklistItems ?? []) as { completed: boolean }[]
+  const guestList = (guests ?? []) as { status: GuestStatus }[]
+  const entries   = (financialEntries ?? []) as { total_amount: number }[]
+  const giftList  = (giftItems ?? []) as { is_purchased: boolean }[]
+
+  const budgetCents     = (wedding?.budget as number | null | undefined) ?? null
+  const totalSpentCents = entries.reduce((sum, entry) => sum + (entry.total_amount ?? 0), 0)
+
+  let score: WeddingSummaryScore | null = null
+
+  // "Dados já calculados": só monta o card de score se o módulo estiver liberado
+  // E já existir um cálculo persistido (score_calculated_at) — sem os dois, o
+  // resumo segue sem essa seção, mas nunca quebra por causa dela.
+  if (hasScoreAccess && wedding?.score_calculated_at) {
+    const [{ data: historyRow }, { data: weightRows }] = await Promise.all([
+      supabase
+        .from('wedding_score_history')
+        .select('checklist_pct, financeiro_pct, convidados_pct, rsvp_pct, mesas_pct, presentes_pct, arquivos_pct')
+        .eq('wedding_id', weddingId)
+        .order('recorded_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('wedding_score_module_weights')
+        .select('module_key, label'),
+    ])
+
+    if (historyRow) {
+      const labelByModule = Object.fromEntries(
+        ((weightRows ?? []) as { module_key: string; label: string }[]).map((row) => [row.module_key, row.label]),
+      )
+      const pctByModule = historyRow as Record<string, number>
+
+      score = {
+        total: (wedding.wedding_score as number | null) ?? 0,
+        breakdown: SCORE_MODULE_ORDER.map((moduleKey) => ({
+          label: labelByModule[moduleKey] ?? moduleKey,
+          pct:   pctByModule[`${moduleKey}_pct`] ?? 0,
+        })),
+      }
+    }
+  }
+
+  return {
+    coupleNames,
+    weddingDate: weddingDateISO,
+    checklist: {
+      completed: checklist.filter((item) => item.completed).length,
+      total:     checklist.length,
+    },
+    guests: {
+      total:     guestList.length,
+      confirmed: guestList.filter((guest) => guest.status === 'confirmado').length,
+      declined:  guestList.filter((guest) => guest.status === 'recusado').length,
+      pending:   guestList.filter((guest) => guest.status === 'pendente').length,
+    },
+    financial: { budgetCents, totalSpentCents },
+    gifts: {
+      purchased: giftList.filter((item) => item.is_purchased).length,
+      total:     giftList.length,
+    },
+    files: { count: filesCount ?? 0 },
+    score,
   }
 }
 
@@ -102,7 +229,28 @@ export async function GET(req: Request) {
           milestone,
         })
 
-        await sendEmail({ to: ownerEmail, subject, html })
+        // Só o marco day_after leva anexo — geração de PDF é uma operação mais
+        // pesada, isolada num try/catch próprio: se falhar por qualquer motivo,
+        // o e-mail ainda deve ser enviado (sem o anexo), nunca cancelado por
+        // causa disso.
+        let attachments: SendEmailAttachment[] | undefined
+        if (milestone === 'day_after') {
+          try {
+            const summaryData = await buildWeddingSummaryPdfData(
+              supabase,
+              wedding.id,
+              wedding.user_id,
+              wedding.couple_names,
+              wedding.wedding_date,
+            )
+            const pdfBuffer = await renderWeddingSummaryPdf(summaryData)
+            attachments = [{ filename: 'resumo-casamento.pdf', content: pdfBuffer }]
+          } catch (pdfError) {
+            console.error(`[cron/notify-wedding-milestones] falha ao gerar PDF de resumo do casamento ${wedding.id}:`, pdfError)
+          }
+        }
+
+        await sendEmail({ to: ownerEmail, subject, html, attachments })
         sent += 1
       } catch (error) {
         console.error(`[cron/notify-wedding-milestones] falha ao processar casamento ${wedding.id}:`, error)

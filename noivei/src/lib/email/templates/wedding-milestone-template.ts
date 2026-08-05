@@ -77,7 +77,8 @@ export function weddingMilestoneTemplate({ coupleNames, milestone }: WeddingMile
           title: 'Parabéns pelo casamento!',
           bodyHtml: `
             <p style="margin:0 0 8px;font-size:14px;line-height:1.6;">Olá, ${coupleNames}!</p>
-            <p style="margin:0;font-size:14px;line-height:1.6;">Parabéns pelo casamento! Esperamos que tenha sido um dia inesquecível. Se quiserem reviver os melhores momentos, deem uma olhada nas fotos que os convidados enviaram para o álbum do casamento.</p>
+            <p style="margin:0 0 8px;font-size:14px;line-height:1.6;">Parabéns pelo casamento! Esperamos que tenha sido um dia inesquecível. Se quiserem reviver os melhores momentos, deem uma olhada nas fotos que os convidados enviaram para o álbum do casamento.</p>
+            <p style="margin:0;font-size:14px;line-height:1.6;">Preparamos também um resumo do planejamento de vocês em PDF, anexado a este e-mail.</p>
           `,
           ctaLabel: 'Ver álbum de fotos',
           ctaUrl:   `${APP_URL}/album`,

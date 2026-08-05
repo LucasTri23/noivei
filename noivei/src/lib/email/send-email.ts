@@ -17,10 +17,18 @@
 
 import nodemailer from 'nodemailer'
 
+/** Mesmo shape aceito por `transporter.sendMail({ attachments })` do nodemailer. */
+export interface SendEmailAttachment {
+  filename: string
+  content:  Buffer | string
+}
+
 interface SendEmailParams {
   to:      string
   subject: string
   html:    string
+  /** Opcional — ex.: PDF de resumo do casamento no e-mail do marco `day_after`. */
+  attachments?: SendEmailAttachment[]
 }
 
 /**
@@ -30,7 +38,7 @@ interface SendEmailParams {
  * de dev sem .env), apenas loga um aviso e retorna — nenhuma feature de e-mail
  * pode quebrar o fluxo principal (RSVP, cron) só porque o SMTP não está disponível.
  */
-export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<void> {
+export async function sendEmail({ to, subject, html, attachments }: SendEmailParams): Promise<void> {
   const host     = process.env.EMAIL_SMTP_HOST
   const port     = process.env.EMAIL_SMTP_PORT
   const user     = process.env.EMAIL_SMTP_USER
@@ -49,5 +57,5 @@ export async function sendEmail({ to, subject, html }: SendEmailParams): Promise
     auth: { user, pass: password },
   })
 
-  await transporter.sendMail({ from, to, subject, html })
+  await transporter.sendMail({ from, to, subject, html, attachments })
 }
