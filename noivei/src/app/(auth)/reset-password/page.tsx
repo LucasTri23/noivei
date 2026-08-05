@@ -55,8 +55,8 @@ export default function ResetPasswordPage() {
     const supabase = createSupabaseBrowser()
     const { error } = await supabase.auth.updateUser({ password: data.password })
 
-    setLoading(false)
     if (error) {
+      setLoading(false)
       setServerError(
         error.message.includes('different from the old password')
           ? 'A nova senha precisa ser diferente da atual.'
@@ -64,6 +64,18 @@ export default function ResetPasswordPage() {
       )
       return
     }
+
+    // SEC-007: derruba as demais sessões do usuário (outros dispositivos/navegadores
+    // logados com a senha antiga) — mesmo mecanismo usado após troca de senha
+    // autenticada. Não bloqueia a tela de sucesso se essa chamada falhar: a senha já
+    // foi trocada de fato, e a rota nunca lança por conta disso.
+    try {
+      await fetch('/api/v1/auth/invalidate-other-sessions', { method: 'POST' })
+    } catch {
+      // ignorado de propósito — ver comentário acima
+    }
+
+    setLoading(false)
     setDone(true)
   }
 

@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import PasswordInput from '@/components/auth/password-input'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import Spinner from '@/components/ui/spinner'
 
 const PasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Informe sua senha atual'),
   password:        z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
   confirmPassword: z.string().min(8, 'Confirme sua nova senha'),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -18,16 +19,19 @@ const PasswordSchema = z.object({
 })
 type PasswordFields = z.infer<typeof PasswordSchema>
 
-const inputStyle: React.CSSProperties = {
-  border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
-  fontSize: '15px', color: 'var(--fg)', background: '#FFFFFF', outline: 'none', width: '100%',
-}
 const labelStyle: React.CSSProperties = {
   fontSize: '13px', fontWeight: 600, color: 'var(--fg)',
 }
 
+interface ApiErrorBody {
+  error?: { message?: string }
+}
+
+// SEC-007: a troca de senha agora acontece nesta rota nova (não mais via
+// `supabase.auth.updateUser` direto no client) porque revalidar a senha atual e
+// derrubar as demais sessões precisam do service role — só o servidor tem acesso.
 export default function SecurityForm() {
-  const [loading, setLoading]         = useState(false)
+  const [loading, setLoading] = useState(false)
   const showSpinner = useDelayedLoading(loading)
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<PasswordFields>({
@@ -37,47 +41,41 @@ export default function SecurityForm() {
   async function onSubmit(data: PasswordFields) {
     setLoading(true)
 
-    const supabase = createSupabaseBrowser()
-    const { error } = await supabase.auth.updateUser({ password: data.password })
+    const response = await fetch('/api/v1/auth/change-password', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ currentPassword: data.currentPassword, newPassword: data.password }),
+    })
 
     setLoading(false)
-    if (error) {
-      toastError(
-        error.message.includes('different from the old password')
-          ? 'A nova senha precisa ser diferente da atual.'
-          : 'Não foi possível alterar a senha. Tente novamente.',
-      )
+
+    if (!response.ok) {
+      const body = (await response.json()) as ApiErrorBody
+      toastError(body.error?.message ?? 'Não foi possível alterar a senha. Tente novamente.')
       return
     }
-    toastSuccess('Senha alterada com sucesso.')
+
+    toastSuccess('Sua senha foi alterada. As demais sessões foram encerradas por segurança.')
     reset()
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <label style={labelStyle} htmlFor="current-password">Senha atual</label>
+        <PasswordInput id="current-password" placeholder="Sua senha atual" register={register('currentPassword')} />
+        {errors.currentPassword && <p style={{ fontSize: '12px', color: '#C0553F', margin: 0 }}>{errors.currentPassword.message}</p>}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <label style={labelStyle} htmlFor="new-password">Nova senha</label>
-        <input
-          id="new-password"
-          {...register('password')}
-          type="password"
-          autoComplete="new-password"
-          placeholder="Mínimo de 8 caracteres"
-          style={inputStyle}
-        />
+        <PasswordInput id="new-password" placeholder="Mínimo de 8 caracteres" register={register('password')} />
         {errors.password && <p style={{ fontSize: '12px', color: '#C0553F', margin: 0 }}>{errors.password.message}</p>}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <label style={labelStyle} htmlFor="confirm-password">Confirmar nova senha</label>
-        <input
-          id="confirm-password"
-          {...register('confirmPassword')}
-          type="password"
-          autoComplete="new-password"
-          placeholder="Repita a nova senha"
-          style={inputStyle}
-        />
+        <PasswordInput id="confirm-password" placeholder="Repita a nova senha" register={register('confirmPassword')} />
         {errors.confirmPassword && <p style={{ fontSize: '12px', color: '#C0553F', margin: 0 }}>{errors.confirmPassword.message}</p>}
       </div>
 

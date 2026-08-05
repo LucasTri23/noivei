@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useForm } from 'react-hook-form'
 
+import PasswordInput from '@/components/auth/password-input'
 import CurrencyInput from '@/components/ui/currency-input'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
@@ -9,6 +11,10 @@ import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { GiftRegistryItem, GiftRegistryType } from '@/types/database'
+
+interface DisconnectMpFields {
+  currentPassword: string
+}
 
 interface MpAccountStatus {
   connected:    boolean
@@ -150,6 +156,9 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
   const [mpStatus, setMpStatus]       = useState<MpAccountStatus | null>(null)
   const [mpLoading, setMpLoading]     = useState(true)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false)
+  const { register: registerDisconnect, handleSubmit: handleDisconnectSubmit, reset: resetDisconnect } =
+    useForm<DisconnectMpFields>({ defaultValues: { currentPassword: '' } })
 
   const apiBase = `/api/v1/weddings/${weddingId}/gifts`
   const mpApiBase = `/api/v1/weddings/${weddingId}/gift-payments`
@@ -179,19 +188,32 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
     window.history.replaceState(null, '', window.location.pathname)
   }, [])
 
-  async function disconnectMpAccount() {
-    if (!window.confirm('Desconectar sua conta Mercado Pago? Os presentes pelo app param de funcionar até você conectar de novo.')) return
+  // SEC-009: desconectar exige senha atual, revalidada no servidor — mais simples
+  // que a exclusão de conta (reversível: dá pra conectar de novo), por isso sem
+  // texto de confirmação, só o modal de senha abaixo no lugar do antigo window.confirm.
+  function closeDisconnectModal() {
+    if (disconnecting) return
+    setDisconnectModalOpen(false)
+    resetDisconnect()
+  }
 
+  async function onDisconnectSubmit(data: DisconnectMpFields) {
     setDisconnecting(true)
-    const res = await fetch(`${mpApiBase}/disconnect`, { method: 'POST' })
+    const res = await fetch(`${mpApiBase}/disconnect`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ currentPassword: data.currentPassword }),
+    })
     setDisconnecting(false)
 
     if (!res.ok) {
-      toastError('Não foi possível desconectar a conta.')
+      toastError(await readApiError(res, 'Não foi possível desconectar a conta.'))
       return
     }
     setMpStatus({ connected: false, email: null, nickname: null, connected_at: null })
     toastSuccess('Conta Mercado Pago desconectada.')
+    setDisconnectModalOpen(false)
+    resetDisconnect()
   }
 
   const stats = {
@@ -411,14 +433,14 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
             <button
               type="button"
               disabled={disconnecting}
-              onClick={disconnectMpAccount}
+              onClick={() => setDisconnectModalOpen(true)}
               style={{
                 border: '1.5px solid #C0553F', background: 'transparent', color: '#C0553F',
                 borderRadius: '12px', padding: '10px 18px', fontWeight: 700, fontSize: '13.5px',
                 cursor: disconnecting ? 'not-allowed' : 'pointer', opacity: disconnecting ? 0.6 : 1, flexShrink: 0,
               }}
             >
-              {disconnecting ? 'Desconectando…' : 'Desconectar'}
+              Desconectar
             </button>
           ) : (
             <a
@@ -771,6 +793,53 @@ export default function GiftRegistryManager({ weddingId, initialItems }: GiftReg
               }}
             >
               {showGiveSpinner && <Spinner color="#fff" />} Confirmar
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal de reautenticação antes de desconectar o Mercado Pago (SEC-009) */}
+      <Modal open={disconnectModalOpen} onClose={closeDisconnectModal} title="Desconectar Mercado Pago">
+        <form onSubmit={handleDisconnectSubmit(onDisconnectSubmit)} className="flex flex-col gap-4">
+          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', margin: 0 }}>
+            Os presentes pelo app param de funcionar até você conectar de novo.
+          </p>
+          <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0 }}>
+            Por segurança, confirme sua identidade para continuar.
+          </p>
+          <div>
+            <label htmlFor="mp-disconnect-password" style={labelStyle}>Senha atual</label>
+            <PasswordInput
+              id="mp-disconnect-password"
+              placeholder="Sua senha atual"
+              register={registerDisconnect('currentPassword', { required: true })}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={closeDisconnectModal}
+              disabled={disconnecting}
+              style={{
+                background: 'transparent', color: 'var(--muted-fg)', border: 'none',
+                fontWeight: 600, fontSize: '14px', cursor: disconnecting ? 'not-allowed' : 'pointer', padding: '10px 14px',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={disconnecting}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: '#C0553F', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '10px 18px',
+                fontWeight: 700, fontSize: '14px',
+                cursor: disconnecting ? 'wait' : 'pointer', opacity: disconnecting ? 0.7 : 1,
+              }}
+            >
+              {disconnecting && <Spinner color="#fff" />} {disconnecting ? 'Desconectando…' : 'Desconectar'}
             </button>
           </div>
         </form>
