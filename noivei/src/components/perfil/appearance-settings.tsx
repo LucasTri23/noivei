@@ -260,7 +260,7 @@ export default function AppearanceSettings({ weddingId, weddingColor, weddingCol
               <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
             <span style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.5 }}>
-              Disponível nos planos <strong>Premium</strong> e <strong>Premium Plus</strong>.
+              Disponível nos planos <strong>Ideal</strong> e <strong>Exclusivo</strong>.
             </span>
           </div>
         )}

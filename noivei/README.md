@@ -33,11 +33,12 @@ precisar criar conta.
 - **Contas sincronizadas** — o dono do casamento pode convidar outras pessoas
   (cerimonialista, familiares etc.) para colaborar, com permissão configurável por
   módulo.
-- **Planos e cobrança** — Gratuito, Premium e Exclusivo (nome real em `plans.name`;
-  "Premium Plus" é só o `plan_id` interno), com limites de convidados/armazenamento/
-  entradas e módulos liberados por plano (ambos configuráveis pelo admin, sem
-  deploy — ver tabela abaixo). Cobrança recorrente ou única via Mercado Pago, com
-  cupom de desconto (percentual, fixo ou dias grátis) e cancelamento de assinatura
+- **Planos e cobrança** — Gratuito, Ideal e Exclusivo (nome real em `plans.name`;
+  `plan_id` interno continua `premium_*`/`premium_plus_*`, só o nome exibido mudou),
+  com limites de convidados/armazenamento/entradas e módulos liberados por plano
+  (ambos configuráveis pelo admin, sem deploy — ver tabela abaixo). Cobrança
+  recorrente ou única via Mercado Pago, com cupom de desconto (percentual, fixo ou
+  dias grátis) e cancelamento de assinatura
   pelo próprio casal.
 
 #### Diferença real entre os planos
@@ -49,9 +50,9 @@ editáveis sem deploy em `/admin/planos` e `/admin/planos/modulos`; a tabela aba
 reflete a configuração de fábrica (seed das migrations), que pode já ter sido
 alterada pelo admin.
 
-| Recurso | Gratuito | Premium | Exclusivo |
+| Recurso | Gratuito | Ideal | Exclusivo |
 |---|---|---|---|
-| Preço | R$ 0 | R$ 29,90/mês ou R$ 99,90 único | R$ 49,90/mês ou R$ 149,90 único |
+| Preço | R$ 0 | R$ 19,90/mês ou R$ 97 único | R$ 34,90/mês ou R$ 197 único |
 | Convidados | até 100 | até 500 | até 999 |
 | Colaboradores (contas sincronizadas) | 1 (só o dono) | até 5 | até 10 |
 | Armazenamento (Central de Arquivos) | 100 MB | 5 GB | 20 GB |
@@ -124,8 +125,9 @@ manual, por arrastar-e-soltar ou seletor).
   conecta a própria conta, o dinheiro cai direto nela, a Wednest retém só a
   comissão configurada em `/admin/configuracoes`)
 - **Cloudflare Turnstile** — CAPTCHA no cadastro, login e recuperação de senha
-- Vercel Cron para rotinas agendadas (aviso de tarefa atrasada, expurgo definitivo
-  de conta) — ver `vercel.json`
+- Vercel Cron para rotinas agendadas (aviso de tarefa atrasada, marcos do
+  casamento, exclusão automática após o casamento, expurgo definitivo de conta)
+  — ver `vercel.json`
 - Nenhuma ferramenta de analytics/rastreamento de terceiros está ativa no código atual
 
 ---
@@ -234,7 +236,15 @@ uma ferramenta de analytics/marketing for adicionada no futuro.
 
 ### Retenção e exclusão
 
-- Exclusão de conta é **soft delete** (`weddings.deleted_at`): os dados somem do
+- **Exclusão automática após o casamento**: independente de o casal pedir ou não,
+  a rota agendada `/api/cron/auto-delete-after-wedding` (Vercel Cron, diária)
+  marca o casamento pra exclusão (mesmo soft delete de sempre) quando o prazo do
+  plano ativo se esgota, contado a partir de `weddings.wedding_date` —
+  `plan_limits.retention_days_after_wedding`: 30 dias no Gratuito, 365 dias nos
+  planos pagos (Ideal e Exclusivo, mensal ou pagamento único). Editável sem
+  deploy em `/admin/planos`. A partir daí, segue o mesmo fluxo abaixo.
+- Exclusão de conta (pedida pelo casal, ou automática acima) é **soft delete**
+  (`weddings.deleted_at`): os dados somem do
   produto na hora, mas ficam recuperáveis por um prazo mediante contato com o
   suporte — hoje 30 dias por padrão, configurável em `/admin/configuracoes`
   (`app_settings.account_purge_days`, entre 7 e 365 dias).

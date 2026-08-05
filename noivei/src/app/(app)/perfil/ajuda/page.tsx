@@ -5,7 +5,7 @@ export const metadata = { title: 'Ajuda' }
 const FAQ = [
   {
     q: 'Como convido meu parceiro(a) para editar o casamento?',
-    a: 'O acesso compartilhado está disponível nos planos Premium (até 5 usuários) e Premium Plus (até 10 usuários). Em breve você poderá enviar um convite por e-mail direto pelo app — enquanto isso, vocês podem usar a mesma conta.',
+    a: 'O acesso compartilhado está disponível nos planos Ideal (até 5 usuários) e Exclusivo (até 10 usuários). Em breve você poderá enviar um convite por e-mail direto pelo app — enquanto isso, vocês podem usar a mesma conta.',
   },
   {
     q: 'Como cancelo minha assinatura?',
@@ -21,7 +21,7 @@ const FAQ = [
   },
   {
     q: 'O que acontece com meu plano depois do casamento?',
-    a: 'No Premium de pagamento único, o acesso vale até 1 ano após a data do casamento. No Premium Plus, por um período estendido após o grande dia — tempo de sobra para exportar relatórios, listas e memórias.',
+    a: 'Nos planos pagos (Ideal e Exclusivo, mensal ou pagamento único), o casamento fica disponível por até 1 ano após a data do evento — tempo de sobra para exportar relatórios, listas e memórias. No Gratuito, por 30 dias após o casamento. Passado esse prazo, a conta é excluída seguindo o mesmo processo de qualquer exclusão (recuperável por um tempo, veja a próxima pergunta).',
   },
 ]
 

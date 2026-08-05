@@ -10,10 +10,10 @@ export type PlanId = (typeof PLAN_IDS)[keyof typeof PLAN_IDS]
 
 export const PLAN_NAMES: Record<PlanId, string> = {
   free:                 'Gratuito',
-  premium_monthly:      'Premium',
-  premium_once:         'Premium',
-  premium_plus_monthly: 'Premium Plus',
-  premium_plus_once:    'Premium Plus',
+  premium_monthly:      'Ideal',
+  premium_once:         'Ideal',
+  premium_plus_monthly: 'Exclusivo',
+  premium_plus_once:    'Exclusivo',
 }
 
 export const PAID_PLANS: PlanId[] = [
