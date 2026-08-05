@@ -17,7 +17,7 @@ interface RouteContext {
   params: Promise<{ token: string }>
 }
 
-export async function GET(_req: Request, { params }: RouteContext) {
+export async function GET(req: Request, { params }: RouteContext) {
   try {
     const { token } = await params
 
@@ -27,6 +27,15 @@ export async function GET(_req: Request, { params }: RouteContext) {
     }
 
     const supabase = createSupabaseService()
+
+    // Só por IP (não por token): o token tem 122 bits de entropia, então o risco
+    // real aqui é varredura automatizada, não adivinhação de um token específico.
+    // Generoso o bastante pra não incomodar convidados no mesmo Wi-Fi de festa/família.
+    const ipLimit = await checkRateLimit(supabase, `rsvp-get:ip:${getClientIp(req)}`, 60, 3600)
+    if (!ipLimit.allowed) {
+      return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')
+    }
+
     const rsvp = await getRsvpByToken(supabase, parsedToken.data)
 
     if (!rsvp) return err(404, 'RSVP_NOT_FOUND', 'Convite não encontrado.')

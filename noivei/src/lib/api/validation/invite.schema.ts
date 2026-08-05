@@ -24,10 +24,19 @@ export const WeddingMemberPermissionsSchema = z.object({
   modules:     z.record(z.enum(WEDDING_MODULE_KEYS), z.boolean()).optional(),
 })
 
+// E-mail opcional que trava o convite pra uma pessoa específica (SEC-003) — mesma
+// normalização usada em login/signup (trim + lowercase), pra bater exatamente com o
+// e-mail da conta autenticada no momento do aceite (ver accept/route.ts).
+export const InvitedEmailSchema = z.string().trim().toLowerCase().email('E-mail inválido').max(255)
+
 // Convite sem body = full_access (comportamento de hoje, "Noivo/Noiva"); com body,
-// o dono escolheu um papel restrito e mandou o conjunto de módulos liberados.
+// o dono escolheu um papel restrito e mandou o conjunto de módulos liberados, e/ou
+// um e-mail específico pro qual o convite fica travado (invited_email, opcional).
 export const CreateInviteSchema = z
-  .object({ permissions: WeddingMemberPermissionsSchema })
+  .object({
+    permissions:   WeddingMemberPermissionsSchema,
+    invited_email: InvitedEmailSchema,
+  })
   .partial()
 
 export type AcceptInviteInput   = z.infer<typeof AcceptInviteSchema>

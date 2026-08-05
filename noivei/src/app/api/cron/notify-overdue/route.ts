@@ -14,6 +14,7 @@ import { isPaidPlan } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { sendEmail } from '@/lib/email/send-email'
 import { overdueTasksDigestTemplate } from '@/lib/email/templates/overdue-tasks-digest-template'
+import { constantTimeEqual } from '@/lib/security/constant-time-compare'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 interface DigestTaskRow {
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
     const secret = process.env.CRON_SECRET
     const authHeader = req.headers.get('authorization')
 
-    if (!secret || authHeader !== `Bearer ${secret}`) {
+    if (!secret || !authHeader || !constantTimeEqual(authHeader, `Bearer ${secret}`)) {
       return err(401, 'UNAUTHORIZED', 'Não autorizado.')
     }
 

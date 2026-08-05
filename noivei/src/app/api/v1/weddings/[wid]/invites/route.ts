@@ -49,8 +49,10 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     // Body é opcional: sem ele, o convite nasce com o default da coluna
     // (full_access — papel "Noivo/Noiva"). Só é enviado quando o dono escolhe um
-    // papel restrito na tela de convite.
+    // papel restrito na tela de convite e/ou informa um e-mail (SEC-003) pra travar
+    // quem pode aceitar (ver invited_email em accept/route.ts).
     let permissions: WeddingMemberPermissions | undefined
+    let invitedEmail: string | undefined
     try {
       const rawBody = await req.json()
       const parsedBody = CreateInviteSchema.safeParse(rawBody)
@@ -58,8 +60,10 @@ export async function POST(req: Request, { params }: RouteContext) {
         return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsedBody.error.flatten())
       }
       permissions = parsedBody.data.permissions
+      invitedEmail = parsedBody.data.invited_email
     } catch {
       permissions = undefined
+      invitedEmail = undefined
     }
 
     const limitCheck = await checkMemberLimit(supabase, wid)
@@ -78,6 +82,7 @@ export async function POST(req: Request, { params }: RouteContext) {
         wedding_id: wid,
         created_by: user.id,
         ...(permissions ? { permissions } : {}),
+        ...(invitedEmail ? { invited_email: invitedEmail } : {}),
       })
       .select()
       .single()

@@ -2,7 +2,11 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import TurnstileWidget from '@/components/auth/turnstile-widget'
+
+interface VerifyApiErrorBody {
+  error?: { code?: string; message?: string }
+}
 
 // Campo único (em vez de N caixas separadas, uma por dígito) de propósito: o
 // tamanho do código de confirmação é definido pelo próprio Supabase (painel do
@@ -16,6 +20,19 @@ function VerifyForm() {
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
+  const [captchaToken, setCaptchaToken]   = useState<string | null>(null)
+  const [turnstileKey, setTurnstileKey]   = useState(0)
+
+  // Token do Turnstile é de uso único — trocar a key força o React a desmontar/
+  // remontar o widget (criando um token novo do zero), mesmo padrão já usado nas
+  // outras telas de auth deste projeto.
+  function resetCaptcha() {
+    setCaptchaToken(null)
+    setTurnstileKey((k) => k + 1)
+  }
+
   function handleChange(val: string) {
     setCode(val.replace(/\D/g, '').slice(0, 12))
   }
@@ -25,21 +42,56 @@ function VerifyForm() {
     if (token.length < 6) { setError('Digite o código recebido por e-mail.'); return }
     setLoading(true)
     setError('')
-    const supabase = createSupabaseBrowser()
-    const { error: verifyError } = await supabase.auth.verifyOtp({ email, token, type: 'signup' })
-    if (verifyError) {
-      setError('Código inválido ou expirado. Tente reenviar.')
+
+    // Verificação de verdade acontece no servidor (não aqui no browser) — mesma
+    // rota que verifica o limite de tentativas, no mesmo request que grava a
+    // sessão como cookie na resposta. Sem chamada a verifyOtp no cliente neste fluxo.
+    const res = await fetch('/api/v1/auth/verify-otp', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email, token }),
+    })
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as VerifyApiErrorBody | null
+      setError(body?.error?.message ?? 'Código inválido ou expirado. Solicite um novo código.')
       setLoading(false)
       return
     }
+
     router.push('/onboarding')
   }
 
   async function handleResend() {
+    if (!captchaToken) {
+      setResendMessage('Confirme que você não é um robô para reenviar.')
+      return
+    }
+
     setCode('')
     setError('')
-    const supabase = createSupabaseBrowser()
-    await supabase.auth.resend({ type: 'signup', email })
+    setResendMessage('')
+    setResendLoading(true)
+
+    // Reenvio acontece no servidor — é a ação mais abusável do fluxo (dispara
+    // e-mail de verdade pra qualquer endereço informado), por isso passa também
+    // pelo captcha, além do rate limit por IP/e-mail e do cooldown entre reenvios.
+    const res = await fetch('/api/v1/auth/resend-otp', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email, captchaToken }),
+    })
+
+    resetCaptcha()
+    setResendLoading(false)
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as VerifyApiErrorBody | null
+      setResendMessage(body?.error?.message ?? 'Não foi possível reenviar agora. Tente novamente em instantes.')
+      return
+    }
+
+    setResendMessage('Código reenviado. Verifique seu e-mail.')
   }
 
   return (
@@ -108,11 +160,26 @@ function VerifyForm() {
         Não recebeu?{' '}
         <button
           onClick={handleResend}
-          style={{ color: '#C6943A', fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer', fontSize: '14px', padding: 0 }}
+          disabled={resendLoading}
+          style={{
+            color: '#C6943A', fontWeight: 600, border: 'none', background: 'none',
+            cursor: resendLoading ? 'not-allowed' : 'pointer', fontSize: '14px', padding: 0,
+            opacity: resendLoading ? 0.7 : 1,
+          }}
         >
-          Reenviar código
+          {resendLoading ? 'Reenviando…' : 'Reenviar código'}
         </button>
       </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '14px' }}>
+        <TurnstileWidget key={turnstileKey} onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
+      </div>
+
+      {resendMessage && (
+        <p style={{ fontSize: '13.5px', color: '#9A7A60', textAlign: 'center', marginTop: '10px' }}>
+          {resendMessage}
+        </p>
+      )}
     </div>
   )
 }

@@ -47,7 +47,7 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     const { data: invite, error: inviteError } = await supabase
       .from('wedding_invites')
-      .select('id, wedding_id, status, expires_at, accepted_by, permissions')
+      .select('id, wedding_id, status, expires_at, accepted_by, permissions, invited_email')
       .eq('token', parsedToken.data.token)
       .maybeSingle()
 
@@ -84,6 +84,35 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
     if (new Date(invite.expires_at as string).getTime() < Date.now()) {
       return err(410, 'INVITE_EXPIRED', 'Este convite expirou.')
+    }
+
+    // SEC-003: convite pode estar travado a um e-mail específico (invited_email NULL =
+    // convite legado de antes desta coluna existir, ou o dono optou por não restringir
+    // — ambos os casos continuam aceitos por qualquer conta, de propósito, ver
+    // 20260805000015_add-invited-email-to-wedding-invites.sql). Checagem entra AQUI:
+    // depois das checagens de status (usado/revogado/expirado) — se o convite já morreu
+    // por outro motivo, é isso que o usuário deve ver, não uma mensagem sobre e-mail —
+    // mas ANTES de qualquer outra regra de negócio (checagem de "já é membro de outro
+    // casamento", limite de membros etc.), porque não faz sentido pedir pra sair do
+    // casamento atual ou checar limite antes de saber que esta conta nem pode aceitar
+    // este convite específico.
+    const invitedEmail = invite.invited_email as string | null
+    if (invitedEmail) {
+      const accountEmail = (user.email ?? '').trim().toLowerCase()
+      if (accountEmail !== invitedEmail) {
+        // 403 (não 404/410): o convite existe e é válido, só não é para esta conta.
+        // Decisão de não-enumeração: quem chega até aqui já provou que tem o token
+        // (INVITE_NOT_FOUND já teria barrado token inválido antes), então "convite
+        // existe" não é informação nova vazada; a mensagem não confirma nem sugere
+        // qual é o e-mail esperado (só a versão mascarada, se algo, é exposta na
+        // tela pública — ver getInviteByToken), então não dá pra usar isto como
+        // oráculo para descobrir o e-mail de ninguém por tentativa e erro.
+        return err(
+          403,
+          'EMAIL_MISMATCH',
+          'Este convite foi enviado para outro endereço de e-mail. Entre com a conta correta para continuar.',
+        )
+      }
     }
 
     // Regra de produto: 1 casamento por conta, dono ou membro — sem essa checagem,

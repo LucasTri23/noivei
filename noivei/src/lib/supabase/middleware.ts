@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
 // Cliente leve para uso exclusivo no middleware (não usa cookies() do next/headers)
+// cookieOptions (secure/sameSite, sem httpOnly) precisa ficar em sincronia com
+// server.ts e browser.ts — ver o comentário completo da decisão em browser.ts.
 export function createSupabaseMiddleware(request: NextRequest) {
   let response = NextResponse.next({ request })
 

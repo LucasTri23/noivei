@@ -155,6 +155,9 @@ export default function WeddingMembersManager({ weddingId, isOwner, canManageInv
 
   const [inviteRole, setInviteRole]       = useState<RoleChoice>('noivo')
   const [inviteModules, setInviteModules] = useState<ModuleSelection>({})
+  // SEC-003: e-mail opcional que trava o convite pra uma pessoa específica — vazio
+  // (comportamento de hoje) mantém o link aberto pra qualquer conta autenticada.
+  const [inviteEmail, setInviteEmail]     = useState('')
 
   const [editingMember, setEditingMember]   = useState<MemberRow | null>(null)
   const [editRole, setEditRole]             = useState<RoleChoice>('noivo')
@@ -215,10 +218,20 @@ export default function WeddingMembersManager({ weddingId, isOwner, canManageInv
       ? { full_access: false, modules: inviteModules }
       : undefined
 
+    // invited_email é opcional — normalização final (trim + lowercase) acontece no
+    // servidor (mesmo padrão de login/signup), aqui só tira espaços nas pontas antes
+    // de decidir se manda o campo.
+    const trimmedEmail = inviteEmail.trim()
+
+    const requestBody: { permissions?: WeddingMemberPermissions; invited_email?: string } = {}
+    if (permissions) requestBody.permissions = permissions
+    if (trimmedEmail) requestBody.invited_email = trimmedEmail
+    const hasBody = Object.keys(requestBody).length > 0
+
     const res = await fetch(`/api/v1/weddings/${weddingId}/invites`, {
       method: 'POST',
-      ...(permissions
-        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ permissions }) }
+      ...(hasBody
+        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) }
         : {}),
     })
 
@@ -233,6 +246,7 @@ export default function WeddingMembersManager({ weddingId, isOwner, canManageInv
     setCreatingInvite(false)
     setInviteRole('noivo')
     setInviteModules({})
+    setInviteEmail('')
     toastSuccess('Link de convite gerado.')
   }
 
@@ -457,6 +471,25 @@ export default function WeddingMembersManager({ weddingId, isOwner, canManageInv
                 modules={inviteModules}
                 onModulesChange={setInviteModules}
               />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="invite-email" style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fg)' }}>
+                  E-mail do convidado (opcional)
+                </label>
+                <input
+                  id="invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="nome@exemplo.com"
+                  style={{
+                    border: '1.5px solid #EBDDD0', borderRadius: '10px', padding: '10px 12px',
+                    fontSize: '13.5px', color: 'var(--fg)', background: 'transparent', outline: 'none',
+                  }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--muted-fg)', lineHeight: 1.4 }}>
+                  Se preenchido, só essa pessoa poderá aceitar o convite.
+                </span>
+              </div>
               <button
                 onClick={createInvite}
                 disabled={creatingInvite}
@@ -509,6 +542,11 @@ export default function WeddingMembersManager({ weddingId, isOwner, canManageInv
                   >
                     Revogar
                   </button>
+                  {invite.invited_email && (
+                    <span style={{ width: '100%', fontSize: '11.5px', color: 'var(--muted-fg)' }}>
+                      Restrito a: {invite.invited_email}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

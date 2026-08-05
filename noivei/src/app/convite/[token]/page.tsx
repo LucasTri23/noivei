@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import AcceptInviteButton from '@/components/invites/accept-invite-button'
+import EnterWithAnotherAccountButton from '@/components/invites/enter-with-another-account-button'
 import { InviteTokenSchema } from '@/lib/api/validation/invite.schema'
 import { getInviteByToken, type InviteInfo } from '@/lib/invites/get-invite-by-token'
 import { createSupabaseServer } from '@/lib/supabase/server'
@@ -59,19 +60,22 @@ export default async function InvitePage({ params }: InvitePageProps) {
   const parsedToken = InviteTokenSchema.safeParse(decodeURIComponent(token))
   if (!parsedToken.success) return <InviteNotFound />
 
+  // Auth checado ANTES de buscar o convite: precisamos do e-mail da conta logada (se
+  // houver) pra getInviteByToken já computar `emailMismatch` (SEC-003) — sem isso, a
+  // tela só saberia do descompasso de e-mail depois de tentar aceitar via API.
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+
   let invite: InviteInfo | null = null
   try {
     const service = createSupabaseService()
-    invite = await getInviteByToken(service, parsedToken.data)
+    invite = await getInviteByToken(service, parsedToken.data, user?.email)
   } catch {
     // Ambiente sem service role configurado — trata como convite indisponível
     invite = null
   }
 
   if (!invite || invite.status !== 'pending' || invite.expired) return <InviteNotFound />
-
-  const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
 
   const inviteHref = `/convite/${encodeURIComponent(parsedToken.data)}`
 
@@ -121,17 +125,31 @@ export default async function InvitePage({ params }: InvitePageProps) {
       {/* Corpo */}
       <div style={{ padding: '34px 36px 38px' }}>
         {user ? (
-          <>
-            <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
-              Você foi convidado(a) a acessar este casamento junto com o casal, com acesso
-              completo ao checklist, convidados, financeiro e mais. Deseja aceitar?
-            </p>
-            <AcceptInviteButton token={parsedToken.data} />
-          </>
+          invite.emailMismatch ? (
+            <>
+              <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
+                Este convite foi enviado para outro endereço de e-mail
+                {invite.maskedInvitedEmail ? ` (${invite.maskedInvitedEmail})` : ''}. Entre com a conta
+                correta para continuar.
+              </p>
+              <EnterWithAnotherAccountButton nextHref={inviteHref} />
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
+                Você foi convidado(a) a acessar este casamento junto com o casal, com acesso
+                completo ao checklist, convidados, financeiro e mais. Deseja aceitar?
+              </p>
+              <AcceptInviteButton token={parsedToken.data} />
+            </>
+          )
         ) : (
           <>
             <p style={{ fontSize: '14.5px', color: 'var(--muted-fg)', margin: '0 0 22px', lineHeight: 1.6 }}>
               Entre ou crie uma conta Wednest para aceitar o convite.
+              {invite.emailRestricted && invite.maskedInvitedEmail
+                ? ` Este convite é restrito à conta ${invite.maskedInvitedEmail}.`
+                : ''}
             </p>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <Link

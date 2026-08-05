@@ -3,6 +3,8 @@ import { cookies }            from 'next/headers'
 import type { Database }      from '@/types/database'
 
 // Cliente para Server Components, API Routes e Server Actions
+// cookieOptions (secure/sameSite, sem httpOnly) precisa ficar em sincronia com
+// browser.ts e middleware.ts — ver o comentário completo da decisão em browser.ts.
 export async function createSupabaseServer() {
   const cookieStore = await cookies()
 

@@ -18,6 +18,7 @@
 // expurgo agora, pra garantir a ordem (Storage antes do banco) sempre.
 
 import { err, handleApiError, ok } from '@/lib/api/response'
+import { constantTimeEqual } from '@/lib/security/constant-time-compare'
 import { createSupabaseService } from '@/lib/supabase/service'
 
 // Todo bucket que guarda arquivo prefixado por "{wedding_id}/..." precisa estar
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
     const secret = process.env.CRON_SECRET
     const authHeader = req.headers.get('authorization')
 
-    if (!secret || authHeader !== `Bearer ${secret}`) {
+    if (!secret || !authHeader || !constantTimeEqual(authHeader, `Bearer ${secret}`)) {
       return err(401, 'UNAUTHORIZED', 'Não autorizado.')
     }
 

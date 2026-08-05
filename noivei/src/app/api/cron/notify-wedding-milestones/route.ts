@@ -16,6 +16,7 @@ import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { sendEmail, type SendEmailAttachment } from '@/lib/email/send-email'
 import { weddingMilestoneTemplate, type WeddingMilestone } from '@/lib/email/templates/wedding-milestone-template'
 import { renderWeddingSummaryPdf, type WeddingSummaryPdfData, type WeddingSummaryScore } from '@/lib/pdf/wedding-summary-pdf'
+import { constantTimeEqual } from '@/lib/security/constant-time-compare'
 import { createSupabaseService } from '@/lib/supabase/service'
 import type { GuestStatus } from '@/types/database'
 
@@ -172,7 +173,7 @@ export async function GET(req: Request) {
     const secret = process.env.CRON_SECRET
     const authHeader = req.headers.get('authorization')
 
-    if (!secret || authHeader !== `Bearer ${secret}`) {
+    if (!secret || !authHeader || !constantTimeEqual(authHeader, `Bearer ${secret}`)) {
       return err(401, 'UNAUTHORIZED', 'Não autorizado.')
     }
 
