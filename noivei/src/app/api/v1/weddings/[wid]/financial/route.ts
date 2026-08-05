@@ -77,6 +77,26 @@ export async function POST(req: Request, { params }: RouteContext) {
       )
     }
 
+    // O client escolhe o anexo por id (já enviado ao bucket antes deste POST), mas nunca
+    // confiamos que esse id realmente pertence a este casamento — sem esta checagem, um
+    // wedding_id trocado no payload conseguiria vincular um lançamento a um arquivo de
+    // OUTRO casamento. `.eq('wedding_id', wid)` garante que só um arquivo do próprio
+    // casamento é aceito; qualquer outro caso (arquivo de outro casamento, ou inexistente)
+    // é rejeitado com 400 antes de gravar.
+    if (parsed.data.attached_file_id) {
+      const { data: attachedFile, error: attachedFileError } = await supabase
+        .from('wedding_files')
+        .select('id')
+        .eq('id', parsed.data.attached_file_id)
+        .eq('wedding_id', wid)
+        .maybeSingle()
+
+      if (attachedFileError) return err(500, 'DB_ERROR', 'Erro ao verificar o arquivo anexado.')
+      if (!attachedFile) {
+        return err(400, 'VALIDATION_ERROR', 'Arquivo anexado não encontrado para este casamento.')
+      }
+    }
+
     const { data, error } = await supabase
       .from('financial_entries')
       .insert({ ...parsed.data, wedding_id: wid })

@@ -5,9 +5,9 @@ import { useRef, useState } from 'react'
 import Modal from '@/components/ui/modal'
 import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { uploadWeddingFile } from '@/lib/files/upload-wedding-file'
 import { toastError } from '@/store/toast.store'
-import type { WeddingFile } from '@/types/database'
+import type { WeddingFile, WeddingFileCategory } from '@/types/database'
 
 interface FileArchiveManagerProps {
   weddingId:         string
@@ -15,25 +15,13 @@ interface FileArchiveManagerProps {
   storageLimitBytes: number
 }
 
-interface ApiErrorBody {
-  error?: { code?: string; message?: string }
-}
+type CategoryFilter = 'todos' | WeddingFileCategory
 
-async function readApiError(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as ApiErrorBody
-    return body.error?.message ?? fallback
-  } catch {
-    return fallback
-  }
-}
-
-// NFKD decompõe acentos em letra base + diacrítico; o replace seguinte já derruba
-// tanto os diacríticos quanto qualquer outro caractere fora de [a-zA-Z0-9.-_] — o
-// nome sanitizado vira parte do path no bucket, que não aceita espaços/acentos.
-function sanitizeFileName(name: string): string {
-  return name.normalize('NFKD').replace(/[^a-zA-Z0-9.\-_]/g, '-')
-}
+const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
+  { value: 'todos',    label: 'Todos' },
+  { value: 'geral',    label: 'Geral' },
+  { value: 'contrato', label: 'Contratos' },
+]
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -99,6 +87,15 @@ function GenericFileIcon() {
     </svg>
   )
 }
+function ContractIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="m9 15 2 2 4-4" />
+    </svg>
+  )
+}
 
 function FileIcon({ mimeType }: { mimeType: string | null }) {
   if (mimeType?.startsWith('image/')) return <ImageFileIcon />
@@ -112,8 +109,22 @@ function isPreviewable(mimeType: string | null): boolean {
   return mimeType?.startsWith('image/') === true || mimeType === 'application/pdf'
 }
 
+interface ApiErrorBody {
+  error?: { code?: string; message?: string }
+}
+
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as ApiErrorBody
+    return body.error?.message ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
 export default function FileArchiveManager({ weddingId, initialFiles, storageLimitBytes }: FileArchiveManagerProps) {
   const [files, setFiles]           = useState<WeddingFile[]>(initialFiles)
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('todos')
   const [uploading, setUploading]   = useState(false)
   // Progresso do lote de upload (múltiplos arquivos selecionados de uma vez) — null fora de um upload
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
@@ -126,46 +137,28 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   const [previewFile, setPreviewFile] = useState<WeddingFile | null>(null)
   const [previewUrl, setPreviewUrl]   = useState<string | null>(null)
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null)
-  const inputRef        = useRef<HTMLInputElement>(null)
+  // Dois inputs de arquivo separados (mesma dropzone/lista, botões diferentes) — cada um
+  // fixa a categoria do lote que sobe por ele, sem precisar de um seletor extra no meio do upload.
+  const inputRef         = useRef<HTMLInputElement>(null)
+  const contractInputRef = useRef<HTMLInputElement>(null)
   const showUploadSpinner = useDelayedLoading(uploading)
 
   const apiBase  = `/api/v1/weddings/${weddingId}/files`
   const usedBytes = files.reduce((sum, f) => sum + f.size_bytes, 0)
   const usedPct   = storageLimitBytes > 0 ? Math.min(100, (usedBytes / storageLimitBytes) * 100) : 0
+  const visibleFiles = categoryFilter === 'todos' ? files : files.filter((f) => f.category === categoryFilter)
 
-  // Envia um único arquivo: sobe os bytes direto pro Storage (não passa pela Route Handler —
-  // evita o limite de body de poucos MB dos Route Handlers em produção e usa a RLS de
-  // storage.objects, que já garante posse pelo prefixo do path) e registra os metadados via API.
-  async function uploadOneFile(file: File): Promise<boolean> {
-    const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
-    const supabase = createSupabaseBrowser()
-
-    const { error: uploadError } = await supabase.storage.from('wedding-files').upload(path, file)
-    if (uploadError) {
-      toastError(`Não foi possível enviar "${file.name}". Verifique o tamanho (máx. 50 MB) e tente novamente.`)
+  // Envia um único arquivo na categoria escolhida — delega upload pro Storage + registro
+  // dos metadados ao helper compartilhado (mesmo usado pelo anexo de lançamento financeiro),
+  // só cuidando do estado local (lista de arquivos, toast de erro) aqui.
+  async function uploadOneFile(file: File, category: WeddingFileCategory): Promise<boolean> {
+    const result = await uploadWeddingFile(weddingId, file, category)
+    if (!result.file) {
+      toastError(result.error ?? 'Não foi possível salvar o arquivo.')
       return false
     }
 
-    const res = await fetch(apiBase, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        file_name:    file.name,
-        storage_path: path,
-        size_bytes:   file.size,
-        mime_type:    file.type || null,
-      }),
-    })
-
-    if (!res.ok) {
-      // O upload já subiu pro storage; sem o registro de metadados ele fica órfão — remove.
-      await supabase.storage.from('wedding-files').remove([path])
-      toastError(`"${file.name}": ${await readApiError(res, 'Não foi possível salvar o arquivo.')}`)
-      return false
-    }
-
-    const { data } = (await res.json()) as { data: WeddingFile }
-    setFiles((prev) => [data, ...prev])
+    setFiles((prev) => [result.file as WeddingFile, ...prev])
     return true
   }
 
@@ -177,7 +170,7 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
   // primeiro problema e descartar uploads que já eram válidos.
   // Compartilhada pelo <input type="file"> e pelo drop da drag-and-drop — mesma pipeline,
   // mesmo guard de "já tem upload em andamento", pra não duplicar a lógica de progresso.
-  async function uploadFiles(fileList: FileList | File[]) {
+  async function uploadFiles(fileList: FileList | File[], category: WeddingFileCategory) {
     const selected = Array.from(fileList)
     if (selected.length === 0 || uploading) return
 
@@ -187,17 +180,17 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
       setUploadProgress({ current: i + 1, total: selected.length })
       const file = selected[i]
       if (!file) continue
-      await uploadOneFile(file)
+      await uploadOneFile(file, category)
     }
 
     setUploadProgress(null)
     setUploading(false)
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>, category: WeddingFileCategory) {
     const selected = Array.from(e.target.files ?? [])
     e.target.value = ''
-    void uploadFiles(selected)
+    void uploadFiles(selected, category)
   }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
@@ -210,10 +203,12 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
     setIsDraggingOver(false)
   }
 
+  // Drag-and-drop sempre entra como "geral" — soltar um contrato assinado exige o botão
+  // dedicado "Adicionar contrato assinado", que deixa a categoria explícita pro casal.
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDraggingOver(false)
-    void uploadFiles(e.dataTransfer.files)
+    void uploadFiles(e.dataTransfer.files, 'geral')
   }
 
   async function handleDownload(file: WeddingFile) {
@@ -290,24 +285,66 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-          <button
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              background: 'var(--wedding-color)', color: '#fff', border: 'none',
-              borderRadius: '12px', padding: '10px 16px',
-              fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
-              opacity: uploading ? 0.7 : 1,
-              boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
-            }}
-          >
-            {showUploadSpinner ? <Spinner color="#fff" /> : <UploadIcon />}
-            {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Enviar arquivo'}
-          </button>
-          <input ref={inputRef} type="file" multiple onChange={handleFileChange} style={{ display: 'none' }} />
-          <span style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>ou arraste um arquivo até a lista abaixo</span>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => contractInputRef.current?.click()}
+              disabled={uploading}
+              title="Enviar um contrato assinado — aparece na aba dedicada Contratos"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'transparent', color: 'var(--wedding-color-dark)',
+                border: '1.5px solid var(--wedding-color)', borderRadius: '12px', padding: '10px 16px',
+                fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+                opacity: uploading ? 0.7 : 1,
+              }}
+            >
+              <ContractIcon />
+              Adicionar contrato assinado
+            </button>
+            <button
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--wedding-color)', color: '#fff', border: 'none',
+                borderRadius: '12px', padding: '10px 16px',
+                fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+                opacity: uploading ? 0.7 : 1,
+                boxShadow: '0 6px 16px color-mix(in srgb, var(--wedding-color) 32%, transparent)',
+              }}
+            >
+              {showUploadSpinner ? <Spinner color="#fff" /> : <UploadIcon />}
+              {uploadProgress ? `Enviando ${uploadProgress.current} de ${uploadProgress.total}…` : uploading ? 'Enviando…' : 'Adicionar arquivo'}
+            </button>
+          </div>
+          <input ref={inputRef} type="file" multiple onChange={(e) => handleFileChange(e, 'geral')} style={{ display: 'none' }} />
+          <input ref={contractInputRef} type="file" multiple onChange={(e) => handleFileChange(e, 'contrato')} style={{ display: 'none' }} />
+          <span style={{ fontSize: '12px', color: 'var(--muted-fg)' }}>ou arraste um arquivo até a lista abaixo (entra como Geral)</span>
         </div>
+      </div>
+
+      {/* Abas de categoria */}
+      <div className="mb-4 flex gap-2" role="tablist" aria-label="Filtrar arquivos por categoria">
+        {CATEGORY_TABS.map((tab) => {
+          const active = categoryFilter === tab.value
+          return (
+            <button
+              key={tab.value}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setCategoryFilter(tab.value)}
+              style={{
+                border: 'none', borderRadius: '999px', padding: '7px 16px',
+                fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                background: active ? 'var(--wedding-color)' : 'var(--wedding-color-subtle)',
+                color: active ? '#fff' : 'var(--wedding-color-dark)',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Barra de uso */}
@@ -345,11 +382,11 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
           transition: 'border-color 0.15s, background 0.15s',
         }}
       >
-        {files.map((file, idx) => (
+        {visibleFiles.map((file, idx) => (
           <div
             key={file.id}
             className="flex flex-wrap items-center gap-4 px-5 py-4"
-            style={{ borderBottom: idx < files.length - 1 ? '1px solid #F8F3EE' : 'none' }}
+            style={{ borderBottom: idx < visibleFiles.length - 1 ? '1px solid #F8F3EE' : 'none' }}
           >
             <div
               style={{
@@ -362,8 +399,21 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
             </div>
 
             <div style={{ flex: 1, minWidth: '200px' }}>
-              <div style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)', wordBreak: 'break-word' }}>
-                {file.file_name}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)', wordBreak: 'break-word' }}>
+                  {file.file_name}
+                </span>
+                {categoryFilter === 'todos' && file.category === 'contrato' && (
+                  <span
+                    style={{
+                      fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+                      padding: '2px 8px', borderRadius: '999px',
+                      background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
+                    }}
+                  >
+                    Contrato
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
                 {formatBytes(file.size_bytes)}
@@ -410,9 +460,13 @@ export default function FileArchiveManager({ weddingId, initialFiles, storageLim
             </div>
           </div>
         ))}
-        {files.length === 0 && (
+        {visibleFiles.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
-            Nenhum arquivo enviado ainda. Envie contratos, orçamentos e outros documentos, ou arraste um arquivo aqui.
+            {files.length === 0
+              ? 'Nenhum arquivo enviado ainda. Envie contratos, orçamentos e outros documentos, ou arraste um arquivo aqui.'
+              : categoryFilter === 'contrato'
+                ? 'Nenhum contrato assinado enviado ainda.'
+                : 'Nenhum arquivo geral enviado ainda.'}
           </div>
         )}
       </div>

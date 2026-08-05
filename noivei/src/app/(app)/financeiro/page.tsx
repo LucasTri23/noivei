@@ -33,9 +33,12 @@ async function FinanceiroContent() {
   // recurso de TODOS os planos (diferente de Orçamentos), por isso a busca não
   // é condicionada ao plano como a de financial_quotes logo abaixo.
   const [{ data: entries }, planId, limitCheck, { data: installments }] = await Promise.all([
+    // Embute wedding_files(id, file_name) via attached_file_id (única FK de financial_entries
+    // pra wedding_files) para a UI mostrar o nome do arquivo anexado sem round-trip extra —
+    // continua null pra lançamentos sem anexo.
     supabase
       .from('financial_entries')
-      .select('*')
+      .select('*, attached_file:wedding_files(id, file_name)')
       .eq('wedding_id', wedding.id)
       .order('created_at', { ascending: true }),
     resolveWeddingPlanId(supabase, wedding.id as string),

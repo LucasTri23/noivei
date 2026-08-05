@@ -9,9 +9,15 @@ import Spinner from '@/components/ui/spinner'
 import { isPaidPlan, type PlanId } from '@/constants/plans'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import { QUOTE_TYPES, QUOTE_TYPE_LABELS } from '@/lib/api/validation/financial-quote.schema'
+import { uploadWeddingFile } from '@/lib/files/upload-wedding-file'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { toastError, toastSuccess } from '@/store/toast.store'
 import type { FinancialCategoryBudget, FinancialEntry, FinancialInstallment, FinancialQuote, FinancialQuoteType } from '@/types/database'
+
+// Mesmo teto de 50 MB do bucket "wedding-files" (ver migration
+// 20260728000002_increase-wedding-files-size-limit.sql) — checagem client-side só pra dar
+// feedback imediato; o teto real de verdade é sempre o do Storage/Route Handler.
+const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
 
 interface FinancialManagerProps {
   weddingId:              string
@@ -254,6 +260,16 @@ function CircleIcon() {
     </svg>
   )
 }
+function ClipIcon() {
+  return (
+    <svg
+      width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-1px' }}
+    >
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
   try {
@@ -280,6 +296,10 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const [editing, setEditing]     = useState<FinancialEntry | null>(null)
   const [form, setForm]           = useState<EntryForm>(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
+  // Anexo opcional só no lançamento NOVO (editar não recria/troca o anexo, ver handleSubmit) —
+  // guarda o File cru selecionado; o upload de fato só acontece no submit do formulário.
+  const [attachFile, setAttachFile] = useState<File | null>(null)
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null)
   // Validação local de negócio (pago > total) — mantida no formulário, não é resultado de ação de rede
   const [formError, setFormError] = useState('')
   const showSpinner = useDelayedLoading(saving)
@@ -327,6 +347,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
   const apiBase      = `/api/v1/weddings/${weddingId}/financial`
   const quotesApiBase = `/api/v1/weddings/${weddingId}/financial-quotes`
   const categoryBudgetsApiBase = `/api/v1/weddings/${weddingId}/financial-category-budgets`
+  const filesApiBase = `/api/v1/weddings/${weddingId}/files`
 
   const isPaid  = isPaidPlan(planId)
   const atLimit = entries.length >= entryLimit
@@ -406,6 +427,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     setEditing(null)
     setForm(EMPTY_FORM)
     setFormError('')
+    setAttachFile(null)
     setModalOpen(true)
   }
 
@@ -420,7 +442,22 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       due_date:     entry.due_date ?? '',
     })
     setFormError('')
+    setAttachFile(null)
     setModalOpen(true)
+  }
+
+  // Feedback client-side imediato (nem tenta subir um arquivo grande demais); a checagem
+  // real de tamanho continua sendo o que o Storage gravou (ver POST .../files).
+  function handleAttachFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null
+    e.target.value = ''
+    if (!file) return
+
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      toastError('O arquivo anexado excede o limite de 50 MB.')
+      return
+    }
+    setAttachFile(file)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -437,6 +474,23 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     setSaving(true)
     setFormError('')
 
+    // Anexo (se houver) sobe pro storage/Central de Arquivos ANTES de criar o lançamento —
+    // reaproveita o mesmo helper/rota de upload da Central de Arquivos (POST .../files),
+    // sempre como categoria "geral" (não é necessariamente um contrato). Só se aplica à
+    // criação: editar um lançamento existente não troca o anexo já salvo.
+    let attachedFileId: string | null = null
+    let attachedFileMeta: { id: string; file_name: string } | null = null
+    if (!editing && attachFile) {
+      const uploadResult = await uploadWeddingFile(weddingId, attachFile, 'geral')
+      if (!uploadResult.file) {
+        setSaving(false)
+        toastError(uploadResult.error ?? 'Não foi possível enviar o anexo.')
+        return
+      }
+      attachedFileId = uploadResult.file.id
+      attachedFileMeta = { id: uploadResult.file.id, file_name: uploadResult.file.file_name }
+    }
+
     const payload = {
       category:     form.category.trim(),
       description:  form.description.trim(),
@@ -444,6 +498,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
       total_amount: total,
       paid_amount:  paidValue,
       due_date:     form.due_date || null,
+      ...(attachedFileId ? { attached_file_id: attachedFileId } : {}),
     }
 
     const res = editing
@@ -465,12 +520,16 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     }
 
     const { data } = (await res.json()) as { data: FinancialEntry }
+    // O POST não faz o embed de wedding_files (ver .../financial/route.ts) — completa
+    // com o que o próprio upload já retornou, pra exibir nome do anexo sem recarregar a página.
+    const savedEntry = attachedFileMeta ? { ...data, attached_file: attachedFileMeta } : data
     setEntries((prev) =>
-      editing ? prev.map((entry) => (entry.id === data.id ? data : entry)) : [...prev, data],
+      editing ? prev.map((entry) => (entry.id === savedEntry.id ? savedEntry : entry)) : [...prev, savedEntry],
     )
     if (!editing) {
       setInstallments((prev) => ({ ...prev, [data.id]: prev[data.id] ?? [] }))
     }
+    setAttachFile(null)
     setModalOpen(false)
   }
 
@@ -501,6 +560,24 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
     setQuotes((prev) =>
       prev.map((q) => (q.financial_entry_id === entry.id ? { ...q, is_selected: false, financial_entry_id: null } : q)),
     )
+  }
+
+  // Abre o anexo do lançamento (mesma signed URL de 60s usada pela Central de Arquivos)
+  // direto numa nova aba, sem precisar navegar até lá.
+  async function handleOpenAttachment(fileId: string) {
+    if (openingAttachmentId) return
+    setOpeningAttachmentId(fileId)
+
+    const res = await fetch(`${filesApiBase}/${fileId}`)
+    setOpeningAttachmentId(null)
+
+    if (!res.ok) {
+      toastError(await readApiError(res, 'Não foi possível abrir o anexo.'))
+      return
+    }
+
+    const { data } = (await res.json()) as { data: { url: string } }
+    window.open(data.url, '_blank', 'noopener,noreferrer')
   }
 
   function openBudgetModal() {
@@ -1137,7 +1214,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
               </h3>
               <p style={{ fontSize: '13.5px', color: 'rgba(250,240,230,0.65)', lineHeight: 1.6, marginBottom: '18px' }}>
                 Veja o breakdown completo do orçamento por categoria, com barras de progresso de pago x total.
-                Disponível no Premium.
+                Disponível no Ideal.
               </p>
               <Link
                 href="/perfil/planos"
@@ -1172,6 +1249,7 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
               const isExpanded = expandedEntryId === entry.id
               const entryInstallments = installments[entry.id]
               const nextUnpaidId = entryInstallments ? nextUnpaidInstallmentId(entryInstallments) : null
+              const attachedFile = entry.attached_file
               return (
                 <div key={entry.id} className="flex flex-col gap-2">
                   <div
@@ -1205,6 +1283,21 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
                       <div style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '2px' }}>
                         {subtitle}
                       </div>
+                      {attachedFile && (
+                        <button
+                          onClick={() => handleOpenAttachment(attachedFile.id)}
+                          disabled={openingAttachmentId === attachedFile.id}
+                          title="Abrir anexo"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px',
+                            border: 'none', background: 'transparent', color: 'var(--wedding-color-dark)',
+                            cursor: openingAttachmentId === attachedFile.id ? 'wait' : 'pointer',
+                            fontSize: '11.5px', fontWeight: 600, padding: 0,
+                          }}
+                        >
+                          <ClipIcon /> {attachedFile.file_name}
+                        </button>
+                      )}
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)' }}>{fmt(entry.total_amount)}</div>
@@ -1692,6 +1785,41 @@ export default function FinancialManager({ weddingId, budgetCents, initialEntrie
               style={inputStyle}
             />
           </div>
+
+          {/* Anexo só no lançamento novo — editar um existente não troca o anexo já salvo
+              (aparece como informação, sem input, pra não sugerir que dá pra substituí-lo aqui). */}
+          {editing ? (
+            editing.attached_file && (
+              <div>
+                <span style={labelStyle}>Anexo</span>
+                <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', margin: 0 }}>
+                  <ClipIcon /> {editing.attached_file.file_name} — gerencie em Central de arquivos
+                </p>
+              </div>
+            )
+          ) : (
+            <div>
+              <label htmlFor="entry-attachment" style={labelStyle}>Anexar orçamento/recibo (opcional, até 50 MB)</label>
+              <input
+                id="entry-attachment"
+                type="file"
+                onChange={handleAttachFileChange}
+                style={inputStyle}
+              />
+              {attachFile && (
+                <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '4px' }}>
+                  {attachFile.name}{' '}
+                  <button
+                    type="button"
+                    onClick={() => setAttachFile(null)}
+                    style={{ border: 'none', background: 'transparent', color: '#C0553F', cursor: 'pointer', fontWeight: 600, fontSize: '12.5px', padding: 0 }}
+                  >
+                    Remover
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
 
           {formError && (
             <p role="alert" style={{ fontSize: '13.5px', color: '#C0553F', margin: 0 }}>{formError}</p>
