@@ -14,14 +14,17 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('app_settings')
-      .select('platform_fee_percent')
+      .select('platform_fee_percent, account_purge_days')
       .eq('id', true)
       .maybeSingle()
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao buscar configurações.')
 
-    // Number(...) por segurança: NUMERIC do Postgres pode vir como string via PostgREST.
-    return ok({ platform_fee_percent: Number(data?.platform_fee_percent ?? 5) })
+    // Number(...) por segurança: NUMERIC/INTEGER do Postgres pode vir como string via PostgREST.
+    return ok({
+      platform_fee_percent: Number(data?.platform_fee_percent ?? 5),
+      account_purge_days:   Number(data?.account_purge_days ?? 30),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -42,14 +45,20 @@ export async function PATCH(req: Request) {
 
     const { data, error } = await supabase
       .from('app_settings')
-      .update({ platform_fee_percent: parsed.data.platform_fee_percent })
+      .update({
+        platform_fee_percent: parsed.data.platform_fee_percent,
+        account_purge_days:   parsed.data.account_purge_days,
+      })
       .eq('id', true)
-      .select('platform_fee_percent')
+      .select('platform_fee_percent, account_purge_days')
       .single()
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao salvar configurações.')
 
-    return ok({ platform_fee_percent: Number(data.platform_fee_percent) })
+    return ok({
+      platform_fee_percent: Number(data.platform_fee_percent),
+      account_purge_days:   Number(data.account_purge_days),
+    })
   } catch (error) {
     return handleApiError(error)
   }

@@ -7,11 +7,13 @@ import Spinner from '@/components/ui/spinner'
 
 interface AdminSettingsManagerProps {
   initialPlatformFeePercent: number
+  initialAccountPurgeDays: number
 }
 
-export default function AdminSettingsManager({ initialPlatformFeePercent }: AdminSettingsManagerProps) {
-  const [feePercent, setFeePercent] = useState(initialPlatformFeePercent)
-  const [saving, setSaving]         = useState(false)
+export default function AdminSettingsManager({ initialPlatformFeePercent, initialAccountPurgeDays }: AdminSettingsManagerProps) {
+  const [feePercent, setFeePercent]     = useState(initialPlatformFeePercent)
+  const [purgeDays, setPurgeDays]       = useState(initialAccountPurgeDays)
+  const [saving, setSaving]             = useState(false)
   const showSpinner = useDelayedLoading(saving)
 
   async function handleSave(e: React.FormEvent) {
@@ -22,9 +24,12 @@ export default function AdminSettingsManager({ initialPlatformFeePercent }: Admi
     const res = await fetch('/api/v1/admin/settings', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ platform_fee_percent: feePercent }),
+      body:    JSON.stringify({ platform_fee_percent: feePercent, account_purge_days: purgeDays }),
     })
-    const body = await res.json().catch(() => null) as { data?: { platform_fee_percent: number }; error?: { message: string } } | null
+    const body = await res.json().catch(() => null) as {
+      data?: { platform_fee_percent: number; account_purge_days: number }
+      error?: { message: string }
+    } | null
 
     setSaving(false)
     if (!res.ok) {
@@ -33,6 +38,7 @@ export default function AdminSettingsManager({ initialPlatformFeePercent }: Admi
     }
 
     setFeePercent(body!.data!.platform_fee_percent)
+    setPurgeDays(body!.data!.account_purge_days)
     toastSuccess('Configuração salva!')
   }
 
@@ -71,6 +77,55 @@ export default function AdminSettingsManager({ initialPlatformFeePercent }: Admi
               step={0.5}
               value={feePercent}
               onChange={(e) => setFeePercent(Math.min(10, Math.max(0, Number(e.target.value))))}
+              style={{
+                border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '11px 14px',
+                fontSize: '15px', color: 'var(--fg)', background: 'var(--bg)', outline: 'none', width: '140px',
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              background: 'var(--wedding-color)', color: '#fff', border: 'none',
+              borderRadius: '12px', padding: '11px 18px', fontWeight: 700, fontSize: '14px',
+              cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, width: 'fit-content',
+            }}
+          >
+            {showSpinner && <Spinner color="#fff" />}
+            {saving ? 'Salvando…' : 'Salvar'}
+          </button>
+        </form>
+      </div>
+
+      <div
+        className="rounded-2xl bg-[var(--surface)] p-6"
+        style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', maxWidth: '480px', marginTop: '20px' }}
+      >
+        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--fg)', margin: '0 0 6px' }}>
+          Prazo de expurgo definitivo (dias)
+        </h2>
+        <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.6, margin: '0 0 18px' }}>
+          Quantos dias depois que uma conta é excluída até os dados serem apagados definitivamente do
+          Storage e do banco — não pode ser alterado com efeito retroativo em contas já expurgadas.
+          Mínimo 7, máximo 365. Hoje: 30 dias.
+        </p>
+
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="account-purge-days" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)', display: 'block', marginBottom: '6px' }}>
+              Prazo (dias)
+            </label>
+            <input
+              id="account-purge-days"
+              type="number"
+              min={7}
+              max={365}
+              step={1}
+              value={purgeDays}
+              onChange={(e) => setPurgeDays(Math.min(365, Math.max(7, Math.trunc(Number(e.target.value)))))}
               style={{
                 border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '11px 14px',
                 fontSize: '15px', color: 'var(--fg)', background: 'var(--bg)', outline: 'none', width: '140px',

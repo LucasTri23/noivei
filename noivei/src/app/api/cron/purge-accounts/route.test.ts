@@ -50,22 +50,46 @@ function buildSupabaseMock(options: {
   listResults?: Record<string, ListResult>
   removeResults?: Record<string, RemoveResult>
   rpcError?: { message: string } | null
+  appSettings?: { account_purge_days: number } | null
+  appSettingsError?: { message: string } | null
 }) {
   const storage = buildStorageMock(options.listResults, options.removeResults)
   const rpc = vi.fn().mockResolvedValue({ error: options.rpcError ?? null })
 
+  // lt() captura os args pra permitir assertar a janela de dias usada, sem
+  // precisar reimplementar filtro de data no mock.
+  const ltCalls: unknown[][] = []
+
   const weddingsQuery = {
     select: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
-    lt: vi.fn().mockResolvedValue({ data: options.weddings, error: options.weddingsError ?? null }),
+    lt: vi.fn((...args: unknown[]) => {
+      ltCalls.push(args)
+      return Promise.resolve({ data: options.weddings, error: options.weddingsError ?? null })
+    }),
+  }
+
+  const appSettingsData =
+    options.appSettings === null
+      ? null
+      : (options.appSettings ?? { account_purge_days: 30 })
+
+  const appSettingsQuery = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: appSettingsData,
+      error: options.appSettingsError ?? null,
+    }),
   }
 
   const from = vi.fn((table: string) => {
     if (table === 'weddings') return weddingsQuery
+    if (table === 'app_settings') return appSettingsQuery
     throw new Error(`tabela não mockada no teste: ${table}`)
   })
 
-  return { from, storage, rpc }
+  return { from, storage, rpc, ltCalls }
 }
 
 function buildRequest(secret = CRON_SECRET): Request {
@@ -101,7 +125,7 @@ describe('GET /api/cron/purge-accounts', () => {
       expect.arrayContaining(['wedding-files', 'wedding-photos', 'wedding-gift-photos', 'wedding-album-photos']),
     )
     expect(bucketsVarridos).toHaveLength(4)
-    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts')
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 30 })
   })
 
   it('deve tratar bucket vazio sem gerar erro', async () => {
@@ -120,7 +144,7 @@ describe('GET /api/cron/purge-accounts', () => {
     expect(response.status).toBe(200)
     expect(body.data.filesRemoved).toBe(0)
     expect(console.error).not.toHaveBeenCalled()
-    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts')
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 30 })
   })
 
   it('deve continuar limpando os demais buckets e expurgar o banco quando um bucket falha', async () => {
@@ -151,7 +175,7 @@ describe('GET /api/cron/purge-accounts', () => {
     )
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining(weddingId), expect.anything())
     // Falha em um bucket não pode impedir o expurgo definitivo do banco.
-    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts')
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 30 })
   })
 
   it('deve continuar limpando os demais buckets quando a remoção falha em um bucket específico', async () => {
@@ -173,7 +197,7 @@ describe('GET /api/cron/purge-accounts', () => {
 
     expect(response.status).toBe(200)
     expect(body.data.filesRemoved).toBe(1) // só wedding-files contou, wedding-album-photos falhou
-    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts')
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 30 })
   })
 
   it('deve listar e remover usando o prefixo exato do wedding_id, nunca uma varredura geral do bucket', async () => {
@@ -219,6 +243,62 @@ describe('GET /api/cron/purge-accounts', () => {
     // Cada remoção só contém paths do próprio wedding_id — nunca mistura os dois.
     expect(callForA?.paths).toEqual([`${weddingA}/foto.jpg`])
     expect(callForB?.paths).toEqual([`${weddingB}/foto.jpg`])
+  })
+
+  it('deve usar o account_purge_days configurado em app_settings para definir a janela de expurgo', async () => {
+    const weddingId = 'wedding-purge-days'
+    const supabase = buildSupabaseMock({
+      weddings: [{ id: weddingId }],
+      appSettings: { account_purge_days: 10 },
+    })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+
+    const before = Date.now()
+    const response = await GET(buildRequest())
+    const after = Date.now()
+
+    expect(response.status).toBe(200)
+
+    // A rotina deve ter consultado app_settings antes de decidir a janela.
+    expect(supabase.from).toHaveBeenCalledWith('app_settings')
+
+    // O cascade do banco (fn_purge_soft_deleted_accounts) precisa receber o MESMO
+    // valor usado pra decidir quais casamentos tiveram o Storage limpo acima — senão
+    // os dois passos podem selecionar conjuntos diferentes de casamentos e reabrir
+    // o bug de arquivo órfão (ver migration 20260805000004).
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 10 })
+
+    // O cutoff passado pro lt('deleted_at', ...) deve refletir 10 dias, não os 30
+    // fixos antigos — checamos com uma tolerância pequena (tempo de execução do teste).
+    const [, cutoffArg] = supabase.ltCalls[0] as [string, string]
+    const cutoffMs = new Date(cutoffArg).getTime()
+    const tenDaysMs = 10 * 24 * 60 * 60 * 1000
+    expect(before - cutoffMs).toBeGreaterThanOrEqual(tenDaysMs - 1000)
+    expect(after - cutoffMs).toBeLessThanOrEqual(tenDaysMs + 1000)
+  })
+
+  it('deve cair no padrão de 30 dias sem quebrar a rotina quando a leitura de app_settings falha', async () => {
+    const weddingId = 'wedding-fallback'
+    const supabase = buildSupabaseMock({
+      weddings: [{ id: weddingId }],
+      appSettings: null,
+      appSettingsError: { message: 'falha simulada ao ler app_settings' },
+    })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+
+    const before = Date.now()
+    const response = await GET(buildRequest())
+    const after = Date.now()
+
+    // Falha ao ler configuração não pode derrubar a rotina (fail-safe).
+    expect(response.status).toBe(200)
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 30 })
+
+    const [, cutoffArg] = supabase.ltCalls[0] as [string, string]
+    const cutoffMs = new Date(cutoffArg).getTime()
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+    expect(before - cutoffMs).toBeGreaterThanOrEqual(thirtyDaysMs - 1000)
+    expect(after - cutoffMs).toBeLessThanOrEqual(thirtyDaysMs + 1000)
   })
 
   it('deve rejeitar requisição sem o CRON_SECRET correto', async () => {

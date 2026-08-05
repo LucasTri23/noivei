@@ -1,4 +1,6 @@
-// Purge definitivo (LGPD, art. 18 VI) de contas soft-deletadas há mais de 30 dias.
+// Purge definitivo (LGPD, art. 18 VI) de contas soft-deletadas há mais de
+// app_settings.account_purge_days dias (configurável em /admin/configuracoes,
+// padrão 30 — ver migration 20260805000002_add-account-purge-days-to-app-settings.sql).
 // Disparada via Vercel Cron (ver vercel.json), protegida por CRON_SECRET — mesmo
 // padrão de cron/notify-overdue.
 //
@@ -30,7 +32,7 @@ const STORAGE_BUCKETS = [
   'wedding-album-photos',
 ] as const
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+const DEFAULT_PURGE_DAYS = 30
 
 export async function GET(req: Request) {
   try {
@@ -43,11 +45,23 @@ export async function GET(req: Request) {
 
     const supabase = createSupabaseService()
 
+    // Configurável em /admin/configuracoes (app_settings.account_purge_days) — fail-safe
+    // pro padrão de 30 dias se a leitura falhar ou vier nula, pra nunca travar o cron
+    // por falta/erro de configuração.
+    const { data: appSettings } = await supabase
+      .from('app_settings')
+      .select('account_purge_days')
+      .eq('id', true)
+      .maybeSingle()
+
+    const purgeDays = Number(appSettings?.account_purge_days ?? DEFAULT_PURGE_DAYS)
+    const purgeWindowMs = (Number.isFinite(purgeDays) && purgeDays > 0 ? purgeDays : DEFAULT_PURGE_DAYS) * 24 * 60 * 60 * 1000
+
     const { data: weddings, error: weddingsError } = await supabase
       .from('weddings')
       .select('id')
       .not('deleted_at', 'is', null)
-      .lt('deleted_at', new Date(Date.now() - THIRTY_DAYS_MS).toISOString())
+      .lt('deleted_at', new Date(Date.now() - purgeWindowMs).toISOString())
 
     if (weddingsError) return err(500, 'DB_ERROR', 'Erro ao buscar casamentos a expurgar.')
 
@@ -79,8 +93,14 @@ export async function GET(req: Request) {
     }
 
     // Cascade real (auth.users -> weddings -> tabelas filhas) só depois de limpar
-    // o Storage acima — ver comentário no topo do arquivo.
-    const { error: purgeError } = await supabase.rpc('fn_purge_soft_deleted_accounts')
+    // o Storage acima — ver comentário no topo do arquivo. Passa o MESMO purgeDays
+    // resolvido acima pra function SQL (migration 20260805000004) — precisa ser o
+    // valor idêntico ao usado no filtro de weddings logo acima, senão o cascade do
+    // banco e a limpeza do Storage podem selecionar conjuntos diferentes de
+    // casamentos e reabrir o bug de arquivo órfão.
+    const { error: purgeError } = await supabase.rpc('fn_purge_soft_deleted_accounts', {
+      p_purge_days: Number.isFinite(purgeDays) && purgeDays > 0 ? purgeDays : DEFAULT_PURGE_DAYS,
+    })
     if (purgeError) return err(500, 'DB_ERROR', 'Erro ao expurgar contas.')
 
     return ok({ weddingsProcessed: weddings?.length ?? 0, filesRemoved })
