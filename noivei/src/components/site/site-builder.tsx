@@ -721,6 +721,7 @@ interface HistoriaSectionProps {
   storyPhotoUrl: string | null
   saving:        boolean
   siteExists:    boolean
+  template:      SiteTemplate
   onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto: (url: string) => Promise<boolean>
   onSave:        (values: { our_story: string; custom_message: string; story_photo_url: string }) => Promise<PatchResult>
@@ -728,7 +729,7 @@ interface HistoriaSectionProps {
 }
 
 function HistoriaSection({
-  ourStory, customMessage, storyPhotoUrl, saving, siteExists, onUploadPhoto, onDeletePhoto, onSave, onGoToCapa,
+  ourStory, customMessage, storyPhotoUrl, saving, siteExists, template, onUploadPhoto, onDeletePhoto, onSave, onGoToCapa,
 }: HistoriaSectionProps) {
   const [storyDraft, setStoryDraft]     = useState(ourStory)
   const [messageDraft, setMessageDraft] = useState(customMessage)
@@ -787,52 +788,55 @@ function HistoriaSection({
         />
       </div>
 
-      <div>
-        <label style={labelStyle}>Foto de destaque desta seção</label>
-        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '-2px 0 8px' }}>
-          Aparece ao lado da sua história no site — escolha a que mais representa vocês.
-        </p>
-        {photoDraft ? (
-          <div className="relative overflow-hidden rounded-2xl" style={{ border: '1.5px solid #EBDDD0' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
-            <img
-              src={photoDraft}
-              alt="Foto de destaque da história"
-              style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }}
-            />
+      {/* Só o Portfólio lê story_photo_url (portfolio-site.tsx) — no Clássico o campo não teria efeito nenhum */}
+      {template === 'portfolio' && (
+        <div>
+          <label style={labelStyle}>Foto de destaque desta seção</label>
+          <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '-2px 0 8px' }}>
+            Aparece ao lado da sua história no site — escolha a que mais representa vocês.
+          </p>
+          {photoDraft ? (
+            <div className="relative overflow-hidden rounded-2xl" style={{ border: '1.5px solid #EBDDD0' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage, sem domínio fixo para configurar no next/image */}
+              <img
+                src={photoDraft}
+                alt="Foto de destaque da história"
+                style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }}
+              />
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                aria-label="Remover foto de destaque"
+                style={{
+                  position: 'absolute', top: '10px', right: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '30px', height: '30px', border: 'none', borderRadius: '10px',
+                  background: 'rgba(20,12,4,0.55)', color: '#fff', cursor: 'pointer',
+                }}
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
-              onClick={handleRemovePhoto}
-              aria-label="Remover foto de destaque"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
               style={{
-                position: 'absolute', top: '10px', right: '10px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '30px', height: '30px', border: 'none', borderRadius: '10px',
-                background: 'rgba(20,12,4,0.55)', color: '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
+                borderRadius: '12px', padding: '10px 16px',
+                fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
+                opacity: uploading ? 0.7 : 1,
               }}
             >
-              <TrashIcon />
+              {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
+              {uploading ? 'Enviando…' : 'Enviar foto de destaque'}
             </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
-              borderRadius: '12px', padding: '10px 16px',
-              fontWeight: 600, fontSize: '14px', cursor: uploading ? 'wait' : 'pointer',
-              opacity: uploading ? 0.7 : 1,
-            }}
-          >
-            {showUploadSpinner ? <Spinner color="var(--wedding-color-dark)" /> : <UploadIcon />}
-            {uploading ? 'Enviando…' : 'Enviar foto de destaque'}
-          </button>
-        )}
-        <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-      </div>
+          )}
+          <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+        </div>
+      )}
 
       <div>
         <label htmlFor="site-custom-message" style={labelStyle}>Mensagem para os convidados</label>
@@ -1679,6 +1683,7 @@ export default function SiteBuilder({
                 storyPhotoUrl={content.story_photo_url ?? null}
                 saving={saving}
                 siteExists={siteExists}
+                template={template}
                 onUploadPhoto={uploadPhoto}
                 onDeletePhoto={deletePhoto}
                 onSave={saveContentPatch}

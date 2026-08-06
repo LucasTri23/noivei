@@ -86,15 +86,13 @@ export async function POST(req: Request) {
       }
     }
 
-    const eventKey = `${type}:${dataId}`
-    const { data: existingEvent } = await supabase
-      .from('mp_webhook_events')
-      .select('id')
-      .eq('mp_event_key', eventKey)
-      .maybeSingle()
-
-    if (existingEvent) return ok({ received: true }) // já processado — idempotente
-
+    // Busca o status ATUAL antes de checar idempotência (não depois) — crítico pra
+    // métodos assíncronos como PIX: o Mercado Pago manda uma notificação quando o
+    // pagamento é CRIADO (status 'pending', QR code gerado) e outra separada quando
+    // ele é de fato PAGO (status 'approved'), ambas com o MESMO dataId. Uma chave de
+    // idempotência baseada só em `type:dataId` (sem o status) tratava a segunda
+    // notificação como duplicata da primeira e descartava sem nunca ativar o plano —
+    // bug real que deixou pagamento aprovado preso, achado em produção (2026-08-06).
     let externalReference: string | null = null
     let status: string | null = null
     let gatewaySubId: string | null = null
@@ -113,9 +111,21 @@ export async function POST(req: Request) {
       isRecurring = true
     }
 
-    await supabase
+    // Inclui o status na chave: pending -> approved do MESMO dataId são DOIS eventos
+    // distintos que precisam ser processados, não duplicata um do outro. Insert
+    // direto (não select-então-insert) torna a checagem atômica via a constraint
+    // UNIQUE de mp_event_key — evita a mesma corrida de duas entregas concorrentes
+    // passando ambas pela checagem antes de qualquer uma inserir.
+    const eventKey = `${type}:${dataId}:${status ?? 'unknown'}`
+    const { error: insertEventError } = await supabase
       .from('mp_webhook_events')
       .insert({ mp_event_key: eventKey, event_type: type, payload: { dataId, externalReference, status } })
+
+    if (insertEventError) {
+      if (insertEventError.code === '23505') return ok({ received: true }) // já processado — idempotente
+      console.error('[webhook/mercadopago] falha ao registrar evento:', insertEventError)
+      return err(500, 'DB_ERROR', 'Erro ao registrar o evento de webhook.')
+    }
 
     if (!externalReference) return ok({ received: true })
 

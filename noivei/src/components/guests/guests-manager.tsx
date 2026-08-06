@@ -289,6 +289,12 @@ export default function GuestsManager({
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
   const [companionAssignment, setCompanionAssignment] = useState<CompanionAssignment>('guest')
   const [companionNames, setCompanionNames]           = useState<string[]>([])
+  // Acompanhantes já existentes (linhas próprias em `guests`, ligadas por
+  // parent_guest_id) do convidado sendo editado agora — diferente de
+  // `companionNames`, que é só o rascunho de nomes na CRIAÇÃO de um convidado novo.
+  const [editingCompanions, setEditingCompanions]     = useState<{ id: string; name: string }[]>([])
+  const [groupCustom, setGroupCustom]                 = useState('')
+  const [groupIsCustom, setGroupIsCustom]             = useState(false)
   const [helpOpen, setHelpOpen]         = useState(false)
   const [previewCsv, setPreviewCsv]     = useState<string | null>(null)
   const [previewResult, setPreviewResult] = useState<ParseImportCsvResult | null>(null)
@@ -320,6 +326,16 @@ export default function GuestsManager({
       (groupFilter === 'todos' || matchGroupCategory(g.group_name) === groupFilter),
   )
 
+  // Acompanhante (parent_guest_id !== null) não vira linha própria na lista nem no
+  // PDF — ele é parte do convite do convidado principal, não um convidado separado
+  // ("o principal que envolve o secundário e não um apartado"). Editar o nome de um
+  // acompanhante já existente acontece dentro do modal do convidado principal.
+  const visibleTopLevel = visible.filter((g) => g.parent_guest_id === null)
+
+  function companionsOf(guestId: string): Guest[] {
+    return guests.filter((g) => g.parent_guest_id === guestId)
+  }
+
   const previewRows: PreviewRow[] = previewResult
     ? [
         ...previewResult.validRows.map((r): PreviewRow => ({ line: r.line, error: null, guest: r.guest })),
@@ -338,10 +354,22 @@ export default function GuestsManager({
     setCompanionNames([])
   }
 
+  function closeGuestModal() {
+    setModalOpen(false)
+    setEditingGuest(null)
+    resetCompanionState()
+    setEditingCompanions([])
+    setGroupIsCustom(false)
+    setGroupCustom('')
+  }
+
   function openCreate() {
     setEditingGuest(null)
     setForm({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
     resetCompanionState()
+    setEditingCompanions([])
+    setGroupIsCustom(false)
+    setGroupCustom('')
     setModalOpen(true)
   }
 
@@ -355,6 +383,15 @@ export default function GuestsManager({
       party_size: guest.party_size,
     })
     resetCompanionState()
+    setEditingCompanions(companionsOf(guest.id).map((c) => ({ id: c.id, name: c.name })))
+
+    // Se o group_name já salvo não bate exatamente com um dos 5 rótulos padrão, o
+    // select cai em "Outro" com o valor original preservado no campo de texto — assim
+    // editar um convidado com grupo digitado à mão (ex.: "Amigos do trabalho") nunca
+    // perde/troca o grupo silenciosamente só por abrir e salvar o modal.
+    const isPreset = GROUP_SUGGESTIONS.includes(guest.group_name ?? '')
+    setGroupIsCustom(!isPreset && !!guest.group_name)
+    setGroupCustom(isPreset ? '' : guest.group_name ?? '')
     setModalOpen(true)
   }
 
@@ -374,6 +411,26 @@ export default function GuestsManager({
 
   function updateCompanionName(index: number, value: string) {
     setCompanionNames((prev) => prev.map((name, i) => (i === index ? value : name)))
+  }
+
+  function updateEditingCompanionName(id: string, value: string) {
+    setEditingCompanions((prev) => prev.map((c) => (c.id === id ? { ...c, name: value } : c)))
+  }
+
+  function handleGroupSelectChange(value: string) {
+    if (value === 'outro') {
+      setGroupIsCustom(true)
+      setForm((f) => ({ ...f, group_name: groupCustom }))
+    } else {
+      setGroupIsCustom(false)
+      setGroupCustom('')
+      setForm((f) => ({ ...f, group_name: value }))
+    }
+  }
+
+  function handleGroupCustomChange(value: string) {
+    setGroupCustom(value)
+    setForm((f) => ({ ...f, group_name: value }))
   }
 
   async function handleSubmitGuest(e: React.FormEvent) {
@@ -444,15 +501,41 @@ export default function GuestsManager({
       }
     }
 
+    // Renomeia acompanhantes já existentes editados junto com o convidado principal —
+    // só quando o nome de fato mudou, e só depois que o PATCH do convidado principal
+    // já deu certo (acima). Mesmo padrão best-effort sem rollback da criação: uma
+    // falha ao renomear um acompanhante não desfaz o convidado principal nem impede
+    // salvar os demais acompanhantes.
+    if (editingGuest) {
+      for (const companion of editingCompanions) {
+        const original = guests.find((g) => g.id === companion.id)
+        const trimmedName = companion.name.trim()
+        if (!original || trimmedName.length === 0 || trimmedName === original.name) continue
+
+        const companionRes = await fetch(`${apiBase}/${companion.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ name: trimmedName }),
+        })
+
+        if (!companionRes.ok) {
+          const message = await readApiError(companionRes, 'Não foi possível salvar este acompanhante.')
+          toastError(`Acompanhante "${original.name}": ${message}`)
+          continue
+        }
+
+        const { data: companionData } = (await companionRes.json()) as { data: Guest }
+        setGuests((prev) => prev.map((g) => (g.id === companionData.id ? companionData : g)))
+      }
+    }
+
     setSaving(false)
     setGuests((prev) =>
       (editingGuest ? prev.map((g) => (g.id === data.id ? data : g)) : [...prev, ...createdGuests])
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
     )
     setForm({ name: '', email: '', phone: '', group_name: '', party_size: 1 })
-    setEditingGuest(null)
-    resetCompanionState()
-    setModalOpen(false)
+    closeGuestModal()
   }
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -603,17 +686,30 @@ export default function GuestsManager({
       38,
     )
 
+    // Acompanhante nunca vira linha própria no PDF — os nomes entram junto com o
+    // convidado principal na célula "Nome" (jspdf-autotable aceita \n pra quebrar
+    // linha dentro de uma célula), pelo mesmo motivo do item 1: o acompanhante é
+    // parte do convite do convidado principal, não um convidado separado.
     autoTable(doc, {
       startY: 44,
       head: [['Nome', 'Grupo', 'Status', 'Qtd. pessoas', 'Telefone', 'E-mail']],
-      body: visible.map((guest) => [
-        guest.name,
-        guest.group_name ?? '—',
-        STATUS_STYLE[guest.status].label,
-        String(guest.party_size),
-        guest.phone ?? '—',
-        guest.email ?? '—',
-      ]),
+      body: visible
+        .filter((guest) => guest.parent_guest_id === null)
+        .map((guest) => {
+          const companionNames = companionsOf(guest.id).map((c) => c.name)
+          const nameCell = companionNames.length > 0
+            ? `${guest.name}\n+ ${companionNames.join(', ')}`
+            : guest.name
+
+          return [
+            nameCell,
+            guest.group_name ?? '—',
+            STATUS_STYLE[guest.status].label,
+            String(guest.party_size),
+            guest.phone ?? '—',
+            guest.email ?? '—',
+          ]
+        }),
       margin: { left: 14, right: 14 },
       styles: { fontSize: 9, cellPadding: 4 },
       headStyles: { fillColor: weddingColor, textColor: '#FFFFFF' },
@@ -805,15 +901,16 @@ export default function GuestsManager({
 
       {/* Guest list */}
       <div className="overflow-hidden rounded-2xl bg-[var(--surface)]" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-        {visible.map((guest, idx) => {
+        {visibleTopLevel.map((guest, idx) => {
           const st = STATUS_STYLE[guest.status]
           const initial = guest.name.charAt(0).toUpperCase()
           const details = [guest.group_name, guest.email, guest.phone].filter(Boolean).join(' · ')
+          const companions = companionsOf(guest.id)
           return (
             <div
               key={guest.id}
               className="flex flex-wrap items-center gap-4 px-5 py-4"
-              style={{ borderBottom: idx < visible.length - 1 ? '1px solid #F8F3EE' : 'none' }}
+              style={{ borderBottom: idx < visibleTopLevel.length - 1 ? '1px solid #F8F3EE' : 'none' }}
             >
               <div
                 style={{
@@ -850,6 +947,11 @@ export default function GuestsManager({
                     </span>
                   )}
                 </div>
+                {companions.length > 0 && (
+                  <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
+                    Acompanhantes: {companions.map((c) => c.name).join(', ')}
+                  </div>
+                )}
                 <div style={{ marginTop: '3px' }}>
                   {guest.invite_sent_at ? (
                     <span
@@ -938,7 +1040,7 @@ export default function GuestsManager({
             </div>
           )
         })}
-        {visible.length === 0 && (
+        {visibleTopLevel.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
             {guests.length === 0
               ? 'Nenhum convidado ainda. Adicione o primeiro ou importe um CSV (nome,email,grupo,quantidade).'
@@ -950,7 +1052,7 @@ export default function GuestsManager({
       {/* Modal de novo convidado / editar convidado */}
       <Modal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingGuest(null); resetCompanionState() }}
+        onClose={closeGuestModal}
         title={editingGuest ? 'Editar convidado' : 'Novo convidado'}
       >
         <form onSubmit={handleSubmitGuest} className="flex flex-col gap-4">
@@ -993,19 +1095,32 @@ export default function GuestsManager({
           </div>
           <div>
             <label htmlFor="guest-group" style={labelStyle}>Grupo</label>
-            <input
+            <select
               id="guest-group"
-              type="text"
-              maxLength={80}
-              list="guest-group-suggestions"
-              value={form.group_name}
-              onChange={(e) => setForm((f) => ({ ...f, group_name: e.target.value }))}
-              placeholder="Família da noiva, Amigos do trabalho…"
+              value={groupIsCustom ? 'outro' : form.group_name}
+              onChange={(e) => handleGroupSelectChange(e.target.value)}
               style={inputStyle}
-            />
-            <datalist id="guest-group-suggestions">
-              {GROUP_SUGGESTIONS.map((g) => <option key={g} value={g} />)}
-            </datalist>
+            >
+              <option value="">Selecione um grupo</option>
+              {GROUP_SUGGESTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+              <option value="outro">Outro (personalizado)</option>
+            </select>
+            {groupIsCustom && (
+              <>
+                <label htmlFor="guest-group-custom" style={{ ...labelStyle, marginTop: '8px' }}>
+                  Grupo personalizado
+                </label>
+                <input
+                  id="guest-group-custom"
+                  type="text"
+                  maxLength={80}
+                  value={groupCustom}
+                  onChange={(e) => handleGroupCustomChange(e.target.value)}
+                  placeholder="Amigos do trabalho, Padrinhos…"
+                  style={inputStyle}
+                />
+              </>
+            )}
           </div>
           <div>
             <label htmlFor="guest-party-size" style={labelStyle}>Quantidade de pessoas</label>
@@ -1081,10 +1196,36 @@ export default function GuestsManager({
             </div>
           )}
 
+          {/* Edição de acompanhantes já existentes (linhas próprias em `guests`, ligadas
+              por parent_guest_id) — atenção: se este convidado confirmar presença de
+              novo pelo link de RSVP público informando acompanhantes, a API do RSVP
+              apaga e recria essas linhas do zero, então qualquer nome editado aqui pode
+              ser sobrescrito nesse cenário (ver PATCH /api/v1/rsvp/[token]). */}
+          {editingGuest && editingCompanions.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {editingCompanions.map((companion, index) => (
+                <div key={companion.id}>
+                  <label htmlFor={`editing-companion-name-${companion.id}`} style={labelStyle}>
+                    Nome do acompanhante {index + 1}
+                  </label>
+                  <input
+                    id={`editing-companion-name-${companion.id}`}
+                    type="text"
+                    maxLength={120}
+                    value={companion.name}
+                    onChange={(e) => updateEditingCompanionName(companion.id, e.target.value)}
+                    placeholder="Nome completo"
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
-              onClick={() => { setModalOpen(false); setEditingGuest(null); resetCompanionState() }}
+              onClick={closeGuestModal}
               style={{
                 background: 'transparent', color: 'var(--muted-fg)', border: 'none',
                 fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: '10px 14px',

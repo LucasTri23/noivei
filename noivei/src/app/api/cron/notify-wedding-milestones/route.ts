@@ -20,6 +20,11 @@ import { constantTimeEqual } from '@/lib/security/constant-time-compare'
 import { createSupabaseService } from '@/lib/supabase/service'
 import type { GuestStatus } from '@/types/database'
 
+// @react-pdf/renderer (renderWeddingSummaryPdf) precisa do runtime Node — deixar
+// implícito já bastaria hoje, mas fixar explicitamente evita quebra silenciosa
+// caso o runtime padrão de rotas mude no futuro.
+export const runtime = 'nodejs'
+
 // yyyy-mm-dd, yyyy-mm-dd → diferença inteira de dias (toISO - fromISO) usando
 // Date.UTC pros dois lados — as strings já são datas puras (America/Sao_Paulo,
 // resolvidas pelo caller), então isso nunca sofre off-by-one por fuso/DST.

@@ -29,6 +29,11 @@ import type {
   WeddingPreferences,
 } from '@/types/database'
 
+// @react-pdf/renderer (renderWeddingDataExportPdf) precisa do runtime Node —
+// deixar implícito já bastaria hoje, mas fixar explicitamente evita quebra
+// silenciosa caso o runtime padrão de rotas mude no futuro.
+export const runtime = 'nodejs'
+
 interface RouteContext {
   params: Promise<{ wid: string }>
 }

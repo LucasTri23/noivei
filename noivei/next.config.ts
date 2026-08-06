@@ -41,6 +41,15 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // @react-pdf/renderer (usado no resumo de casamento por e-mail e na exportação de
+  // dados em PDF) depende de fontkit/yoga-layout por baixo dos panos — deixando o
+  // Next tentar empacotar isso normalmente no bundle da função serverless, o
+  // carregamento quebra em produção na Vercel mesmo funcionando local (build e
+  // testes rodam em Node puro, sem passar pelo bundle da function). Marcar como
+  // pacote externo faz essas libs serem carregadas direto do node_modules em
+  // runtime, sem o bundler mexer nelas.
+  serverExternalPackages: ['@react-pdf/renderer'],
+
   headers: async () => [
     { source: '/(.*)', headers: securityHeaders },
   ],
