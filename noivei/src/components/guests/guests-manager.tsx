@@ -74,6 +74,15 @@ const GROUP_FILTER_OPTS: { key: GuestGroupCategory | 'todos'; label: string }[] 
   ...(Object.entries(GROUP_CATEGORY_LABELS) as [GuestGroupCategory, string][]).map(([key, label]) => ({ key, label })),
 ]
 
+// Remove acento e diferença de maiúsculas — usado tanto no filtro de grupo quanto na
+// busca por nome, pra "Ana", "ana" e "Anã" se comportarem da mesma forma.
+function stripAccents(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
+
 // Casa "Família da Noiva", "familia da noiva", "Familia Noiva (Robert)" etc. com a
 // categoria certa — sem acento e sem diferenciar maiúsculas, porque convidado já
 // cadastrado antes deste filtro existir tem group_name digitado à mão, de todo jeito.
@@ -81,10 +90,7 @@ const GROUP_FILTER_OPTS: { key: GuestGroupCategory | 'todos'; label: string }[] 
 // de todo filtro específico, só aparece em "Todos os grupos".
 function matchGroupCategory(groupName: string | null): GuestGroupCategory | null {
   if (!groupName) return null
-  const normalized = groupName
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  const normalized = stripAccents(groupName)
 
   if (normalized.includes('comum')) return 'amigos_comum'
   if (normalized.includes('famil') && normalized.includes('noiva')) return 'familia_noiva'
@@ -239,10 +245,7 @@ function toIsoDate(date: Date): string {
 // slug pra nome de arquivo, trocando qualquer sequência de caracteres não
 // alfanuméricos por um único hífen.
 function slugify(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  return stripAccents(text)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-+|-+$)/g, '')
 }
@@ -282,6 +285,7 @@ export default function GuestsManager({
   const [guests, setGuests]             = useState<Guest[]>(initialGuests)
   const [filter, setFilter]             = useState<Filter>('todos')
   const [groupFilter, setGroupFilter]   = useState<GuestGroupCategory | 'todos'>('todos')
+  const [search, setSearch]             = useState('')
   const [modalOpen, setModalOpen]       = useState(false)
   const [saving, setSaving]             = useState(false)
   const [importing, setImporting]       = useState(false)
@@ -320,21 +324,55 @@ export default function GuestsManager({
     recusado:   guests.filter((g) => g.status === 'recusado').length,
   }
 
-  const visible = guests.filter(
-    (g) =>
-      (filter === 'todos' || g.status === filter) &&
-      (groupFilter === 'todos' || matchGroupCategory(g.group_name) === groupFilter),
-  )
-
-  // Acompanhante (parent_guest_id !== null) não vira linha própria na lista nem no
-  // PDF — ele é parte do convite do convidado principal, não um convidado separado
-  // ("o principal que envolve o secundário e não um apartado"). Editar o nome de um
-  // acompanhante já existente acontece dentro do modal do convidado principal.
-  const visibleTopLevel = visible.filter((g) => g.parent_guest_id === null)
-
   function companionsOf(guestId: string): Guest[] {
     return guests.filter((g) => g.parent_guest_id === guestId)
   }
+
+  // As três buscas (status, grupo, nome) se aplicam por indivíduo — cada convidado ou
+  // acompanhante é avaliado pelo próprio status/grupo/nome, nunca pelo do convidado
+  // principal a que pertence. É essa composição que permite um acompanhante recusado
+  // aparecer na aba "Recusados" mesmo com o principal confirmado.
+  function matchesStatusFilter(g: Guest): boolean {
+    return filter === 'todos' || g.status === filter
+  }
+  function matchesGroupFilter(g: Guest): boolean {
+    return groupFilter === 'todos' || matchGroupCategory(g.group_name) === groupFilter
+  }
+  function matchesSearch(g: Guest): boolean {
+    return stripAccents(g.name).includes(stripAccents(search))
+  }
+  function isIndividuallyVisible(g: Guest): boolean {
+    return matchesStatusFilter(g) && matchesGroupFilter(g) && matchesSearch(g)
+  }
+
+  // Monta as linhas da lista: convidado principal visível entra com todos os
+  // acompanhantes que TAMBÉM estão individualmente visíveis, aninhados embaixo dele
+  // ("uma tem que ficar embaixo da outra"). Quando o principal não está visível (ex.:
+  // status diferente do filtro ativo) mas algum acompanhante está, esse acompanhante
+  // vira uma linha própria — senão ele nunca apareceria em lugar nenhum na aba.
+  type GuestRow =
+    | { kind: 'group'; guest: Guest; companions: Guest[] }
+    | { kind: 'standalone'; guest: Guest; parentName: string }
+
+  const rows: GuestRow[] = []
+  for (const g of guests) {
+    if (g.parent_guest_id !== null) continue
+    const companions = companionsOf(g.id).filter(isIndividuallyVisible)
+    if (isIndividuallyVisible(g)) {
+      rows.push({ kind: 'group', guest: g, companions })
+    } else {
+      for (const companion of companions) {
+        rows.push({ kind: 'standalone', guest: companion, parentName: g.name })
+      }
+    }
+  }
+
+  // Exportação em PDF: o convidado principal entra se ele mesmo bate com os filtros
+  // ativos (status/grupo/busca) — diferente da tela, os acompanhantes NUNCA decidem
+  // sozinhos se a linha do principal aparece, porque no PDF o grupo continua sempre
+  // junto independente do status de cada um (só o rótulo de status de cada
+  // acompanhante muda dentro da célula).
+  const pdfTopLevelGuests = guests.filter((g) => g.parent_guest_id === null && isIndividuallyVisible(g))
 
   const previewRows: PreviewRow[] = previewResult
     ? [
@@ -657,9 +695,9 @@ export default function GuestsManager({
     setDeletingGuest(null)
   }
 
-  // Exporta exatamente o que está em `visible` (respeitando filter/groupFilter), não a
-  // lista completa de `guests` — senão o PDF não bateria com o que o casal está vendo
-  // na tela no momento em que clicou em exportar.
+  // Exporta exatamente o que está em `pdfTopLevelGuests` (respeitando filter/groupFilter/
+  // search), não a lista completa de `guests` — senão o PDF não bateria com o que o
+  // casal está vendo na tela no momento em que clicou em exportar.
   function handleExportPdf() {
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
@@ -689,27 +727,29 @@ export default function GuestsManager({
     // Acompanhante nunca vira linha própria no PDF — os nomes entram junto com o
     // convidado principal na célula "Nome" (jspdf-autotable aceita \n pra quebrar
     // linha dentro de uma célula), pelo mesmo motivo do item 1: o acompanhante é
-    // parte do convite do convidado principal, não um convidado separado.
+    // parte do convite do convidado principal, não um convidado separado. O status de
+    // cada um vai entre parênteses porque, diferente da tela, aqui o grupo continua
+    // sempre junto mesmo quando os status divergem entre si.
     autoTable(doc, {
       startY: 44,
       head: [['Nome', 'Grupo', 'Status', 'Qtd. pessoas', 'Telefone', 'E-mail']],
-      body: visible
-        .filter((guest) => guest.parent_guest_id === null)
-        .map((guest) => {
-          const companionNames = companionsOf(guest.id).map((c) => c.name)
-          const nameCell = companionNames.length > 0
-            ? `${guest.name}\n+ ${companionNames.join(', ')}`
-            : guest.name
+      body: pdfTopLevelGuests.map((guest) => {
+        const companionLabels = companionsOf(guest.id).map(
+          (c) => `${c.name} (${STATUS_STYLE[c.status].label})`,
+        )
+        const nameCell = companionLabels.length > 0
+          ? `${guest.name}\n+ ${companionLabels.join(', ')}`
+          : guest.name
 
-          return [
-            nameCell,
-            guest.group_name ?? '—',
-            STATUS_STYLE[guest.status].label,
-            String(guest.party_size),
-            guest.phone ?? '—',
-            guest.email ?? '—',
-          ]
-        }),
+        return [
+          nameCell,
+          guest.group_name ?? '—',
+          STATUS_STYLE[guest.status].label,
+          String(guest.party_size),
+          guest.phone ?? '—',
+          guest.email ?? '—',
+        ]
+      }),
       margin: { left: 14, right: 14 },
       styles: { fontSize: 9, cellPadding: 4 },
       headStyles: { fillColor: weddingColor, textColor: '#FFFFFF' },
@@ -718,6 +758,170 @@ export default function GuestsManager({
 
     const slug = slugify(coupleNames) || 'casamento'
     doc.save(`convidados-${slug}-${toIsoDate(new Date())}.pdf`)
+  }
+
+  // Linha "cheia" — usada tanto pro convidado principal de um grupo quanto pro
+  // acompanhante que aparece sozinho numa aba de status (`extraDetail` é o que
+  // diferencia esse segundo caso, com o rótulo "Acompanhante de {nome}").
+  function renderGuestRow(guest: Guest, extraDetail?: string) {
+    const st = STATUS_STYLE[guest.status]
+    const initial = guest.name.charAt(0).toUpperCase()
+    const baseDetails = [guest.group_name, guest.email, guest.phone].filter(Boolean).join(' · ')
+    const details = [baseDetails, extraDetail].filter(Boolean).join(' · ')
+    return (
+      <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+        <div
+          style={{
+            width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
+            background: 'color-mix(in srgb, var(--wedding-color) 14%, transparent)', color: 'var(--wedding-color)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: '16px',
+          }}
+        >
+          {initial}
+        </div>
+        <div style={{ flex: 1, minWidth: '160px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
+              {guest.name}
+            </span>
+            {guest.party_size > 1 && (
+              <span
+                title={`Convite para até ${guest.party_size} pessoas`}
+                style={{
+                  fontSize: '11px', fontWeight: 700, color: 'var(--wedding-color-dark)',
+                  background: 'var(--wedding-color-subtle)', borderRadius: '99px', padding: '2px 8px',
+                }}
+              >
+                até {guest.party_size} pessoas
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
+            {details || 'Sem detalhes'}
+            {guest.attending_count !== null && (
+              <span style={{ fontWeight: 600, color: '#5E8B6A' }}>
+                {details ? ' · ' : ''}{guest.attending_count} de {guest.party_size} confirmado(s)
+              </span>
+            )}
+          </div>
+          <div style={{ marginTop: '3px' }}>
+            {guest.invite_sent_at ? (
+              <span
+                title={`Convite enviado em ${new Date(guest.invite_sent_at).toLocaleDateString('pt-BR')}`}
+                style={{
+                  fontSize: '11px', fontWeight: 600, color: '#5E8B6A',
+                  background: '#E9EFE6', borderRadius: '99px', padding: '2px 8px',
+                }}
+              >
+                Convite enviado · {formatInviteSentAt(guest.invite_sent_at)}
+              </span>
+            ) : (
+              <span
+                style={{
+                  fontSize: '11px', fontWeight: 600, color: '#9A7A60',
+                  background: 'var(--wedding-color-subtle)', borderRadius: '99px', padding: '2px 8px',
+                }}
+              >
+                Convite ainda não enviado
+              </span>
+            )}
+          </div>
+        </div>
+        <select
+          value={guest.status}
+          onChange={(e) => handleStatusChange(guest, e.target.value as GuestStatus)}
+          aria-label={`Status de ${guest.name}`}
+          style={{
+            fontSize: '12px', fontWeight: 600, padding: '5px 10px',
+            borderRadius: '99px', background: st.bg, color: st.color,
+            border: 'none', cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <option value="pendente">Pendente</option>
+          <option value="confirmado">Confirmado</option>
+          <option value="recusado">Recusado</option>
+        </select>
+        {guest.phone && (
+          <button
+            onClick={() => handleSendWhatsApp(guest)}
+            title={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
+            aria-label={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
+            style={{
+              border: 'none', background: 'transparent', color: '#5E8B6A',
+              cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
+            }}
+          >
+            <WhatsAppIcon />
+          </button>
+        )}
+        {guest.status === 'confirmado' && checkinEnabled && (
+          <button
+            onClick={() => handleSendTicket(guest)}
+            title={`Enviar ingresso (QR code) para ${guest.name} pelo WhatsApp`}
+            aria-label={`Enviar ingresso (QR code) para ${guest.name} pelo WhatsApp`}
+            style={{
+              border: 'none', background: 'transparent', color: 'var(--wedding-color)',
+              cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
+            }}
+          >
+            <TicketIcon />
+          </button>
+        )}
+        <button
+          onClick={() => openEdit(guest)}
+          title={`Editar ${guest.name}`}
+          aria-label={`Editar ${guest.name}`}
+          style={{
+            border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+            cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
+          }}
+        >
+          <PencilIcon />
+        </button>
+        <button
+          onClick={() => openDeleteConfirm(guest)}
+          title={`Remover ${guest.name}`}
+          aria-label={`Remover ${guest.name}`}
+          style={{
+            border: 'none', background: 'transparent', color: 'var(--muted-fg)',
+            cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
+          }}
+        >
+          <TrashIcon />
+        </button>
+      </div>
+    )
+  }
+
+  // Sub-linha de acompanhante aninhado sob o convidado principal — mais compacta que
+  // renderGuestRow de propósito (é um detalhe do grupo, não uma linha completa):
+  // nome + status, editável independentemente via o mesmo handleStatusChange.
+  function renderCompanionSubRow(companion: Guest) {
+    const cst = STATUS_STYLE[companion.status]
+    return (
+      <div
+        key={companion.id}
+        className="flex flex-wrap items-center gap-3"
+        style={{ padding: '7px 20px 7px 64px', borderTop: '1px dashed #F3EAE0' }}
+      >
+        <span style={{ fontSize: '13px', color: 'var(--fg)' }}>{companion.name}</span>
+        <select
+          value={companion.status}
+          onChange={(e) => handleStatusChange(companion, e.target.value as GuestStatus)}
+          aria-label={`Status de ${companion.name}`}
+          style={{
+            marginLeft: 'auto', fontSize: '11px', fontWeight: 600, padding: '3px 9px',
+            borderRadius: '99px', background: cst.bg, color: cst.color,
+            border: 'none', cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <option value="pendente">Pendente</option>
+          <option value="confirmado">Confirmado</option>
+          <option value="recusado">Recusado</option>
+        </select>
+      </div>
+    )
   }
 
   return (
@@ -899,148 +1103,32 @@ export default function GuestsManager({
         ))}
       </div>
 
+      {/* Busca por nome */}
+      <div className="mb-5">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar convidado por nome…"
+          aria-label="Buscar convidado por nome"
+          style={{ ...inputStyle, maxWidth: '320px' }}
+        />
+      </div>
+
       {/* Guest list */}
       <div className="overflow-hidden rounded-2xl bg-[var(--surface)]" style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)' }}>
-        {visibleTopLevel.map((guest, idx) => {
-          const st = STATUS_STYLE[guest.status]
-          const initial = guest.name.charAt(0).toUpperCase()
-          const details = [guest.group_name, guest.email, guest.phone].filter(Boolean).join(' · ')
-          const companions = companionsOf(guest.id)
-          return (
-            <div
-              key={guest.id}
-              className="flex flex-wrap items-center gap-4 px-5 py-4"
-              style={{ borderBottom: idx < visibleTopLevel.length - 1 ? '1px solid #F8F3EE' : 'none' }}
-            >
-              <div
-                style={{
-                  width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-                  background: 'color-mix(in srgb, var(--wedding-color) 14%, transparent)', color: 'var(--wedding-color)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontSize: '16px',
-                }}
-              >
-                {initial}
-              </div>
-              <div style={{ flex: 1, minWidth: '160px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--fg)' }}>
-                    {guest.name}
-                  </span>
-                  {guest.party_size > 1 && (
-                    <span
-                      title={`Convite para até ${guest.party_size} pessoas`}
-                      style={{
-                        fontSize: '11px', fontWeight: 700, color: 'var(--wedding-color-dark)',
-                        background: 'var(--wedding-color-subtle)', borderRadius: '99px', padding: '2px 8px',
-                      }}
-                    >
-                      até {guest.party_size} pessoas
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
-                  {details || 'Sem detalhes'}
-                  {guest.attending_count !== null && (
-                    <span style={{ fontWeight: 600, color: '#5E8B6A' }}>
-                      {details ? ' · ' : ''}{guest.attending_count} de {guest.party_size} confirmado(s)
-                    </span>
-                  )}
-                </div>
-                {companions.length > 0 && (
-                  <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '1px' }}>
-                    Acompanhantes: {companions.map((c) => c.name).join(', ')}
-                  </div>
-                )}
-                <div style={{ marginTop: '3px' }}>
-                  {guest.invite_sent_at ? (
-                    <span
-                      title={`Convite enviado em ${new Date(guest.invite_sent_at).toLocaleDateString('pt-BR')}`}
-                      style={{
-                        fontSize: '11px', fontWeight: 600, color: '#5E8B6A',
-                        background: '#E9EFE6', borderRadius: '99px', padding: '2px 8px',
-                      }}
-                    >
-                      Convite enviado · {formatInviteSentAt(guest.invite_sent_at)}
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: '11px', fontWeight: 600, color: '#9A7A60',
-                        background: 'var(--wedding-color-subtle)', borderRadius: '99px', padding: '2px 8px',
-                      }}
-                    >
-                      Convite ainda não enviado
-                    </span>
-                  )}
-                </div>
-              </div>
-              <select
-                value={guest.status}
-                onChange={(e) => handleStatusChange(guest, e.target.value as GuestStatus)}
-                aria-label={`Status de ${guest.name}`}
-                style={{
-                  fontSize: '12px', fontWeight: 600, padding: '5px 10px',
-                  borderRadius: '99px', background: st.bg, color: st.color,
-                  border: 'none', cursor: 'pointer', flexShrink: 0,
-                }}
-              >
-                <option value="pendente">Pendente</option>
-                <option value="confirmado">Confirmado</option>
-                <option value="recusado">Recusado</option>
-              </select>
-              {guest.phone && (
-                <button
-                  onClick={() => handleSendWhatsApp(guest)}
-                  title={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
-                  aria-label={`Enviar link de confirmação para ${guest.name} pelo WhatsApp`}
-                  style={{
-                    border: 'none', background: 'transparent', color: '#5E8B6A',
-                    cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
-                  }}
-                >
-                  <WhatsAppIcon />
-                </button>
-              )}
-              {guest.status === 'confirmado' && checkinEnabled && (
-                <button
-                  onClick={() => handleSendTicket(guest)}
-                  title={`Enviar ingresso (QR code) para ${guest.name} pelo WhatsApp`}
-                  aria-label={`Enviar ingresso (QR code) para ${guest.name} pelo WhatsApp`}
-                  style={{
-                    border: 'none', background: 'transparent', color: 'var(--wedding-color)',
-                    cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
-                  }}
-                >
-                  <TicketIcon />
-                </button>
-              )}
-              <button
-                onClick={() => openEdit(guest)}
-                title={`Editar ${guest.name}`}
-                aria-label={`Editar ${guest.name}`}
-                style={{
-                  border: 'none', background: 'transparent', color: 'var(--muted-fg)',
-                  cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
-                }}
-              >
-                <PencilIcon />
-              </button>
-              <button
-                onClick={() => openDeleteConfirm(guest)}
-                title={`Remover ${guest.name}`}
-                aria-label={`Remover ${guest.name}`}
-                style={{
-                  border: 'none', background: 'transparent', color: 'var(--muted-fg)',
-                  cursor: 'pointer', padding: '6px', borderRadius: '8px', flexShrink: 0,
-                }}
-              >
-                <TrashIcon />
-              </button>
-            </div>
-          )
-        })}
-        {visibleTopLevel.length === 0 && (
+        {rows.map((row, idx) => (
+          <div
+            key={row.guest.id}
+            style={{ borderBottom: idx < rows.length - 1 ? '1px solid #F8F3EE' : 'none' }}
+          >
+            {row.kind === 'group'
+              ? renderGuestRow(row.guest)
+              : renderGuestRow(row.guest, `Acompanhante de ${row.parentName}`)}
+            {row.kind === 'group' && row.companions.map((companion) => renderCompanionSubRow(companion))}
+          </div>
+        ))}
+        {rows.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted-fg)', fontSize: '14px' }}>
             {guests.length === 0
               ? 'Nenhum convidado ainda. Adicione o primeiro ou importe um CSV (nome,email,grupo,quantidade).'

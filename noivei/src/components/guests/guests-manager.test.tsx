@@ -122,12 +122,32 @@ describe('GuestsManager', () => {
   })
 
   describe('acompanhantes', () => {
-    it('não deve renderizar acompanhante como linha própria, mas deve listar o nome na linha do convidado principal', () => {
+    it('deve renderizar acompanhante como sub-linha aninhada embaixo do convidado principal, com status próprio, na aba "Todos"', () => {
       renderManager([guest, companion])
 
-      expect(screen.getByText((_, node) => node?.textContent === 'Acompanhantes: Ana')).toBeInTheDocument()
+      expect(screen.getByText('Ana')).toBeInTheDocument()
+      expect(screen.getByLabelText('Status de Ana')).toHaveValue('confirmado')
+      expect(screen.queryByText((_, node) => node?.textContent === 'Acompanhantes: Ana')).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Remover Ana' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Editar Ana' })).not.toBeInTheDocument()
+    })
+
+    it('deve mostrar o acompanhante sozinho na aba do status dele quando o convidado principal está em outro status', async () => {
+      const user = userEvent.setup()
+      const mainConfirmado: Guest = { ...guest, status: 'confirmado' }
+      const companionRecusado: Guest = { ...companion, status: 'recusado' }
+      renderManager([mainConfirmado, companionRecusado])
+
+      await user.click(screen.getByRole('button', { name: 'Recusados' }))
+
+      expect(screen.getByText('Ana')).toBeInTheDocument()
+      expect(screen.getByText((_, node) => node?.textContent === 'Acompanhante de Maria Silva')).toBeInTheDocument()
+      expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Confirmados' }))
+
+      expect(screen.getByText('Maria Silva')).toBeInTheDocument()
+      expect(screen.queryByText('Ana')).not.toBeInTheDocument()
     })
 
     it('deve pré-preencher o nome do acompanhante existente ao editar o convidado principal e salvar deve fazer PATCH no acompanhante quando o nome muda', async () => {
@@ -175,6 +195,30 @@ describe('GuestsManager', () => {
 
       expect(screen.getByLabelText('Grupo')).toHaveValue('outro')
       expect(screen.getByLabelText('Grupo personalizado')).toHaveValue('Amigos do trabalho')
+    })
+  })
+
+  describe('busca por nome', () => {
+    it('deve filtrar a lista pela busca de nome, ignorando acento e maiúsculas/minúsculas', async () => {
+      const user = userEvent.setup()
+      const joao: Guest = { ...guest, id: 'g3', name: 'João Souza', rsvp_token: 'tok-3' }
+      renderManager([guest, joao])
+
+      await user.type(screen.getByLabelText('Buscar convidado por nome'), 'JOAO')
+
+      expect(screen.getByText('João Souza')).toBeInTheDocument()
+      expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument()
+    })
+
+    it('deve mostrar o acompanhante encontrado pela busca com o rótulo "Acompanhante de" quando o principal não bate com a busca', async () => {
+      const user = userEvent.setup()
+      renderManager([guest, companion])
+
+      await user.type(screen.getByLabelText('Buscar convidado por nome'), 'ana')
+
+      expect(screen.getByText('Ana')).toBeInTheDocument()
+      expect(screen.getByText((_, node) => node?.textContent === 'Acompanhante de Maria Silva')).toBeInTheDocument()
+      expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument()
     })
   })
 })
