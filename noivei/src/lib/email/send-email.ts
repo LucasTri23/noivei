@@ -29,6 +29,8 @@ interface SendEmailParams {
   html:    string
   /** Opcional — ex.: PDF de resumo do casamento no e-mail do marco `day_after`. */
   attachments?: SendEmailAttachment[]
+  /** Opcional — ex.: e-mail do usuário no canal de suporte, pra responder direto pra ele. */
+  replyTo?: string
 }
 
 /**
@@ -38,7 +40,7 @@ interface SendEmailParams {
  * de dev sem .env), apenas loga um aviso e retorna — nenhuma feature de e-mail
  * pode quebrar o fluxo principal (RSVP, cron) só porque o SMTP não está disponível.
  */
-export async function sendEmail({ to, subject, html, attachments }: SendEmailParams): Promise<void> {
+export async function sendEmail({ to, subject, html, attachments, replyTo }: SendEmailParams): Promise<void> {
   const host     = process.env.EMAIL_SMTP_HOST
   const port     = process.env.EMAIL_SMTP_PORT
   const user     = process.env.EMAIL_SMTP_USER
@@ -57,5 +59,5 @@ export async function sendEmail({ to, subject, html, attachments }: SendEmailPar
     auth: { user, pass: password },
   })
 
-  await transporter.sendMail({ from, to, subject, html, attachments })
+  await transporter.sendMail({ from, to, subject, html, attachments, replyTo })
 }

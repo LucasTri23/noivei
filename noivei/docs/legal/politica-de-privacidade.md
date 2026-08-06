@@ -1,6 +1,6 @@
 # Política de Privacidade — Wednest
 
-**Última atualização:** 05 de agosto de 2026
+**Última atualização:** 06 de agosto de 2026
 
 ---
 
@@ -120,6 +120,12 @@ O Wednest utiliza apenas os cookies e tecnologias descritos em sua Política de 
 Na data desta Política, são utilizados apenas cookies estritamente necessários ao funcionamento da autenticação e aos mecanismos de segurança da plataforma.
 
 Caso futuramente sejam implementadas ferramentas analíticas, publicitárias ou de marketing que dependam de cookies não essenciais, esta Política e a Política de Cookies serão atualizadas antes da ativação dessas tecnologias.
+
+### 5.8 Mensagens enviadas pelo canal de ajuda/suporte
+
+Quando o usuário utiliza o formulário de contato disponível na área "Ajuda" da Plataforma, são tratados: o título e o conteúdo da mensagem informados pelo usuário, associados ao e-mail da conta autenticada.
+
+Essa mensagem é encaminhada por e-mail à equipe de suporte do Wednest para viabilizar a resposta à solicitação, não ficando armazenada em banco de dados da Plataforma — a partir do envio, ela passa a seguir a política de retenção do próprio provedor de e-mail utilizado pela equipe de suporte.
 
 ## 6. Finalidades do tratamento de dados pessoais
 
