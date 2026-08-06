@@ -21,9 +21,7 @@ const hanken = Hanken_Grotesk({
 })
 
 export const metadata: Metadata = {
-  // TODO: confirmar o domínio definitivo em produção (Vercel/DNS ainda apontam
-  // pra config antiga) antes de trocar o fallback abaixo de noivei.com.br.
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://noivei.com.br'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://wednest.com.br'),
   title: {
     default:  'Wednest — Organize seu casamento do jeito certo',
     template: '%s | Wednest',
