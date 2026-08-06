@@ -17,18 +17,31 @@ import { recalculateChecklistDueDates } from '@/lib/checklist/generate'
 import type { WeddingStyle } from '@/types/database'
 
 // Limite de alterações de wedding_date, forçado de verdade no banco (trigger
-// fn_enforce_wedding_date_change_limit, ver migration 20260805000016) — este
-// formulário grava direto no Supabase via RLS, sem Route Handler no meio, então
-// qualquer trava só aqui seria cosmética. O que este componente faz é só
-// refletir o estado (contador, campo desabilitado, aviso na penúltima troca)
-// pra dar um feedback melhor do que deixar o usuário descobrir o limite só
-// quando o UPDATE for rejeitado pelo trigger.
+// fn_enforce_wedding_date_change_limit, ver migrations 20260805000016 e
+// 20260806000001) — este formulário grava direto no Supabase via RLS, sem
+// Route Handler no meio, então qualquer trava só aqui seria cosmética. O que
+// este componente faz é só refletir o estado (contador, campo desabilitado,
+// aviso na penúltima troca) pra dar um feedback melhor do que deixar o
+// usuário descobrir o limite só quando o UPDATE for rejeitado pelo trigger.
 const WEDDING_DATE_CHANGE_LIMIT = 3
 
-// Precisa bater com a mensagem exata que o trigger levanta (RAISE EXCEPTION) —
-// usado só pra reconhecer ESSE erro específico e trocar por um toastError
-// específico, distinto do fallback genérico usado pra qualquer outra falha.
-const WEDDING_DATE_LIMIT_ERROR_MARKER = 'Limite de alterações da data do casamento'
+// Precisam bater com as mensagens exatas que o trigger levanta (RAISE
+// EXCEPTION) — usados só pra reconhecer CADA erro específico e trocar por um
+// toastError próprio, distinto do fallback genérico usado pra qualquer outra
+// falha.
+const WEDDING_DATE_LIMIT_ERROR_MARKER  = 'Limite de alterações da data do casamento'
+const WEDDING_DATE_PASSED_ERROR_MARKER = 'depois que ela já passou'
+
+// Mesma técnica de "hoje" em America/Sao_Paulo usada em
+// isAlbumUploadWindowOpen (src/lib/album/wedding-day.ts) — comparação direta
+// de string yyyy-mm-dd evita parsing de Date e o off-by-one que isso causaria
+// perto da meia-noite (servidor roda em UTC, "hoje" em UTC pode já ser
+// amanhã ou ainda ontem em horário de Brasília).
+function hasWeddingDatePassed(weddingDate: string | null): boolean {
+  if (!weddingDate) return false
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  return weddingDate < today
+}
 
 const STYLE_OPTIONS: { value: WeddingStyle; label: string }[] = [
   { value: 'rustico',     label: 'Rústico' },
@@ -109,10 +122,12 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
   const messageTemplate = useWatch({ control, name: 'rsvp_message_template' })
 
   const changedCount = initial.wedding_date_changed_count
-  const dateLimitReached = changedCount >= WEDDING_DATE_CHANGE_LIMIT
+  const datePassed = hasWeddingDatePassed(initial.wedding_date)
+  const dateLimitReached = datePassed || changedCount >= WEDDING_DATE_CHANGE_LIMIT
   // A PRÓXIMA troca (se acontecer) seria a última permitida — é quando vale
-  // avisar antes de gravar, não depois.
-  const isLastAllowedChange = changedCount === WEDDING_DATE_CHANGE_LIMIT - 1
+  // avisar antes de gravar, não depois. Não faz sentido avisar isso se a data
+  // já passou (dateLimitReached por outro motivo, o campo já vem desabilitado).
+  const isLastAllowedChange = !datePassed && changedCount === WEDDING_DATE_CHANGE_LIMIT - 1
 
   async function saveWedding(data: WeddingDataFields) {
     setLoading(true)
@@ -143,7 +158,9 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
       // deveria disparar aqui numa corrida rara — o campo já vem desabilitado quando
       // dateLimitReached. Reconhece essa mensagem específica pra dar um aviso amigável
       // em vez de deixar vazar o erro cru do Postgres via toastError.
-      if (error.message.includes(WEDDING_DATE_LIMIT_ERROR_MARKER)) {
+      if (error.message.includes(WEDDING_DATE_PASSED_ERROR_MARKER)) {
+        toastError('Não é possível alterar a data do casamento depois que ela já passou.')
+      } else if (error.message.includes(WEDDING_DATE_LIMIT_ERROR_MARKER)) {
         toastError('Você já usou as 3 alterações permitidas para a data do casamento.')
       } else {
         toastError('Não foi possível salvar. Tente novamente.')
@@ -234,9 +251,11 @@ export default function WeddingDataForm({ weddingId, initial }: WeddingDataFormP
             )}
           />
           <p style={{ fontSize: '12px', color: dateLimitReached ? '#C0553F' : 'var(--muted-fg)', margin: 0 }}>
-            {dateLimitReached
-              ? 'Você já usou as 3 alterações permitidas para a data do casamento.'
-              : `Alterações usadas: ${changedCount} de ${WEDDING_DATE_CHANGE_LIMIT}`}
+            {datePassed
+              ? 'A data do casamento já passou e não pode mais ser alterada.'
+              : dateLimitReached
+                ? 'Você já usou as 3 alterações permitidas para a data do casamento.'
+                : `Alterações usadas: ${changedCount} de ${WEDDING_DATE_CHANGE_LIMIT}`}
           </p>
         </div>
         <div style={fieldWrapStyle}>

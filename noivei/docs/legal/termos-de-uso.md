@@ -1,6 +1,6 @@
 # Termos de Uso — Wednest
 
-**Última atualização:** 05 de agosto de 2027
+**Última atualização:** 06 de agosto de 2026
 
 ---
 
@@ -30,6 +30,7 @@ O Wednest é uma plataforma (SaaS — *Software as a Service*) de planejamento d
 - **Lista de presentes**, com itens vinculados a lojas externas (link) e, opcionalmente, itens pagos diretamente pelo aplicativo (ver cláusula 7);
 - **Central de arquivos**, para armazenamento de contratos e documentos relacionados ao casamento;
 - **Padrinhos e cortejo**, para organização de papéis e ordem de entrada no casamento;
+- **Álbum de fotos**, mural para envio de fotografias pelo casal e pelos convidados, disponível para novos envios entre a data do casamento e o dia seguinte;
 - **Acesso compartilhado à conta**, permitindo que mais de uma pessoa (ex.: os dois noivos) gerencie o mesmo casamento, conforme os limites do plano contratado.
 
 O Wednest não presta serviços de assessoria/cerimonial de casamento, não contrata fornecedores em nome do casal e não garante a realização, qualidade ou cumprimento de contratos entre o casal e fornecedores/prestadores externos eventualmente cadastrados na Plataforma pelo próprio usuário.
@@ -53,6 +54,14 @@ Cada conta principal está associada a um único casamento. O acesso de múltipl
 ### 3.4. Suspensão e encerramento pelo Wednest
 
 O Wednest pode suspender ou encerrar o acesso de uma conta, a qualquer tempo, em caso de: violação destes Termos; uso fraudulento ou abusivo da Plataforma (incluindo tentativas de burlar limites de rate limiting, autenticação ou verificação anti-robô); determinação judicial ou de autoridade competente; ou risco à segurança de outros usuários ou da própria Plataforma. Sempre que possível, o usuário será previamente notificado.
+
+### 3.5. Alteração da data do casamento
+
+A data do casamento pode ser alterada no máximo 3 (três) vezes por conta. Ao atingir esse limite, a Plataforma exibirá aviso específico antes da última alteração possível, e novas tentativas de alteração serão automaticamente bloqueadas.
+
+Adicionalmente, uma vez que a data do casamento já tenha passado, ela não poderá mais ser alterada, independentemente do número de alterações já utilizadas — o encerramento dessa possibilidade é automático e não está sujeito a exceções.
+
+Essa limitação existe porque alterações de data impactam diretamente prazos já calculados no Checklist e na Timeline, além de confirmações de presença (RSVP) já registradas pelos convidados para a data original.
 
 ---
 
@@ -169,7 +178,7 @@ O usuário pode encerrar sua conta a qualquer momento pela tela de Perfil. A exc
 
 ## 11. Canal de atendimento
 
-Dúvidas, solicitações relativas a dados pessoais, reembolsos ou qualquer outro assunto relacionado a estes Termos podem ser encaminhadas para: wednest.suport@gmail.com.
+Dúvidas, solicitações relativas a dados pessoais, reembolsos ou qualquer outro assunto relacionado a estes Termos podem ser encaminhadas para: wednest.suport@gmail.com, ou pelo formulário disponível na área "Ajuda" dentro da própria Plataforma (Perfil → Ajuda).
 
 ---
 

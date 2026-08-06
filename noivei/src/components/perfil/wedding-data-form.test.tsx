@@ -25,10 +25,12 @@ vi.mock('@/lib/checklist/generate', () => ({
   recalculateChecklistDueDates: vi.fn().mockResolvedValue({ total: 0, updated: 0 }),
 }))
 
+// Data bem no futuro de propósito — os testes de limite por contagem não devem
+// ser afetados pela trava de "data já passou" (testada em separado abaixo).
 const baseInitial = {
   bride_name:   'Maria',
   groom_name:   'João',
-  wedding_date: '2026-08-04',
+  wedding_date: '2099-08-04',
   venue:        'Espaço Jardim das Flores',
   city:         'Campinas - SP',
   budget:       500_000,
@@ -36,11 +38,11 @@ const baseInitial = {
   rsvp_message_template: null,
 }
 
-function renderForm(weddingDateChangedCount: number) {
+function renderForm(weddingDateChangedCount: number, weddingDate = baseInitial.wedding_date) {
   return render(
     <WeddingDataForm
       weddingId="w1"
-      initial={{ ...baseInitial, wedding_date_changed_count: weddingDateChangedCount }}
+      initial={{ ...baseInitial, wedding_date: weddingDate, wedding_date_changed_count: weddingDateChangedCount }}
     />,
   )
 }
@@ -95,6 +97,18 @@ describe('WeddingDataForm', () => {
       await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
 
       expect(screen.queryByRole('heading', { name: 'Última alteração de data' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('trava de data do casamento já passada', () => {
+    it('deve desabilitar o campo de data e exibir aviso específico quando a data já passou, mesmo com contagem zerada', () => {
+      renderForm(0, '2020-01-01')
+
+      const dateField = screen.getByLabelText('Data do casamento')
+      expect(dateField).toBeDisabled()
+      expect(
+        screen.getByText('A data do casamento já passou e não pode mais ser alterada.'),
+      ).toBeInTheDocument()
     })
   })
 })
