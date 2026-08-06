@@ -1,4 +1,4 @@
-import { requireWeddingOwner } from '@/lib/api/guards/ownership'
+import { requireWeddingOwnerOrFullAccess } from '@/lib/api/guards/ownership'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkRateLimit } from '@/lib/security/rate-limit'
@@ -82,16 +82,24 @@ interface ExportPayload {
 
 // Exportação completa dos dados pessoais do casamento (LGPD art. 18, direito à
 // portabilidade) — até aqui "Exportar meus dados" só devolvia um CSV de convidados,
-// o que não cumpre a promessa do botão. Restrito ao DONO (não a membro convidado):
-// exportar TODOS os dados do casamento é uma ação sensível de conta, mesmo padrão já
-// usado em gift-payments/connect e /disconnect após a auditoria de segurança (SEC-03).
+// o que não cumpre a promessa do botão.
+//
+// Restrito ao DONO ou a membro com full_access (não a qualquer membro convidado):
+// o payload inclui dados de módulos restringíveis por permissão (financeiro,
+// presentes...), então exportar TUDO precisa do mesmo nível de acesso que já
+// enxerga tudo pelo resto do app — um membro só com acesso a "convidados", por
+// exemplo, não pode contornar essa restrição via export. Usar requireWeddingOwner
+// aqui (só o dono literal) foi o bug original: o botão aparece pra qualquer membro
+// (ver ExportDataButton/perfil/page.tsx), e para todo mundo que não fosse o dono
+// literal — inclusive o cônjuge com acesso completo via "juntar contas" — a
+// exportação sempre voltava 404.
 export async function GET(_req: Request, { params }: RouteContext) {
   try {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     const { wid } = await params
 
-    await requireWeddingOwner(supabase, wid, user.id)
+    await requireWeddingOwnerOrFullAccess(supabase, wid, user.id)
 
     // Gerar o export inteiro é pesado (~19 queries) — não é uma ação de negócio que
     // faz sentido repetir em loop, mesmo padrão de checkRateLimit usado em
