@@ -631,25 +631,35 @@ export default function GuestsManager({
     }
   }
 
-  function handleSendWhatsApp(guest: Guest) {
-    const rsvpLink = `${window.location.origin}/rsvp/${guest.rsvp_token}`
+  // Cada envio (ou reenvio) gera um rsvp_token NOVO no servidor — é o único jeito de
+  // reabrir a resposta de quem já respondeu, já que o link antigo trava pra sempre
+  // depois de usado (ver rsvp/[token]/route.ts). A aba é aberta de forma síncrona,
+  // ainda dentro do gesto de clique, e só recebe o destino depois que o token novo
+  // volta da API — abrir a aba só depois do fetch faria o navegador bloquear o popup
+  // (deixa de contar como resultado direto de um clique do usuário).
+  async function handleSendWhatsApp(guest: Guest) {
+    const popup = window.open('', '_blank')
+
+    const res = await fetch(`${apiBase}/${guest.id}/resend-invite`, { method: 'POST' })
+    if (!res.ok) {
+      popup?.close()
+      toastError(await readApiError(res, 'Não foi possível gerar um novo link de convite.'))
+      return
+    }
+
+    const { data: updated } = (await res.json()) as { data: Guest }
+    setGuests((prev) => prev.map((g) => (g.id === guest.id ? updated : g)))
+
+    const rsvpLink = `${window.location.origin}/rsvp/${updated.rsvp_token}`
     const url = buildRsvpWhatsAppUrl({
-      guestName:       guest.name,
-      guestPhone:      guest.phone,
+      guestName:       updated.name,
+      guestPhone:      updated.phone,
       rsvpLink,
       messageTemplate: rsvpMessageTemplate,
     })
-    window.open(url, '_blank')
 
-    // Best-effort: só pra o casal saber quem já recebeu o link (aparece como badge na
-    // lista) — uma falha aqui não deve impedir o envio, que já aconteceu acima.
-    const sentAt = new Date().toISOString()
-    setGuests((prev) => prev.map((g) => (g.id === guest.id ? { ...g, invite_sent_at: sentAt } : g)))
-    fetch(`${apiBase}/${guest.id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ invite_sent_at: sentAt }),
-    }).catch(() => {})
+    if (popup) popup.location.href = url
+    else window.open(url, '_blank')
   }
 
   function handleSendTicket(guest: Guest) {

@@ -81,12 +81,26 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     // primeiro (sem incluir o telefone na resposta desta rota em nenhum caminho).
     const { data: existingGuest, error: fetchError } = await supabase
       .from('guests')
-      .select('id, phone, name, group_name, wedding_id, party_size')
+      .select('id, phone, name, group_name, wedding_id, party_size, status')
       .eq('rsvp_token', parsedToken.data)
       .maybeSingle()
 
     if (fetchError) return err(500, 'DB_ERROR', 'Erro ao verificar o convite.')
     if (!existingGuest) return err(404, 'RSVP_NOT_FOUND', 'Convite não encontrado.')
+
+    // Link de RSVP é de uso único: depois de respondido, o mesmo link não aceita mais
+    // envio (mesmo padrão de "gerar outro convite" — ver resend-invite/route.ts, que é
+    // o único jeito de reabrir a resposta, com um token novo). Antes disso, reenviar a
+    // mesma resposta reprocessava o plano de acompanhantes inteiro (apaga tudo e recria
+    // só com quem veio nesse envio) — se o convidado reabrisse o link à toa e reenviasse,
+    // acompanhantes cadastrados manualmente pelo casal desapareciam de verdade do banco.
+    if (existingGuest.status !== 'pendente') {
+      return err(
+        409,
+        'ALREADY_RESPONDED',
+        'Este convite já foi respondido e não pode ser alterado por este link. Peça um novo link ao casal se precisar mudar sua resposta.',
+      )
+    }
 
     const submittedPhone = parsed.data.phone?.trim() ?? ''
     const storedPhone = (existingGuest.phone as string | null)?.trim() ?? ''

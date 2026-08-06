@@ -120,6 +120,13 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
   const [companionErrors, setCompanionErrors] = useState<CompanionFormError[]>([])
   const [saving, setSaving]   = useState<Answer | null>(null)
   const [saved, setSaved]     = useState(false)
+  // Link de RSVP é de uso único: uma vez respondido, o formulário trava (não dá mais
+  // pra reenviar por este link — ver a checagem de status no servidor em
+  // rsvp/[token]/route.ts). `locked` cobre o caso em que o servidor rejeitou por
+  // ALREADY_RESPONDED mesmo com `initialStatus` tendo chegado 'pendente' nesta carga
+  // de página (ex.: duas abas abertas, ou resposta registrada por outro caminho
+  // entre o carregamento e o envio).
+  const [locked, setLocked]   = useState(initialStatus !== 'pendente')
   const showSpinner = useDelayedLoading(saving !== null)
 
   function handleAttendingCountChange(value: number) {
@@ -219,12 +226,23 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
         toastError(body.error.message ?? 'A quantidade informada excede o número de pessoas do convite.')
         return
       }
+      if (body?.error?.code === 'ALREADY_RESPONDED') {
+        // Só deveria acontecer se a pessoa mantiver a página aberta em duas abas, ou
+        // reabrir um link antigo depois de já ter respondido por outro caminho — o
+        // formulário já não deveria estar editável nesse caso (ver `locked` abaixo),
+        // mas o servidor é quem garante de verdade. Não sabemos qual foi a resposta
+        // real (o erro não devolve o status atual), só que não é mais editável.
+        setLocked(true)
+        toastError(body.error.message ?? 'Este convite já foi respondido e não pode ser alterado por este link.')
+        return
+      }
       toastError('Não foi possível registrar sua resposta. Tente novamente.')
       return
     }
 
     setStatus(answer)
     setSaved(true)
+    setLocked(true)
 
     // Só redireciona pro site quando ele existe e está publicado (ver siteSlug em
     // get-rsvp-by-token.ts) — sem site pra mandar o convidado, ele fica na própria
@@ -235,29 +253,40 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
     }
   }
 
-  const answered = status !== 'pendente'
+  // Status pode continuar 'pendente' mesmo com `locked` true, no caso raro do
+  // servidor rejeitar por ALREADY_RESPONDED sem a gente saber qual foi a resposta
+  // real (ver handling do erro em `respond`) — por isso a mensagem trata esse caso à
+  // parte, sem alegar "confirmou" ou "recusou" sem ter certeza.
+  const lockedMessage = saved
+    ? status === 'confirmado'
+      ? 'Presença confirmada! O casal vai adorar ter você lá. 🎉'
+      : 'Resposta registrada. Sentiremos sua falta!'
+    : status === 'confirmado'
+      ? 'Você já confirmou presença a este convite.'
+      : status === 'recusado'
+        ? 'Você já recusou este convite.'
+        : 'Este convite já foi respondido.'
 
   return (
     <div>
-      {answered && (
-        <p
-          style={{
-            fontSize: '14.5px', margin: '0 0 18px', padding: '12px 16px', borderRadius: '12px',
-            background: status === 'confirmado' ? '#E9EFE6' : '#F6E4DE',
-            color:      status === 'confirmado' ? '#5E8B6A' : '#C0553F',
-            fontWeight: 600,
-          }}
-        >
-          {saved
-            ? status === 'confirmado'
-              ? 'Presença confirmada! O casal vai adorar ter você lá. 🎉'
-              : 'Resposta registrada. Sentiremos sua falta!'
-            : status === 'confirmado'
-              ? 'Você já confirmou presença — mas pode mudar sua resposta abaixo.'
-              : 'Você recusou o convite — mas pode mudar sua resposta abaixo.'}
-        </p>
-      )}
-
+      {locked ? (
+        <>
+          <p
+            style={{
+              fontSize: '14.5px', margin: '0 0 8px', padding: '12px 16px', borderRadius: '12px',
+              background: status === 'confirmado' ? '#E9EFE6' : status === 'recusado' ? '#F6E4DE' : 'var(--wedding-color-subtle)',
+              color:      status === 'confirmado' ? '#5E8B6A' : status === 'recusado' ? '#C0553F' : 'var(--wedding-color-dark)',
+              fontWeight: 600,
+            }}
+          >
+            {lockedMessage}
+          </p>
+          <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0 }}>
+            Se precisar alterar sua resposta, peça um novo link ao casal.
+          </p>
+        </>
+      ) : (
+        <>
       <div style={{ marginBottom: '18px' }}>
         <label htmlFor="rsvp-phone" style={labelStyle}>Telefone</label>
         <input
@@ -447,6 +476,8 @@ export default function RsvpForm({ token, initialStatus, initialPartySize, initi
           Não poderei ir
         </button>
       </div>
+        </>
+      )}
     </div>
   )
 }
