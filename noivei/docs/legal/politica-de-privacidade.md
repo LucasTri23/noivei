@@ -194,7 +194,9 @@ Quando solicitado pelo titular, esse documento poderá ser encaminhado por e-mai
 
 O Wednest disponibiliza mecanismo para exportação das informações cadastradas na plataforma.
 
-Na versão atual, a exportação consiste em um arquivo JSON contendo os dados relacionados ao casamento e às funcionalidades utilizadas pelo usuário, permitindo que o titular obtenha uma cópia estruturada das informações armazenadas.
+Na versão atual, a exportação consiste em um documento em formato PDF, gerado sob demanda, contendo os dados relacionados ao casamento e às funcionalidades utilizadas, organizados por categoria, permitindo que o titular obtenha uma cópia estruturada das informações armazenadas.
+
+Essa exportação completa está disponível exclusivamente para o titular da conta principal (dono do casamento), por se tratar de uma cópia integral de dados de múltiplas categorias, incluindo informações que podem estar sujeitas a permissões restritas dentro da própria plataforma. Demais titulares com acesso à conta — como membros convidados por meio do acesso compartilhado — poderão solicitar acesso aos próprios dados pessoais pelos canais oficiais de atendimento, nos termos do disposto na seção 16 desta Política.
 
 Essa funcionalidade existe para facilitar o acesso aos próprios dados e reforçar a transparência no tratamento realizado pela plataforma.
 

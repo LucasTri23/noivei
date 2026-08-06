@@ -1,8 +1,15 @@
-import { requireWeddingOwnerOrFullAccess } from '@/lib/api/guards/ownership'
-import { ok, err, handleApiError } from '@/lib/api/response'
+import { requireWeddingOwner } from '@/lib/api/guards/ownership'
+import { err, handleApiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { renderWeddingDataExportPdf } from '@/lib/pdf/wedding-data-export-pdf'
+import type {
+  ExportedFileMeta,
+  ExportedGalleryPhotoMeta,
+  ExportedTableAssignment,
+  ExportPayload,
+} from '@/lib/export/wedding-export-payload'
 import type {
   ChecklistItem,
   FinancialCategoryBudget,
@@ -26,80 +33,24 @@ interface RouteContext {
   params: Promise<{ wid: string }>
 }
 
-// Metadados de arquivo/foto exportados — nunca o conteúdo binário nem um link assinado
-// pro Storage (LGPD art. 18 pede os dados, não um jeito de baixar os arquivos originais
-// por aqui; quem quer o arquivo em si já tem a Central de Arquivos/Galeria pra isso).
-interface ExportedFileMeta {
-  id:          string
-  file_name:   string
-  size_bytes:  number
-  mime_type:   string | null
-  uploaded_by: string
-  created_at:  string
-}
-
-interface ExportedGalleryPhotoMeta {
-  id:          string
-  size_bytes:  number
-  mime_type:   string | null
-  uploaded_by: string
-  created_at:  string
-}
-
-interface ExportedTableAssignment {
-  id:         string
-  table_id:   string
-  guest_id:   string
-  created_at: string
-}
-
-interface ExportPayload {
-  exported_at: string
-  wedding:     Wedding | null
-  profile:     Profile | null
-  subscription: Subscription | null
-  guests:      Guest[]
-  checklist_items: ChecklistItem[]
-  financial: {
-    entries:           FinancialEntry[]
-    quotes:            FinancialQuote[]
-    installments:      FinancialInstallment[]
-    category_budgets:  FinancialCategoryBudget[]
-  }
-  gift_registry: GiftRegistryItem[]
-  wedding_party: WeddingPartyEntry[]
-  tables: {
-    config:      TableConfig[]
-    assignments: ExportedTableAssignment[]
-  }
-  site_config: SiteConfig | null
-  files:          ExportedFileMeta[]
-  gallery_photos: ExportedGalleryPhotoMeta[]
-  preferences: WeddingPreferences | null
-  members:     WeddingMember[]
-  invites_sent: WeddingInvite[]
-}
-
 // Exportação completa dos dados pessoais do casamento (LGPD art. 18, direito à
 // portabilidade) — até aqui "Exportar meus dados" só devolvia um CSV de convidados,
 // o que não cumpre a promessa do botão.
 //
-// Restrito ao DONO ou a membro com full_access (não a qualquer membro convidado):
-// o payload inclui dados de módulos restringíveis por permissão (financeiro,
-// presentes...), então exportar TUDO precisa do mesmo nível de acesso que já
-// enxerga tudo pelo resto do app — um membro só com acesso a "convidados", por
-// exemplo, não pode contornar essa restrição via export. Usar requireWeddingOwner
-// aqui (só o dono literal) foi o bug original: o botão aparece pra qualquer membro
-// (ver ExportDataButton/perfil/page.tsx), e para todo mundo que não fosse o dono
-// literal — inclusive o cônjuge com acesso completo via "juntar contas" — a
-// exportação sempre voltava 404.
+// Restrito ao DONO literal (não a membro convidado, mesmo com full_access): decisão
+// de produto — só uma pessoa é a Controladora dos Dados na Política de Privacidade
+// (seção 20), então só ela pode gerar o export completo de tudo. O bug original era
+// outro: a rota já usava esse mesmo critério (requireWeddingOwner), mas o botão
+// aparecia pra QUALQUER membro (ver ExportDataButton/perfil/page.tsx), então todo
+// mundo que não fosse o dono literal via 404 ao clicar. Corrigido escondendo o botão
+// pra quem não é dono, em vez de afrouxar quem pode exportar.
 export async function GET(_req: Request, { params }: RouteContext) {
   try {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     const { wid } = await params
 
-    await requireWeddingOwnerOrFullAccess(supabase, wid, user.id)
+    await requireWeddingOwner(supabase, wid, user.id)
 
     // Gerar o export inteiro é pesado (~19 queries) — não é uma ação de negócio que
     // faz sentido repetir em loop, mesmo padrão de checkRateLimit usado em
@@ -262,7 +213,16 @@ export async function GET(_req: Request, { params }: RouteContext) {
       invites_sent: (invitesRes.data ?? []) as WeddingInvite[],
     }
 
-    return ok(payload)
+    const pdfBuffer = await renderWeddingDataExportPdf(payload)
+    const fileName = `dados-wednest-${wid}-${new Date().toISOString().slice(0, 10)}.pdf`
+
+    return new Response(new Uint8Array(pdfBuffer), {
+      status: 200,
+      headers: {
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+      },
+    })
   } catch (error) {
     return handleApiError(error)
   }

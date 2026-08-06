@@ -57,14 +57,11 @@ export default function ExportDataButton() {
       return
     }
 
-    const { data: exportData } = await response.json() as { data: unknown }
-
-    const json = JSON.stringify(exportData, null, 2)
-    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+    const blob = await response.blob()
     const url  = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `dados-wednest-${wedding.id}-${new Date().toISOString().slice(0, 10)}.json`
+    link.download = `dados-wednest-${wedding.id}-${new Date().toISOString().slice(0, 10)}.pdf`
     document.body.appendChild(link)
     link.click()
     link.remove()

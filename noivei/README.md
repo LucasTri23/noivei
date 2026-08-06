@@ -75,10 +75,11 @@ Recursos que aparecem na vitrine de marketing (`plan_feature_*`, editável em
 `/admin/planos`) mas que **não têm implementação correspondente no código hoje** —
 revisar antes de anunciar como diferencial real: sugestões/assistente de IA
 (nenhum código de IA está em produção — `src/lib/ai/` é reservado pra uma fase
-futura), backup automático/avançado, notificações push, exportação em PDF/Excel
-(a exportação real é um JSON completo, disponível pra qualquer plano, não uma
-distinção paga), e "distribuição automática" de mesas (a organização de mesas é
-manual, por arrastar-e-soltar ou seletor).
+futura), backup automático/avançado, notificações push, exportação em Excel (a
+exportação real é um PDF completo por categoria, disponível pra qualquer plano,
+restrita ao dono do casamento — não uma distinção paga), e "distribuição
+automática" de mesas (a organização de mesas é manual, por arrastar-e-soltar ou
+seletor).
 
 ### Área pública (sem login)
 
@@ -263,11 +264,14 @@ uma ferramenta de analytics/marketing for adicionada no futuro.
 
 - **Exclusão** — botão de exclusão de conta no painel, com o aviso de que os dados
   do casamento atual serão apagados (ver acima).
-- **Exportação** — botão "Exportar meus dados" no perfil baixa um **JSON completo**
-  com todos os dados pessoais do casamento (perfil, assinatura, convidados,
-  checklist, financeiro, presentes, padrinhos, mesas, site, metadados de
-  arquivos/fotos, preferências, membros e convites) — não só a lista de
-  convidados como antes.
+- **Exportação** — botão "Exportar meus dados" no perfil baixa um **PDF completo**
+  (uma tabela por categoria) com todos os dados pessoais do casamento (perfil,
+  assinatura, convidados, checklist, financeiro, presentes, padrinhos, mesas,
+  site, metadados de arquivos/fotos, preferências, membros e convites) — não só
+  a lista de convidados como antes. Restrito ao dono literal do casamento (não a
+  membro convidado, mesmo com acesso completo) — decisão de produto, já que só
+  o dono é o Controlador dos Dados identificado na Política de Privacidade;
+  membro convidado pode solicitar os próprios dados pelo canal de suporte.
 - Não há hoje uma tela de autoatendimento para o **convidado** (titular externo,
   sem conta) solicitar correção/exclusão dos próprios dados — esse pedido precisa
   passar pelo casal (que é quem cadastrou o dado) ou pelo suporte.

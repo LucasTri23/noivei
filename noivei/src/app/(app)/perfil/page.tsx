@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, PLAN_NAMES, type PlanId } from '@/constants/plans'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
-import { getUserWedding, hasFullAccess } from '@/lib/weddings/get-user-wedding'
+import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 import LogoutButton from '@/components/auth/logout-button'
 import ExportDataButton from '@/components/perfil/export-data-button'
 import DeleteAccountButton from '@/components/perfil/delete-account-button'
@@ -65,10 +65,12 @@ export default async function PerfilPage() {
     user ? getUserWedding(supabase, user.id) : Promise.resolve(null),
   ])
   const planId: PlanId = userWedding ? await resolveWeddingPlanId(supabase, userWedding.id) : 'free'
-  // Exportação completa inclui módulos restringíveis por permissão (financeiro,
-  // presentes...) — só quem já enxerga tudo pelo resto do app pode exportar tudo
-  // de uma vez (mesmo critério do guard requireWeddingOwnerOrFullAccess na API).
-  const canExportData = userWedding ? hasFullAccess(userWedding) : false
+  // Exportação completa dos dados fica restrita ao dono literal do casamento —
+  // decisão de produto: só uma pessoa é a Controladora dos Dados na Política de
+  // Privacidade (seção 20), então só ela pode gerar o export completo, mesmo que
+  // um membro convidado com acesso total já enxergue os mesmos dados pelo resto
+  // do app (mesmo critério do guard requireWeddingOwner na API).
+  const canExportData = userWedding?.isOwner ?? false
 
   const coupleNames = wedding?.couple_names ?? 'Meu Casamento'
   const email = user?.email ?? ''
