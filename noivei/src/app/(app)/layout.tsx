@@ -11,6 +11,7 @@ import type { WeddingModuleKey } from '@/types/database'
 
 const MODULE_KEYS: WeddingModuleKey[] = [
   'checklist', 'convidados', 'financeiro', 'mesas', 'site', 'arquivos', 'presentes', 'padrinhos', 'checkin', 'album',
+  'fornecedores',
 ]
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {

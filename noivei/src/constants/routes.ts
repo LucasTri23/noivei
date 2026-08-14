@@ -16,6 +16,7 @@ export const PUBLIC_ROUTES = [
   '/convite',
   '/auth/callback',
   '/para-fornecedores',
+  '/profissionais',
 ] as const
 
 // Prefixos de primeiro nível que são de fato rotas do app (autenticadas) — usado só
@@ -32,12 +33,12 @@ export const PUBLIC_ROUTES = [
 // (app)/) não o vê nem precisa ver. Ainda assim precisa estar aqui: sem isso, o
 // middleware trataria /fornecedor como o site público /[slug] e liberaria sem
 // login. Note que é "/fornecedor" (singular, este grupo) e não "/fornecedores"
-// (plural, marketplace autenticado do CASAL — Fase 3, ainda não existe): o match
+// (plural, marketplace autenticado do CASAL, Fase 3 — vive sob src/app/(app)/,
+// então ESTE precisa estar coberto pelo middleware.test.ts também): o match
 // abaixo é por segmento exato (===, ou startsWith seguido de "/"), então
-// "/fornecedores" nunca colide com o prefixo "/fornecedor" mesmo sem estar
-// listado aqui.
+// "/fornecedores" nunca colide com o prefixo "/fornecedor".
 export const APP_ROUTE_PREFIXES = [
   '/dashboard', '/checklist', '/timeline', '/convidados', '/financeiro',
   '/mesas', '/site', '/arquivos', '/presentes', '/padrinhos', '/checkin', '/album', '/perfil',
-  '/onboarding', '/admin', '/fornecedor',
+  '/onboarding', '/admin', '/fornecedor', '/fornecedores',
 ] as const
