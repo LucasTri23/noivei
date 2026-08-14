@@ -16,4 +16,5 @@ export const WEDDING_MODULE_LABELS: Record<WeddingModuleKey, string> = {
   checkin:    'Portaria',
   album:      'Álbum de fotos',
   wedding_score: 'Wedding Score',
+  fornecedores:  'Fornecedores',
 }

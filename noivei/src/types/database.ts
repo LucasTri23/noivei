@@ -27,6 +27,11 @@ export type SubscriptionStatus =
   | 'canceled'
   | 'incomplete'
 
+// Status de um fornecedor MANUALMENTE cadastrado pelo casal na tabela
+// `wedding_vendors` (feature existente, não relacionada ao marketplace). Não
+// confundir com `MarketplaceVendorStatus` (status da LISTAGEM de um fornecedor de
+// verdade no marketplace, tabela `vendor_profiles`) — nomes deliberadamente
+// diferentes pra nunca colidir.
 export type VendorStatus =
   | 'pesquisando'
   | 'em_contato'
@@ -350,6 +355,11 @@ export type WeddingModuleKey =
   | 'checkin'
   | 'album'
   | 'wedding_score'
+  // 'fornecedores' é deliberadamente diferente dos demais: NUNCA tem linha em
+  // plan_module_access (liberado em todo plano, sem paywall) — só é restringível
+  // por permissão de membro via fn_has_module_access. Nunca envolver em
+  // PaywallGate.
+  | 'fornecedores'
 
 export interface WeddingMemberPermissions {
   full_access: boolean
@@ -481,4 +491,178 @@ export interface FinancialCategoryBudget {
   budget_cents: number
   created_at:   string
   updated_at:   string
+}
+
+// =========================================================
+// Fornecedores (marketplace de fornecedores) — Fase 1: schema de banco/domínio.
+// Ver supabase/migrations/20260806000002_create-vendor-marketplace-identity.sql em
+// diante. Sem rotas de API/UI ainda (fases seguintes) — estes tipos existem pra uso
+// futuro (e pra manter `noEmit`/lint limpos onde já referenciados, ex. PaywallGate).
+// =========================================================
+
+// Status da LISTAGEM de um fornecedor no marketplace (tabela vendor_profiles). Não
+// confundir com `VendorStatus` (status de um fornecedor manual em `wedding_vendors`,
+// feature existente e não relacionada).
+export type MarketplaceVendorStatus =
+  | 'draft'
+  | 'pending_review'
+  | 'active'
+  | 'paused'
+  | 'suspended'
+  | 'rejected'
+
+export interface VendorProfile {
+  id:                  string
+  user_id:             string
+  business_name:       string
+  slug:                string
+  cnpj:                string | null
+  phone:               string | null
+  whatsapp:            string | null
+  show_whatsapp:       boolean
+  instagram:           string | null
+  website:             string | null
+  city:                string | null
+  state:               string | null
+  description:         string | null
+  price_range:         string | null
+  cover_storage_path:  string | null
+  logo_storage_path:   string | null
+  status:              MarketplaceVendorStatus
+  featured:            boolean
+  rejection_reason:    string | null
+  deleted_at:          string | null
+  created_at:          string
+  updated_at:          string
+}
+
+export interface VendorCategory {
+  id:         string
+  slug:       string
+  label:      string
+  icon:       string | null
+  sort_order: number
+  active:     boolean
+  created_at: string
+}
+
+export interface VendorCategoryLink {
+  vendor_id:   string
+  category_id: string
+}
+
+export interface VendorPortfolioItem {
+  id:           string
+  vendor_id:    string
+  storage_path: string
+  caption:      string | null
+  sort_order:   number
+  created_at:   string
+}
+
+export interface VendorAdminAction {
+  id:         string
+  admin_id:   string
+  vendor_id:  string
+  action:     string
+  reason:     string | null
+  created_at: string
+}
+
+export type VendorPlanBillingType = 'monthly' | 'lifetime'
+
+export interface VendorPlan {
+  id:           string
+  name:         string
+  billing_type: VendorPlanBillingType
+  price_cents:  number
+  active:       boolean
+  sort_order:   number
+  created_at:   string
+  updated_at:   string
+}
+
+export type VendorSubscriptionStatus = 'pending' | 'active' | 'past_due' | 'canceled' | 'expired'
+
+export interface VendorSubscription {
+  id:                    string
+  vendor_id:             string
+  plan_id:               string
+  status:                VendorSubscriptionStatus
+  gateway:               'mercadopago' | null
+  gateway_sub_id:        string | null
+  current_period_end:    string | null
+  expires_at:            string | null // NULL pra sempre no plano vitalício, nunca lido como "expirado"
+  cancel_at_period_end:  boolean
+  created_at:            string
+  updated_at:            string
+}
+
+export type VendorPaymentCheckoutStatus = 'pending' | 'approved' | 'rejected'
+
+export interface VendorPaymentCheckout {
+  id:                   string
+  vendor_id:            string
+  vendor_plan_id:       string
+  mp_reference:         string
+  mp_preference_id:     string | null
+  mp_preapproval_id:    string | null
+  coupon_redemption_id: string | null
+  amount_cents:         number
+  discount_cents:       number
+  status:               VendorPaymentCheckoutStatus
+  created_at:           string
+  updated_at:           string
+}
+
+export type VendorCouponDiscountType = 'percent' | 'fixed' | 'free_days'
+
+export interface VendorCoupon {
+  id:                 string
+  code:               string
+  discount_type:      VendorCouponDiscountType
+  discount_value:     number | null
+  applies_to_plan_id: string | null
+  benefit_days:       number | null
+  max_redemptions:    number | null
+  redemption_count:   number
+  valid_from:         string | null
+  valid_until:        string | null
+  is_active:          boolean
+  created_at:         string
+  updated_at:         string
+}
+
+export interface VendorCouponRedemption {
+  id:          string
+  coupon_id:   string
+  vendor_id:   string
+  redeemed_at: string
+  applied_at:  string | null
+}
+
+export interface VendorConversation {
+  id:               string
+  wedding_id:       string
+  vendor_id:        string
+  created_by:       string
+  first_message_at: string | null
+  last_message_at:  string | null
+  created_at:       string
+  updated_at:       string
+}
+
+export interface VendorMessage {
+  id:              string
+  conversation_id: string
+  sender_user_id:  string
+  body:            string
+  created_at:      string
+  deleted_at:      string | null
+}
+
+export interface VendorConversationRead {
+  conversation_id: string
+  user_id:         string
+  last_read_at:    string
 }

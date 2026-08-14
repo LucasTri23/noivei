@@ -22,6 +22,11 @@ const FEATURE_DESCRIPTIONS: Record<WeddingModuleKey, string> = {
   checkin:    'Gere o ingresso com QR code de cada convidado confirmado e valide a entrada deles no dia do casamento.',
   album:      'Compartilhe um QR code no salão para os convidados enviarem fotos do casamento em tempo real, direto do celular.',
   wedding_score: 'Acompanhe o Wedding Score: uma nota de 0 a 100 de quão avançado está o planejamento, com histórico e detalhamento por área.',
+  // 'fornecedores' nunca deve ficar atrás deste componente na prática (é liberado
+  // em todo plano, sem paywall — só restrição por permissão de membro, ver
+  // fn_has_module_access) — a entrada existe só porque FEATURE_DESCRIPTIONS é
+  // Record<WeddingModuleKey, string> e precisa ser exaustivo.
+  fornecedores: 'Converse com fornecedores de casamento direto pelo Wednest.',
 }
 
 interface PaywallGateProps {
