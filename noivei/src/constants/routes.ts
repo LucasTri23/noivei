@@ -15,6 +15,7 @@ export const PUBLIC_ROUTES = [
   '/mural',
   '/convite',
   '/auth/callback',
+  '/para-fornecedores',
 ] as const
 
 // Prefixos de primeiro nível que são de fato rotas do app (autenticadas) — usado só
@@ -25,8 +26,18 @@ export const PUBLIC_ROUTES = [
 // proteção automatizada contra "rota nova esquecida aqui" é src/middleware.test.ts —
 // ele falha se aparecer uma pasta nova em src/app/(app)/ sem prefixo correspondente
 // nesta lista. Se esse teste quebrar, adicione o prefixo aqui antes do deploy.
+// '/fornecedor' (singular) é o único prefixo autenticado aqui que NÃO vive sob
+// src/app/(app)/ — é o grupo próprio src/app/(vendor)/ (área do PRÓPRIO fornecedor,
+// Fase 2 do marketplace), então src/middleware.test.ts (que só varre pastas de
+// (app)/) não o vê nem precisa ver. Ainda assim precisa estar aqui: sem isso, o
+// middleware trataria /fornecedor como o site público /[slug] e liberaria sem
+// login. Note que é "/fornecedor" (singular, este grupo) e não "/fornecedores"
+// (plural, marketplace autenticado do CASAL — Fase 3, ainda não existe): o match
+// abaixo é por segmento exato (===, ou startsWith seguido de "/"), então
+// "/fornecedores" nunca colide com o prefixo "/fornecedor" mesmo sem estar
+// listado aqui.
 export const APP_ROUTE_PREFIXES = [
   '/dashboard', '/checklist', '/timeline', '/convidados', '/financeiro',
   '/mesas', '/site', '/arquivos', '/presentes', '/padrinhos', '/checkin', '/album', '/perfil',
-  '/onboarding', '/admin',
+  '/onboarding', '/admin', '/fornecedor',
 ] as const

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -32,8 +32,13 @@ const inputStyle = {
   border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '13px 15px',
 }
 
-export default function SignupPage() {
-  const router = useRouter()
+function SignupForm() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  // Mesma convenção de ?next= usada em /login e no /auth/callback (código OAuth) —
+  // aqui alimenta tanto o Google (redirectTo do OAuth) quanto o e-mail/senha (via
+  // /verify?next=, que faz o push final depois de confirmar o código).
+  const next = searchParams.get('next') ?? '/onboarding'
   const [serverError, setServerError] = useState('')
   const [loading, setLoading]         = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
@@ -81,14 +86,14 @@ export default function SignupPage() {
       return
     }
 
-    router.push(`/verify?email=${encodeURIComponent(data.email)}`)
+    router.push(`/verify?email=${encodeURIComponent(data.email)}&next=${encodeURIComponent(next)}`)
   }
 
   async function handleGoogle() {
     const supabase = createSupabaseBrowser()
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/onboarding` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     })
   }
 
@@ -167,5 +172,13 @@ export default function SignupPage() {
         <Link href="/login" style={{ color: '#C6943A', fontWeight: 600 }}>Entrar</Link>
       </div>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div style={{ height: '400px' }} />}>
+      <SignupForm />
+    </Suspense>
   )
 }

@@ -16,6 +16,9 @@ function VerifyForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const email        = searchParams.get('email') ?? ''
+  // Propagado desde /signup?next=... (mesma convenção de /login) — pra onde o
+  // cadastro por e-mail/senha deve levar depois de confirmado o código.
+  const next         = searchParams.get('next') ?? '/onboarding'
   const [code, setCode]       = useState('')
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -59,7 +62,7 @@ function VerifyForm() {
       return
     }
 
-    router.push('/onboarding')
+    router.push(next)
   }
 
   async function handleResend() {

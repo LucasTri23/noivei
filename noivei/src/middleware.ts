@@ -10,6 +10,14 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const { supabase, response } = createSupabaseMiddleware(request)
 
+  // Next.js não expõe pathname pra Server Components de layout — só pra Client
+  // Components via usePathname(). src/app/(vendor)/layout.tsx precisa saber se já
+  // está em /fornecedor/cadastro pra não fazer loop de redirect (fornecedor sem
+  // perfil ainda: layout manda pra /fornecedor/cadastro, mas a própria página do
+  // wizard não pode se autorredirecionar). Header próprio, lido via headers() do
+  // lado do servidor — padrão comum pra esse gap do App Router.
+  response.headers.set('x-pathname', pathname)
+
   // Atualiza sessão — obrigatório para manter tokens frescos
   const { data: { user } } = await supabase.auth.getUser()
 
