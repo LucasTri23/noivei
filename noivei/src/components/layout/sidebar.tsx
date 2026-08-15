@@ -27,14 +27,20 @@ const NAV = [
 ]
 
 interface SidebarProps {
-  coupleNames:      string
-  plan:             string
-  initial:          string
-  visibleModules:   Record<WeddingModuleKey, boolean>
-  planModuleAccess: Record<WeddingModuleKey, boolean>
+  coupleNames:             string
+  plan:                    string
+  initial:                 string
+  visibleModules:          Record<WeddingModuleKey, boolean>
+  planModuleAccess:        Record<WeddingModuleKey, boolean>
+  // Primeira badge de "não lida" deste app (antes só existia a pill estática
+  // "PRO") — calculada uma vez no server (AppLayout, via fn_list_vendor_
+  // conversations) e passada como prop, não re-computada no client: um ponto
+  // (não contagem) é suficiente aqui, a contagem por conversa já aparece na
+  // lista de /fornecedores/conversas.
+  hasUnreadVendorMessages: boolean
 }
 
-export default function Sidebar({ coupleNames, plan, initial, visibleModules, planModuleAccess }: SidebarProps) {
+export default function Sidebar({ coupleNames, plan, initial, visibleModules, planModuleAccess, hasUnreadVendorMessages }: SidebarProps) {
   const pathname = usePathname()
   const items = NAV.filter((item) => !item.module || visibleModules[item.module])
 
@@ -64,6 +70,9 @@ export default function Sidebar({ coupleNames, plan, initial, visibleModules, pl
         {items.map(({ href, label, icon: Icon, module }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           const locked = Boolean(module) && !planModuleAccess[module as WeddingModuleKey]
+          // Só faz sentido mostrar "tem mensagem nova" se o item não estiver
+          // travado por plano (locked já ocupa o mesmo canto com a pill "PRO").
+          const showUnreadDot = href === '/fornecedores' && hasUnreadVendorMessages && !locked
           return (
             <Link
               key={href}
@@ -89,6 +98,15 @@ export default function Sidebar({ coupleNames, plan, initial, visibleModules, pl
                 >
                   PRO
                 </span>
+              )}
+              {showUnreadDot && (
+                <span
+                  aria-label="Mensagens não lidas"
+                  style={{
+                    marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%',
+                    background: 'var(--wedding-color-light)', flexShrink: 0,
+                  }}
+                />
               )}
             </Link>
           )

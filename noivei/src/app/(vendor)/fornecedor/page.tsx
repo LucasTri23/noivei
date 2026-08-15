@@ -17,7 +17,7 @@ const STATUS_COPY: Record<MarketplaceVendorStatus, { title: string; body: string
   },
   active: {
     title: 'Seu perfil está ativo',
-    body:  'Seu perfil já está aprovado e visível no marketplace de fornecedores. O painel completo (mensagens, assinatura, portfólio) chega em breve.',
+    body:  'Seu perfil já está aprovado e visível no marketplace de fornecedores. Casais já podem te encontrar e conversar com você pelo Wednest — veja em "Mensagens". O restante do painel (assinatura, portfólio) chega em breve.',
   },
   paused: {
     title: 'Seu perfil está pausado',

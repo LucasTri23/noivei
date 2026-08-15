@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Cormorant_Garamond, Hanken_Grotesk } from 'next/font/google'
+import QueryProvider from '@/components/query-provider'
 import ThemeProvider from '@/components/theme-provider'
 import ToastContainer from '@/components/ui/toast'
 import TopProgressBar from '@/components/ui/top-progress-bar'
@@ -55,14 +56,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-full bg-[var(--bg)] text-[var(--fg)] antialiased">
-        <ThemeProvider>
-          <TopProgressBar />
-          <a href="#main-content" className="skip-link">
-            Ir para o conteúdo principal
-          </a>
-          <main id="main-content">{children}</main>
-          <ToastContainer />
-        </ThemeProvider>
+        <QueryProvider>
+          <ThemeProvider>
+            <TopProgressBar />
+            <a href="#main-content" className="skip-link">
+              Ir para o conteúdo principal
+            </a>
+            <main id="main-content">{children}</main>
+            <ToastContainer />
+          </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   )

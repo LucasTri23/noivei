@@ -33,9 +33,19 @@ export default async function VendorLayout({ children }: { children: React.React
 
   if (!vendorProfile && !isOnCadastroRoute) redirect('/fornecedor/cadastro')
 
+  // Sem perfil de fornecedor ainda (rota de cadastro), pula a RPC — sem
+  // vendor_profiles.user_id = auth.uid() pra casar, fn_list_vendor_conversations
+  // sempre voltaria vazia mesmo, mas não vale o round-trip no caminho do wizard.
+  let hasUnreadVendorMessages = false
+  if (vendorProfile) {
+    const { data: conversationRows } = await supabase.rpc('fn_list_vendor_conversations')
+    hasUnreadVendorMessages = ((conversationRows ?? []) as { unread_count: number }[])
+      .some((row) => row.unread_count > 0)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font-body)', color: 'var(--fg)' }}>
-      <VendorTopBar businessName={vendorProfile?.business_name ?? null} />
+      <VendorTopBar businessName={vendorProfile?.business_name ?? null} hasUnreadVendorMessages={hasUnreadVendorMessages} />
       <main style={{ padding: 'clamp(20px, 3.5vw, 44px)', paddingBottom: '64px', maxWidth: '760px', margin: '0 auto' }}>
         {children}
       </main>

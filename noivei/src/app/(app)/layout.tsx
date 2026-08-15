@@ -28,13 +28,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // de deixar a pessoa presa no app com todo módulo aparecendo "acesso restrito".
   if (!userWedding) redirect('/onboarding')
 
-  // As três consultas abaixo não dependem uma da outra — rodar em paralelo poupa
+  // As quatro consultas abaixo não dependem uma da outra — rodar em paralelo poupa
   // round-trips no caminho crítico que toda página autenticada passa (este layout
   // envolve todo o grupo (app)). plan_module_access inteira é pequena (poucas
   // dezenas de linhas, um plano ativo típico × 8 módulos) — mais barato trazer
   // tudo aqui e filtrar em código do que esperar planId resolver pra fazer uma
-  // 2ª consulta em série.
-  const [{ data: wedding }, planId, { data: planModuleRows }] = await Promise.all([
+  // 2ª consulta em série. fn_list_vendor_conversations (Fase 4) é a mesma RPC do
+  // GET /api/v1/vendor-conversations — reaproveitada aqui só pra saber se existe
+  // ALGUMA conversa não lida (badge da sidebar), não precisa de uma function
+  // separada só pra um boolean.
+  const [{ data: wedding }, planId, { data: planModuleRows }, { data: conversationRows }] = await Promise.all([
     supabase
       .from('weddings')
       .select('couple_names, wedding_color, wedding_color_secondary')
@@ -42,7 +45,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .maybeSingle(),
     resolveWeddingPlanId(supabase, userWedding.id),
     supabase.from('plan_module_access').select('plan_id, module, enabled'),
+    supabase.rpc('fn_list_vendor_conversations'),
   ])
+
+  const hasUnreadVendorMessages = ((conversationRows ?? []) as { unread_count: number }[])
+    .some((row) => row.unread_count > 0)
 
   const visibleModules = Object.fromEntries(
     MODULE_KEYS.map((module) => [module, hasModuleAccess(userWedding, module)]),
@@ -125,6 +132,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         initial={initial}
         visibleModules={visibleModules}
         planModuleAccess={planModuleAccess}
+        hasUnreadVendorMessages={hasUnreadVendorMessages}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -141,7 +149,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         >
           {children}
         </main>
-        <MobileBottomNav visibleModules={visibleModules} planModuleAccess={planModuleAccess} />
+        <MobileBottomNav
+          visibleModules={visibleModules}
+          planModuleAccess={planModuleAccess}
+          hasUnreadVendorMessages={hasUnreadVendorMessages}
+        />
       </div>
     </div>
   )

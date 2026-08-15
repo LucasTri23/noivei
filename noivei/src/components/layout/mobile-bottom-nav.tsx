@@ -30,11 +30,15 @@ const MORE_NAV = [
 ]
 
 interface MobileBottomNavProps {
-  visibleModules:   Record<WeddingModuleKey, boolean>
-  planModuleAccess: Record<WeddingModuleKey, boolean>
+  visibleModules:          Record<WeddingModuleKey, boolean>
+  planModuleAccess:        Record<WeddingModuleKey, boolean>
+  // Mesma prop/fonte de dados de sidebar.tsx (calculada uma vez no AppLayout) —
+  // "Fornecedores" mora atrás do botão "Mais" aqui, então o ponto também precisa
+  // aparecer no próprio botão "Mais", senão ninguém percebe sem abrir o modal.
+  hasUnreadVendorMessages: boolean
 }
 
-export default function MobileBottomNav({ visibleModules, planModuleAccess }: MobileBottomNavProps) {
+export default function MobileBottomNav({ visibleModules, planModuleAccess, hasUnreadVendorMessages }: MobileBottomNavProps) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
 
@@ -71,10 +75,20 @@ export default function MobileBottomNav({ visibleModules, planModuleAccess }: Mo
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          className="flex flex-col items-center gap-0.5 px-2.5 py-1"
+          className="relative flex flex-col items-center gap-0.5 px-2.5 py-1"
           style={{ color: moreActive ? 'var(--wedding-color)' : '#C8B4A0', background: 'none', border: 'none', cursor: 'pointer' }}
         >
           <MoreIcon size={23} strokeWidth={moreActive ? 2.1 : 1.7} />
+          {hasUnreadVendorMessages && (
+            <span
+              aria-label="Mensagens não lidas"
+              style={{
+                position: 'absolute', top: '-1px', right: '14px',
+                width: '8px', height: '8px', borderRadius: '50%',
+                background: 'var(--wedding-color)', border: '1.5px solid #fff',
+              }}
+            />
+          )}
           <span style={{ fontSize: '10.5px', fontWeight: 600 }}>Mais</span>
         </button>
       </div>
@@ -84,6 +98,7 @@ export default function MobileBottomNav({ visibleModules, planModuleAccess }: Mo
           {moreItems.map(({ href, label, icon: Icon, module }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
             const locked = Boolean(module) && !planModuleAccess[module as WeddingModuleKey]
+            const showUnreadDot = href === '/fornecedores' && hasUnreadVendorMessages && !locked
             return (
               <Link
                 key={href}
@@ -109,6 +124,15 @@ export default function MobileBottomNav({ visibleModules, planModuleAccess }: Mo
                   >
                     PRO
                   </span>
+                )}
+                {showUnreadDot && (
+                  <span
+                    aria-label="Mensagens não lidas"
+                    style={{
+                      marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%',
+                      background: 'var(--wedding-color)', flexShrink: 0,
+                    }}
+                  />
                 )}
               </Link>
             )

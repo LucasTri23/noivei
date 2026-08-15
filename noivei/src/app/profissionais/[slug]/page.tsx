@@ -193,6 +193,7 @@ export default async function ProfissionalPage({ params }: ProfissionalPageProps
                 </h2>
 
                 <VendorContactActions
+                  vendorId={vendor.id}
                   businessName={vendor.business_name}
                   whatsapp={vendor.whatsapp}
                   showWhatsapp={vendor.show_whatsapp}

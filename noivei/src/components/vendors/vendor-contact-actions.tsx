@@ -1,9 +1,13 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+import Spinner from '@/components/ui/spinner'
+import { useCreateVendorConversation, VendorConversationRequestError } from '@/hooks/use-vendor-conversations'
 import { buildVendorWhatsAppUrl } from '@/lib/vendor/build-vendor-whatsapp-link'
-import { toastSuccess } from '@/store/toast.store'
+import { toastError } from '@/store/toast.store'
 
 interface VendorContactActionsProps {
+  vendorId:     string
   businessName: string
   whatsapp:     string | null
   showWhatsapp: boolean
@@ -25,12 +29,41 @@ function ChatIcon() {
   )
 }
 
-// Chat de verdade (vendor_conversations) é a Fase 4 do marketplace, fora de escopo
-// desta fase — de propósito NÃO cria nenhuma linha em conversation nenhuma aqui,
-// só avisa que a funcionalidade está a caminho. WhatsApp continua sendo o único
-// canal de contato direto até lá.
-export default function VendorContactActions({ businessName, whatsapp, showWhatsapp }: VendorContactActionsProps) {
+// Fase 4: chat de verdade (vendor_conversations) — antes disso este botão só
+// mostrava um toast "chega em breve". find-or-create respeitando
+// UNIQUE(wedding_id, vendor_id) acontece no servidor (POST /api/v1/vendor-
+// conversations); aqui só decide pra onde mandar o usuário dependendo do
+// resultado.
+export default function VendorContactActions({ vendorId, businessName, whatsapp, showWhatsapp }: VendorContactActionsProps) {
+  const router = useRouter()
+  const createConversation = useCreateVendorConversation()
   const canWhatsApp = showWhatsapp && Boolean(whatsapp)
+
+  function handleChatClick() {
+    createConversation.mutate(vendorId, {
+      onSuccess: (conversation) => {
+        router.push(`/fornecedores/conversas/${conversation.id}`)
+      },
+      onError: (error) => {
+        // 401: /profissionais/[slug] é página pública — quem clica sem estar
+        // logado precisa entrar primeiro. `next` devolve pra esta mesma página
+        // (não dá pra retomar o clique automaticamente depois do login sem mais
+        // complexidade do que vale a pena nesta fase — a pessoa só clica de novo).
+        if (error instanceof VendorConversationRequestError && error.status === 401) {
+          router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`)
+          return
+        }
+        // 403: logado mas sem casamento com acesso ao módulo Fornecedores (ex.:
+        // conta é só de fornecedor, ou é membro convidado sem essa permissão) —
+        // WhatsApp continua disponível como alternativa nesse caso.
+        if (error instanceof VendorConversationRequestError && error.status === 403) {
+          toastError('Você precisa de um casamento com acesso ao módulo Fornecedores para conversar por aqui.')
+          return
+        }
+        toastError(error instanceof Error ? error.message : 'Não foi possível iniciar a conversa.')
+      },
+    })
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -52,15 +85,17 @@ export default function VendorContactActions({ businessName, whatsapp, showWhats
 
       <button
         type="button"
-        onClick={() => toastSuccess('Chat chega em breve! Por enquanto, use o WhatsApp para conversar.')}
+        onClick={handleChatClick}
+        disabled={createConversation.isPending}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
           border: 'none', borderRadius: 'var(--radius-lg)', padding: '13px', fontWeight: 700, fontSize: '14px',
-          cursor: 'pointer',
+          cursor: createConversation.isPending ? 'default' : 'pointer',
+          opacity: createConversation.isPending ? 0.7 : 1,
         }}
       >
-        <ChatIcon />
+        {createConversation.isPending ? <Spinner size={15} /> : <ChatIcon />}
         Conversar pelo Wednest
       </button>
     </div>
