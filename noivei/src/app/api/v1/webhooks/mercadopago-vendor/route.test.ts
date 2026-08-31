@@ -128,6 +128,10 @@ describe('POST /api/v1/webhooks/mercadopago-vendor', () => {
     expect(subInsert?.payload).toEqual(
       expect.objectContaining({ vendor_id: VENDOR_ID, plan_id: 'vendor_lifetime', status: 'active', gateway: 'mercadopago' }),
     )
+    // Vitalício nunca tem mp_preapproval_id no checkout — current_period_end fica
+    // null, nunca uma data inventada (nem fetchPreapproval é chamado pra isso).
+    expect(subInsert?.payload).toEqual(expect.objectContaining({ current_period_end: null }))
+    expect(mockedFetchPreapproval).not.toHaveBeenCalled()
   })
 
   it('deve ser idempotente: reenvio do mesmo evento não deve reprocessar (não gera update duplicado)', async () => {
@@ -184,10 +188,11 @@ describe('POST /api/v1/webhooks/mercadopago-vendor', () => {
     expect(supabase.inserts.find((i) => i.table === 'vendor_subscriptions')).toBeUndefined()
   })
 
-  it('preapproval "authorized" deve ativar assinatura mensal (fluxo de assinatura recorrente)', async () => {
-    mockedFetchPreapproval.mockResolvedValue({ id: 'preapproval-1', status: 'authorized', external_reference: MP_REFERENCE })
+  it('preapproval "authorized" deve ativar assinatura mensal e persistir current_period_end a partir de next_payment_date', async () => {
+    const nextPaymentDate = '2026-09-30T12:00:00.000Z'
+    mockedFetchPreapproval.mockResolvedValue({ id: 'preapproval-1', status: 'authorized', external_reference: MP_REFERENCE, next_payment_date: nextPaymentDate })
     const supabase = buildSupabaseMock({
-      checkout: { id: CHECKOUT_ID, vendor_id: VENDOR_ID, vendor_plan_id: 'vendor_monthly', coupon_redemption_id: null },
+      checkout: { id: CHECKOUT_ID, vendor_id: VENDOR_ID, vendor_plan_id: 'vendor_monthly', coupon_redemption_id: null, mp_preapproval_id: 'preapproval-1' },
     })
     mockedCreateSupabaseService.mockReturnValue(supabase as never)
 
@@ -196,7 +201,44 @@ describe('POST /api/v1/webhooks/mercadopago-vendor', () => {
     expect(res.status).toBe(200)
     const subInsert = supabase.inserts.find((i) => i.table === 'vendor_subscriptions')
     expect(subInsert?.payload).toEqual(
-      expect.objectContaining({ vendor_id: VENDOR_ID, plan_id: 'vendor_monthly', status: 'active', gateway_sub_id: 'preapproval-1' }),
+      expect.objectContaining({
+        vendor_id: VENDOR_ID, plan_id: 'vendor_monthly', status: 'active',
+        gateway_sub_id: 'preapproval-1', current_period_end: nextPaymentDate,
+      }),
     )
+  })
+
+  it('renovação mensal via evento "payment" também deve atualizar current_period_end (rebusca pelo mp_preapproval_id do checkout, não pelo id do pagamento avulso)', async () => {
+    const nextPaymentDate = '2026-10-30T12:00:00.000Z'
+    mockedFetchPayment.mockResolvedValue({ id: 555, status: 'approved', external_reference: MP_REFERENCE })
+    mockedFetchPreapproval.mockResolvedValue({ id: 'preapproval-1', status: 'authorized', external_reference: MP_REFERENCE, next_payment_date: nextPaymentDate })
+    const supabase = buildSupabaseMock({
+      checkout: { id: CHECKOUT_ID, vendor_id: VENDOR_ID, vendor_plan_id: 'vendor_monthly', coupon_redemption_id: null, mp_preapproval_id: 'preapproval-1' },
+    })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+
+    await POST(buildRequest({ type: 'payment', 'data.id': '555' }))
+
+    // O id do evento (555, um pagamento avulso da cobrança do mês) NUNCA é usado
+    // pra rebuscar o preapproval — sempre o mp_preapproval_id que NÓS capturamos
+    // no checkout original.
+    expect(mockedFetchPreapproval).toHaveBeenCalledWith('preapproval-1')
+    const subInsert = supabase.inserts.find((i) => i.table === 'vendor_subscriptions')
+    expect(subInsert?.payload).toEqual(expect.objectContaining({ current_period_end: nextPaymentDate }))
+  })
+
+  it('nunca inventa current_period_end quando a rebusca do preapproval falha', async () => {
+    mockedFetchPreapproval.mockRejectedValueOnce(new Error('timeout'))
+    const supabase = buildSupabaseMock({
+      checkout: { id: CHECKOUT_ID, vendor_id: VENDOR_ID, vendor_plan_id: 'vendor_monthly', coupon_redemption_id: null, mp_preapproval_id: 'preapproval-1' },
+    })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+    mockedFetchPayment.mockResolvedValue({ id: 555, status: 'approved', external_reference: MP_REFERENCE })
+
+    const res = await POST(buildRequest({ type: 'payment', 'data.id': '555' }))
+
+    expect(res.status).toBe(200) // falha na rebusca secundária não derruba o webhook inteiro
+    const subInsert = supabase.inserts.find((i) => i.table === 'vendor_subscriptions')
+    expect(subInsert?.payload).toEqual(expect.objectContaining({ current_period_end: null }))
   })
 })

@@ -251,6 +251,7 @@ export default function AdminVendorDetail({ vendorId }: { vendorId: string }) {
         {subscriptions.map((sub) => (
           <p key={sub.id} style={{ fontSize: '13.5px', color: '#3C2818', margin: '4px 0' }}>
             {sub.plan_id} — {sub.status}{sub.cancel_at_period_end ? ' (cancelamento agendado)' : ''} · desde {fmtDateTime(sub.created_at)}
+            {sub.current_period_end && ` · período/acesso até ${fmtDateTime(sub.current_period_end)}`}
           </p>
         ))}
       </div>

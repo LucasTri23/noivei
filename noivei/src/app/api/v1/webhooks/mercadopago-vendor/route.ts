@@ -120,7 +120,7 @@ export async function POST(req: Request) {
     // evento de casamento nunca encontra linha aqui, e vice-versa por construção.
     const { data: checkout } = await supabase
       .from('vendor_payment_checkouts')
-      .select('id, vendor_id, vendor_plan_id, coupon_redemption_id')
+      .select('id, vendor_id, vendor_plan_id, coupon_redemption_id, mp_preapproval_id')
       .eq('mp_reference', externalReference)
       .maybeSingle()
 
@@ -144,15 +144,34 @@ export async function POST(req: Request) {
         .limit(1)
         .maybeSingle()
 
+      // current_period_end (mensal): NUNCA lido do corpo desta notificação — sempre
+      // uma rebusca fresca do preapproval, usando o id que NÓS capturamos no
+      // momento do checkout (checkout.mp_preapproval_id), não o dataId do evento
+      // (que pode ser um id de PAGAMENTO avulso da cobrança do mês, não o da
+      // assinatura). next_payment_date é o campo documentado pelo Mercado Pago
+      // (SDKs oficiais) pra "quando é a próxima cobrança" — cada renovação bem-
+      // sucedida atualiza este valor de novo, mantendo o período corrente correto
+      // mês a mês. Só existe pra plano mensal; vitalício nunca tem mp_preapproval_id.
+      let currentPeriodEnd: string | null = null
+      if (checkout.mp_preapproval_id) {
+        try {
+          const freshPreapproval = await fetchPreapproval(checkout.mp_preapproval_id)
+          currentPeriodEnd = freshPreapproval.next_payment_date ?? null
+        } catch (fetchError) {
+          // Nunca inventa uma data se a rebusca falhar — fica null (mesmo
+          // comportamento de antes desta correção) em vez de aproximar.
+          console.error('[webhook/mercadopago-vendor] falha ao rebuscar next_payment_date do preapproval:', fetchError)
+        }
+      }
+
       const subPayload = {
-        plan_id:        checkout.vendor_plan_id,
-        status:         'active',
-        gateway:        'mercadopago',
-        gateway_sub_id: gatewaySubId,
+        plan_id:            checkout.vendor_plan_id,
+        status:             'active',
+        gateway:            'mercadopago',
+        gateway_sub_id:     gatewaySubId,
+        current_period_end: currentPeriodEnd,
         // Vitalício (lifetime) nunca tem expires_at — mesmo não-padrão de premium_once
         // do casal (ver comentário no topo de 20260806000002): sempre NULL pra sempre.
-        // Cancelamento/renovação de mensal são responsabilidade do fluxo de cancel-
-        // subscription e de eventos futuros, não deste bloco de aprovação.
       }
 
       if (activeSub) {

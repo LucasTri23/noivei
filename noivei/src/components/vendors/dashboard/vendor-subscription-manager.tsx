@@ -6,6 +6,7 @@ import { toastError, toastSuccess } from '@/store/toast.store'
 import type { VendorPlan, VendorSubscription } from '@/types/database'
 
 const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const dateFmt = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
 
 interface VendorSubscriptionManagerProps {
   plans:        VendorPlan[]
@@ -78,12 +79,19 @@ export default function VendorSubscriptionManager({ plans, subscription }: Vendo
     const body = (await res.json().catch(() => null)) as { error?: { message: string } } | null
     setCancelling(false)
 
+    const resultBody = body as { data?: { access_until: string | null } } | null
+
     if (!res.ok) {
       toastError(body?.error?.message ?? 'Não foi possível cancelar a assinatura. Tente novamente.')
       return
     }
 
-    toastSuccess('Assinatura cancelada.')
+    const accessUntil = resultBody?.data?.access_until
+    toastSuccess(
+      accessUntil
+        ? `Assinatura cancelada. Seu acesso continua válido até ${dateFmt.format(new Date(accessUntil))}.`
+        : 'Assinatura cancelada. Seu acesso ao marketplace foi encerrado.',
+    )
     router.refresh()
   }
 
@@ -126,6 +134,13 @@ export default function VendorSubscriptionManager({ plans, subscription }: Vendo
             {STATUS_LABEL[subscription.status] ?? subscription.status}
             {subscription.cancel_at_period_end && subscription.status === 'active' && ' — cancelamento agendado'}
           </p>
+
+          {subscription.current_period_end && subscription.status === 'active' && (
+            <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: '6px 0 0' }}>
+              {subscription.cancel_at_period_end ? 'Acesso válido até ' : 'Próxima cobrança em '}
+              <strong style={{ color: 'var(--fg)' }}>{dateFmt.format(new Date(subscription.current_period_end))}</strong>
+            </p>
+          )}
 
           {canCancel && (
             <button

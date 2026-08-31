@@ -156,6 +156,14 @@ export interface MpPreapproval {
   id:                 string
   status:             string
   external_reference: string | null
+  // Data do PRÓXIMO débito automático programado pelo Mercado Pago — é o campo
+  // documentado (SDKs oficiais, ex.: preapproval.Response.NextPaymentDate no
+  // sdk-go) que representa de forma confiável "até quando o período já pago vale":
+  // enquanto a assinatura segue autorizada, é a data da próxima cobrança; se
+  // cancelada antes dela, é até quando o acesso já pago deve continuar valendo.
+  // Pode vir ausente (null) — nunca inventar uma data quando isso acontecer (ver
+  // uso em vendor/billing/cancel-subscription/route.ts e no webhook de fornecedor).
+  next_payment_date?: string | null
 }
 
 /** Rebusca a assinatura (preapproval) pelo id direto na API — nunca confia só no corpo do webhook. */
