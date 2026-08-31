@@ -2,10 +2,8 @@ import Link from 'next/link'
 
 interface VendorTopBarProps {
   businessName:            string | null
-  // Fase 4: primeiro link de navegação real deste header (antes só tinha logo) —
-  // o resto do painel completo (assinatura, portfólio editável) continua Fase 6,
-  // ver comentário abaixo. Ponto (não contagem) mesmo critério do badge do lado
-  // do casal (sidebar.tsx) — a contagem por conversa já aparece na lista.
+  // Ponto (não contagem), mesmo critério do badge do lado do casal (sidebar.tsx) —
+  // a contagem por conversa já aparece na lista.
   hasUnreadVendorMessages: boolean
 }
 
@@ -19,9 +17,8 @@ function ChatIcon() {
 
 // Cabeçalho enxuto da área do PRÓPRIO fornecedor — não é a sidebar/nav completa do
 // app do casal (Sidebar/MobileTopBar), que carrega tema de wedding-color e módulos
-// do casamento, nenhum dos dois fazendo sentido aqui. A navegação completa deste
-// grupo (assinatura, portfólio editável) continua escopo da Fase 6 — "Mensagens"
-// é a ÚNICA exceção, adicionada agora porque é o que a Fase 4 constrói.
+// do casamento, nenhum dos dois fazendo sentido aqui. "Perfil" e "Assinatura"
+// (Fase 6) completam a navegação ao lado de "Mensagens" (Fase 4).
 export default function VendorTopBar({ businessName, hasUnreadVendorMessages }: VendorTopBarProps) {
   return (
     <header
@@ -56,6 +53,20 @@ export default function VendorTopBar({ businessName, hasUnreadVendorMessages }: 
       </Link>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+        <Link
+          href="/fornecedor/perfil"
+          style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)', textDecoration: 'none' }}
+        >
+          Perfil
+        </Link>
+
+        <Link
+          href="/fornecedor/assinatura"
+          style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)', textDecoration: 'none' }}
+        >
+          Assinatura
+        </Link>
+
         <Link
           href="/fornecedor/conversas"
           style={{
