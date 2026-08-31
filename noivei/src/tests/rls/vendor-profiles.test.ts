@@ -77,8 +77,9 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_profiles', () => {
   })
 
   // CORRIGIDO em 20260831000001 (defesa em profundidade, auditoria de comparação
-  // Fase 1-9): RLS sozinha é só de LINHA (ver comentário histórico na policy "vendor
-  // can update own profile") — mas agora um trigger BEFORE UPDATE
+  // Fase 1-9), com a exceção de 20260831000006 explicada no próximo teste: RLS
+  // sozinha é só de LINHA (ver comentário histórico na policy "vendor can update own
+  // profile") — mas agora um trigger BEFORE UPDATE
   // (fn_protect_vendor_profile_privileged_fields) reescreve status/featured/
   // rejection_reason/deleted_at/user_id de volta pro valor OLD sempre que quem
   // escreve não é service_role nem admin. O UPDATE ainda "funciona" (sem erro,
@@ -118,6 +119,26 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_profiles', () => {
     // deste describe (afterAll só apaga o usuário, não reseta vendor_profiles).
     await service.from('vendor_profiles').update({ status: 'draft', featured: false }).eq('id', vendorAId)
     await deleteTestUser(service, admin.userId)
+  })
+
+  // REGRESSÃO REAL corrigida em 20260831000006: a primeira versão do trigger
+  // (20260831000001) travava QUALQUER mudança de status pra quem não é admin/
+  // service_role — inclusive a única transição que o PRÓPRIO fornecedor tem
+  // permissão de disparar (POST /api/v1/vendor/submit-for-review), quebrando o
+  // reenvio de cadastro pra análise sem ninguém perceber (mockado nos testes de
+  // unidade da rota, só um teste de RLS contra Postgres de verdade pega isso).
+  it('deve permitir que o próprio fornecedor transicione draft -> pending_review (submit-for-review) mesmo com o trigger de proteção ativo', async () => {
+    const { data, error } = await vendorA.client
+      .from('vendor_profiles')
+      .update({ status: 'pending_review' })
+      .eq('id', vendorAId)
+      .select('status')
+
+    expect(error).toBeNull()
+    expect(data).toEqual([{ status: 'pending_review' }])
+
+    // Devolve pro estado original pra não afetar os testes seguintes deste describe.
+    await service.from('vendor_profiles').update({ status: 'draft' }).eq('id', vendorAId)
   })
 
   // Diferente do UPDATE acima: CRIAR uma linha nova é diferente de editar uma
