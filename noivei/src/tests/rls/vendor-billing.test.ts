@@ -1,8 +1,11 @@
 // RLS: portfólio e tabelas de cobrança do fornecedor (vendor_portfolio_items,
-// vendor_subscriptions, vendor_payment_checkouts) — isolamento entre fornecedores
-// e confirmação de que NENHUMA delas aceita INSERT/UPDATE de `authenticated`
-// (toda escrita é service role / webhook / RPC, ver
-// supabase/migrations/20260806000003_create-vendor-marketplace-billing.sql).
+// vendor_subscriptions, vendor_payment_checkouts) — isolamento entre fornecedores.
+// vendor_subscriptions continua sem NENHUMA policy de INSERT/UPDATE pra
+// `authenticated` (toda escrita é service role / webhook / fn_redeem_vendor_coupon,
+// ver 20260806000003). vendor_payment_checkouts passou a aceitar INSERT/UPDATE do
+// PRÓPRIO fornecedor a partir de 20260831000003 (Fase 5: a rota de checkout precisa
+// gravar com o client autenticado normal) — os testes abaixo cobrem que isso
+// continua restrito à própria linha (fn_owns_vendor), não vira um IDOR novo.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
@@ -118,5 +121,53 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_portfolio_items / vendor_subscri
 
     const { data: check } = await service.from('vendor_subscriptions').select('status').eq('vendor_id', vendorAId).single()
     expect((check as { status: string } | null)?.status).toBe('pending')
+  })
+
+  it('deve permitir que o próprio fornecedor crie e atualize seu próprio checkout de pagamento', async () => {
+    const mpReference = `test-own-ref-${crypto.randomUUID()}`
+    const { data: inserted, error: insertError } = await vendorA.client
+      .from('vendor_payment_checkouts')
+      .insert({ vendor_id: vendorAId, vendor_plan_id: 'vendor_monthly', mp_reference: mpReference, amount_cents: 2000 })
+      .select('id')
+      .single()
+    expect(insertError).toBeNull()
+    expect(inserted).not.toBeNull()
+
+    const { data: updated, error: updateError } = await vendorA.client
+      .from('vendor_payment_checkouts')
+      .update({ mp_preapproval_id: 'preapproval-123' })
+      .eq('id', (inserted as { id: string }).id)
+      .select('mp_preapproval_id')
+    expect(updateError).toBeNull()
+    expect(updated).toEqual([{ mp_preapproval_id: 'preapproval-123' }])
+  })
+
+  // IDOR: a policy nova (20260831000003) é escopada por fn_owns_vendor(vendor_id,
+  // auth.uid()) — um fornecedor não pode criar (nem atualizar) um checkout em NOME
+  // de outro fornecedor, mesmo agora que INSERT/UPDATE de authenticated existe.
+  it('não deve permitir que Fornecedor A crie um checkout de pagamento em nome de Fornecedor B', async () => {
+    const { data, error } = await vendorA.client
+      .from('vendor_payment_checkouts')
+      .insert({ vendor_id: vendorBId, vendor_plan_id: 'vendor_monthly', mp_reference: `test-idor-${crypto.randomUUID()}`, amount_cents: 2000 })
+      .select('id')
+    expect(data).toBeNull()
+    expect(error).not.toBeNull()
+  })
+
+  it('não deve permitir que Fornecedor A atualize o checkout de pagamento de Fornecedor B', async () => {
+    const { data: bCheckout } = await service
+      .from('vendor_payment_checkouts')
+      .select('id')
+      .eq('vendor_id', vendorBId)
+      .limit(1)
+      .single()
+
+    const { data, error } = await vendorA.client
+      .from('vendor_payment_checkouts')
+      .update({ status: 'approved' })
+      .eq('id', (bCheckout as { id: string }).id)
+      .select('id')
+    expect(error).toBeNull() // USING não bate -> 0 linhas, sem erro
+    expect(data).toEqual([])
   })
 })
