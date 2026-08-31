@@ -33,6 +33,13 @@ const STORAGE_BUCKETS = [
   'wedding-album-photos',
 ] as const
 
+// "vendor-portfolio" (migration 20260806000005) usa "{vendor_id}/..." — NÃO
+// "{wedding_id}/...", por isso não entra no array acima, e precisa de um loop
+// próprio iterando `vendor_profiles`, não `weddings` (ver aviso deixado na própria
+// migration: "não esquecer antes do QA da Fase 9"). Correção da auditoria de
+// comparação Fase 1-9.
+const VENDOR_STORAGE_BUCKETS = ['vendor-portfolio'] as const
+
 const DEFAULT_PURGE_DAYS = 30
 
 export async function GET(req: Request) {
@@ -93,18 +100,54 @@ export async function GET(req: Request) {
       }
     }
 
-    // Cascade real (auth.users -> weddings -> tabelas filhas) só depois de limpar
-    // o Storage acima — ver comentário no topo do arquivo. Passa o MESMO purgeDays
-    // resolvido acima pra function SQL (migration 20260805000004) — precisa ser o
-    // valor idêntico ao usado no filtro de weddings logo acima, senão o cascade do
-    // banco e a limpeza do Storage podem selecionar conjuntos diferentes de
-    // casamentos e reabrir o bug de arquivo órfão.
+    // Mesma lógica acima, mas por vendor_id — fn_purge_soft_deleted_accounts agora
+    // também expurga contas 100% fornecedor (sem `weddings` nenhuma, ver migration
+    // 20260831000005), então o Storage delas precisa ser limpo aqui também, na
+    // MESMA execução e ANTES do RPC, pelo mesmo motivo já documentado acima.
+    const { data: vendors, error: vendorsError } = await supabase
+      .from('vendor_profiles')
+      .select('id')
+      .not('deleted_at', 'is', null)
+      .lt('deleted_at', new Date(Date.now() - purgeWindowMs).toISOString())
+
+    if (vendorsError) return err(500, 'DB_ERROR', 'Erro ao buscar fornecedores a expurgar.')
+
+    for (const vendor of (vendors ?? []) as { id: string }[]) {
+      for (const bucket of VENDOR_STORAGE_BUCKETS) {
+        const { data: objects, error: listError } = await supabase.storage
+          .from(bucket)
+          .list(vendor.id, { limit: 1000 })
+
+        if (listError) {
+          console.error(`[cron/purge-accounts] falha ao listar ${bucket} pro fornecedor ${vendor.id}:`, listError)
+          continue
+        }
+        if (!objects || objects.length === 0) continue
+
+        const paths = objects.map((obj) => `${vendor.id}/${obj.name}`)
+        const { error: removeError } = await supabase.storage.from(bucket).remove(paths)
+
+        if (removeError) {
+          console.error(`[cron/purge-accounts] falha ao remover arquivos de ${bucket} pro fornecedor ${vendor.id}:`, removeError)
+          continue
+        }
+        filesRemoved += paths.length
+      }
+    }
+
+    // Cascade real (auth.users -> weddings/vendor_profiles -> tabelas filhas) só
+    // depois de limpar o Storage acima — ver comentário no topo do arquivo. Passa o
+    // MESMO purgeDays resolvido acima pra function SQL (migration 20260805000004,
+    // estendida em 20260831000005) — precisa ser o valor idêntico ao usado nos
+    // filtros de weddings/vendor_profiles logo acima, senão o cascade do banco e a
+    // limpeza do Storage podem selecionar conjuntos diferentes e reabrir o bug de
+    // arquivo órfão.
     const { error: purgeError } = await supabase.rpc('fn_purge_soft_deleted_accounts', {
       p_purge_days: Number.isFinite(purgeDays) && purgeDays > 0 ? purgeDays : DEFAULT_PURGE_DAYS,
     })
     if (purgeError) return err(500, 'DB_ERROR', 'Erro ao expurgar contas.')
 
-    return ok({ weddingsProcessed: weddings?.length ?? 0, filesRemoved })
+    return ok({ weddingsProcessed: weddings?.length ?? 0, vendorsProcessed: vendors?.length ?? 0, filesRemoved })
   } catch (error) {
     return handleApiError(error)
   }

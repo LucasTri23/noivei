@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireAuthMock = vi.fn()
 const reauthenticateMock = vi.fn()
 const fromMock = vi.fn()
+const vendorFromMock = vi.fn()
 
 vi.mock('@/lib/auth/require-auth', () => ({
   requireAuth: (...args: unknown[]) => requireAuthMock(...args),
@@ -15,6 +16,14 @@ vi.mock('@/lib/auth/reauthenticate', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServer: async () => ({
     from: (...args: unknown[]) => fromMock(...args),
+  }),
+}))
+// vendor_profiles.deleted_at é um campo privilegiado (trigger de proteção,
+// 20260831000001) — o soft delete do próprio vendor no /account/delete precisa de
+// service role, não do client autenticado normal usado no restante da rota.
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseService: () => ({
+    from: (...args: unknown[]) => vendorFromMock(...args),
   }),
 }))
 
@@ -35,6 +44,10 @@ function buildWeddingsQuery(error: { message: string } | null = null) {
   return { update, eq, is }
 }
 
+// Mesmo formato de encadeamento de buildWeddingsQuery, usado pelo update de
+// vendor_profiles (client de service role).
+const buildVendorProfilesQuery = buildWeddingsQuery
+
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/v1/account/delete', {
     method:  'DELETE',
@@ -52,9 +65,11 @@ describe('DELETE /api/v1/account/delete', () => {
     requireAuthMock.mockReset()
     reauthenticateMock.mockReset()
     fromMock.mockReset()
+    vendorFromMock.mockReset()
 
     requireAuthMock.mockResolvedValue({ user: USER })
     reauthenticateMock.mockResolvedValue(undefined)
+    vendorFromMock.mockReturnValue(buildVendorProfilesQuery())
   })
 
   it('deve rejeitar com 401 e não marcar nada para exclusão quando a senha atual está incorreta', async () => {
@@ -86,6 +101,21 @@ describe('DELETE /api/v1/account/delete', () => {
       expect.objectContaining({ is_active: false, deleted_at: expect.any(String) }),
     )
     expect(query.eq).toHaveBeenCalledWith('user_id', USER.id)
+  })
+
+  it('deve marcar vendor_profiles.deleted_at via service role (conta híbrida/100% fornecedor)', async () => {
+    const query = buildWeddingsQuery()
+    fromMock.mockReturnValue(query)
+    const vendorQuery = buildVendorProfilesQuery()
+    vendorFromMock.mockReturnValue(vendorQuery)
+
+    const { DELETE } = await importRoute()
+    const res = await DELETE(makeRequest({ currentPassword: 'senha-correta' }))
+
+    expect(res.status).toBe(200)
+    expect(vendorFromMock).toHaveBeenCalledWith('vendor_profiles')
+    expect(vendorQuery.update).toHaveBeenCalledWith(expect.objectContaining({ deleted_at: expect.any(String) }))
+    expect(vendorQuery.eq).toHaveBeenCalledWith('user_id', USER.id)
   })
 
   it('deve rejeitar payload sem senha atual com erro de validação, sem checar autenticação', async () => {

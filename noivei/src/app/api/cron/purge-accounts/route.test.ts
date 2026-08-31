@@ -47,6 +47,8 @@ function buildStorageMock(
 function buildSupabaseMock(options: {
   weddings: { id: string }[]
   weddingsError?: { message: string } | null
+  vendors?: { id: string }[]
+  vendorsError?: { message: string } | null
   listResults?: Record<string, ListResult>
   removeResults?: Record<string, RemoveResult>
   rpcError?: { message: string } | null
@@ -59,6 +61,7 @@ function buildSupabaseMock(options: {
   // lt() captura os args pra permitir assertar a janela de dias usada, sem
   // precisar reimplementar filtro de data no mock.
   const ltCalls: unknown[][] = []
+  const vendorLtCalls: unknown[][] = []
 
   const weddingsQuery = {
     select: vi.fn().mockReturnThis(),
@@ -66,6 +69,15 @@ function buildSupabaseMock(options: {
     lt: vi.fn((...args: unknown[]) => {
       ltCalls.push(args)
       return Promise.resolve({ data: options.weddings, error: options.weddingsError ?? null })
+    }),
+  }
+
+  const vendorProfilesQuery = {
+    select: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
+    lt: vi.fn((...args: unknown[]) => {
+      vendorLtCalls.push(args)
+      return Promise.resolve({ data: options.vendors ?? [], error: options.vendorsError ?? null })
     }),
   }
 
@@ -85,11 +97,12 @@ function buildSupabaseMock(options: {
 
   const from = vi.fn((table: string) => {
     if (table === 'weddings') return weddingsQuery
+    if (table === 'vendor_profiles') return vendorProfilesQuery
     if (table === 'app_settings') return appSettingsQuery
     throw new Error(`tabela não mockada no teste: ${table}`)
   })
 
-  return { from, storage, rpc, ltCalls }
+  return { from, storage, rpc, ltCalls, vendorLtCalls }
 }
 
 function buildRequest(secret = CRON_SECRET): Request {
@@ -299,6 +312,60 @@ describe('GET /api/cron/purge-accounts', () => {
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
     expect(before - cutoffMs).toBeGreaterThanOrEqual(thirtyDaysMs - 1000)
     expect(after - cutoffMs).toBeLessThanOrEqual(thirtyDaysMs + 1000)
+  })
+
+  it('deve limpar o bucket vendor-portfolio para cada fornecedor expurgado, isolado por vendor_id', async () => {
+    const vendorA = 'vendor-a'
+    const vendorB = 'vendor-b'
+    const supabase = buildSupabaseMock({
+      weddings: [],
+      vendors: [{ id: vendorA }, { id: vendorB }],
+      listResults: {
+        'vendor-portfolio': { data: [{ name: 'foto.jpg' }], error: null },
+      },
+    })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+
+    const response = await GET(buildRequest())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.vendorsProcessed).toBe(2)
+    expect(body.data.filesRemoved).toBe(2)
+
+    const vendorRemoveCalls = supabase.storage.removeCalls.filter((c) => c.bucket === 'vendor-portfolio')
+    expect(vendorRemoveCalls).toHaveLength(2)
+    const callForA = vendorRemoveCalls.find((c) => c.paths[0]?.startsWith(`${vendorA}/`))
+    const callForB = vendorRemoveCalls.find((c) => c.paths[0]?.startsWith(`${vendorB}/`))
+    // Cada remoção só contém paths do próprio vendor_id — nunca mistura os dois.
+    expect(callForA?.paths).toEqual([`${vendorA}/foto.jpg`])
+    expect(callForB?.paths).toEqual([`${vendorB}/foto.jpg`])
+  })
+
+  it('deve continuar expurgando o banco mesmo quando não há fornecedores a limpar', async () => {
+    const supabase = buildSupabaseMock({ weddings: [], vendors: [] })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+
+    const response = await GET(buildRequest())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.vendorsProcessed).toBe(0)
+    expect(supabase.storage.from).not.toHaveBeenCalledWith('vendor-portfolio')
+    expect(supabase.rpc).toHaveBeenCalledWith('fn_purge_soft_deleted_accounts', { p_purge_days: 30 })
+  })
+
+  it('deve retornar 500 sem chamar o RPC de expurgo quando a leitura de vendor_profiles falha', async () => {
+    const supabase = buildSupabaseMock({
+      weddings: [],
+      vendorsError: { message: 'falha simulada ao ler vendor_profiles' },
+    })
+    mockedCreateSupabaseService.mockReturnValue(supabase as never)
+
+    const response = await GET(buildRequest())
+
+    expect(response.status).toBe(500)
+    expect(supabase.rpc).not.toHaveBeenCalled()
   })
 
   it('deve rejeitar requisição sem o CRON_SECRET correto', async () => {

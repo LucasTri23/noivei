@@ -46,3 +46,14 @@ export const CreateVendorPortfolioItemSchema = z.object({
   sort_order:   z.number().int().min(0).max(10_000).optional(),
 })
 export type CreateVendorPortfolioItemInput = z.infer<typeof CreateVendorPortfolioItemSchema>
+
+// Reordenação/legenda de um item já existente — nunca aceita storage_path/vendor_id
+// (imutáveis após o upload; trocar de arquivo é remover e subir de novo).
+export const UpdateVendorPortfolioItemSchema = z
+  .object({
+    caption:    z.string().trim().max(300).nullable(),
+    sort_order: z.number().int().min(0).max(10_000),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo para atualizar.')
+export type UpdateVendorPortfolioItemInput = z.infer<typeof UpdateVendorPortfolioItemSchema>

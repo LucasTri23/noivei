@@ -4,6 +4,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateVendorPortfolioItemSchema } from '@/lib/api/validation/vendor.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { MAX_VENDOR_PORTFOLIO_ITEMS, validatePortfolioObjectName } from '@/lib/vendor/validate-portfolio-path'
 import type { VendorPortfolioItem } from '@/types/database'
 
 // Mesmos limites do bucket "vendor-portfolio" (migration 20260806000005) — repetidos
@@ -34,6 +35,21 @@ export async function POST(req: Request) {
       return err(400, 'VALIDATION_ERROR', 'Caminho de armazenamento inválido para este fornecedor.')
     }
 
+    // Backstop server-side antes mesmo de consultar o Storage — trg_vendor_portfolio_items_enforce_limit
+    // (migration 20260831000002) também recusa no INSERT, mas checar aqui evita a
+    // volta ao Storage pra remover o objeto só pra descobrir isso via erro genérico
+    // de banco, e devolve uma mensagem legível pro fornecedor.
+    const { count: currentCount, error: countError } = await supabase
+      .from('vendor_portfolio_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('vendor_id', vendor.id)
+
+    if (countError) return err(500, 'DB_ERROR', 'Erro ao verificar portfólio.')
+    if ((currentCount ?? 0) >= MAX_VENDOR_PORTFOLIO_ITEMS) {
+      await supabase.storage.from('vendor-portfolio').remove([parsed.data.storage_path])
+      return err(400, 'PORTFOLIO_LIMIT_REACHED', `Seu portfólio já tem o máximo de ${MAX_VENDOR_PORTFOLIO_ITEMS} fotos. Remova alguma antes de enviar outra.`)
+    }
+
     const objectName = parsed.data.storage_path.slice(vendor.id.length + 1)
     const { data: listing, error: listError } = await supabase.storage
       .from('vendor-portfolio')
@@ -57,6 +73,13 @@ export async function POST(req: Request) {
       return err(400, 'INVALID_FILE_TYPE', 'Formato de imagem não suportado. Envie JPG, PNG, WEBP ou HEIC.')
     }
 
+    // Nunca confia que o client usou sanitizeFileName() antes do upload — revalida o
+    // nome do objeto de verdade contra o charset seguro e cruza extensão x MIME real.
+    if (!validatePortfolioObjectName(objectName, actualMimeType).valid) {
+      await supabase.storage.from('vendor-portfolio').remove([parsed.data.storage_path])
+      return err(400, 'VALIDATION_ERROR', 'Nome de arquivo inválido.')
+    }
+
     const { data, error } = await supabase
       .from('vendor_portfolio_items')
       .insert({
@@ -72,6 +95,13 @@ export async function POST(req: Request) {
       // Metadados falharam ao gravar — remove o objeto órfão do Storage (mesmo
       // padrão de uploadWeddingFile quando o registro pós-upload falha).
       await supabase.storage.from('vendor-portfolio').remove([parsed.data.storage_path])
+
+      // Corrida rara: duas requisições passaram pela checagem de contagem acima ao
+      // mesmo tempo — trg_vendor_portfolio_items_enforce_limit (banco) é quem
+      // garante o limite de verdade nesse caso, a checagem prévia é só otimização.
+      if (error.message.includes('vendor_portfolio_item_limit_reached')) {
+        return err(400, 'PORTFOLIO_LIMIT_REACHED', `Seu portfólio já tem o máximo de ${MAX_VENDOR_PORTFOLIO_ITEMS} fotos. Remova alguma antes de enviar outra.`)
+      }
       return err(500, 'DB_ERROR', 'Erro ao registrar foto do portfólio.')
     }
 

@@ -117,6 +117,25 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_conversations / vendor_messages'
     expect(error).not.toBeNull()
   })
 
+  // Correção de segurança 20260831000001 (auditoria de comparação Fase 1-9): a
+  // policy "sender can soft-delete own message" é de LINHA, não de coluna — sem o
+  // trigger fn_protect_vendor_message_immutable_fields, o remetente conseguiria
+  // reescrever body/sender_user_id/conversation_id da própria mensagem via UPDATE
+  // direto (não só deleted_at). Prova que só deleted_at muda de verdade.
+  it('não deve permitir que o remetente reescreva body/sender_user_id via UPDATE direto — só deleted_at muda', async () => {
+    const { data, error } = await coupleA.client
+      .from('vendor_messages')
+      .update({ body: 'Mensagem adulterada', sender_user_id: vendorV.userId, deleted_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .select('body, sender_user_id, deleted_at')
+
+    expect(error).toBeNull()
+    expect(data?.[0]?.body).toBe('Olá, gostaria de um orçamento.')
+    expect(data?.[0]?.sender_user_id).toBe(coupleA.userId)
+    // deleted_at é o único campo que o trigger deixa passar — este sim deve ter mudado.
+    expect(data?.[0]?.deleted_at).not.toBeNull()
+  })
+
   it('deve manter first_message_at/last_message_at sincronizados via trigger ao inserir mensagem', async () => {
     const { error } = await coupleA.client
       .from('vendor_messages')

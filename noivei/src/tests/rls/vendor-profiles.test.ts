@@ -76,16 +76,16 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_profiles', () => {
     expect(updateData).toHaveLength(1)
   })
 
-  // RISCO DOCUMENTADO DE PROPÓSITO — NÃO é um bug desta migration: RLS é só de
-  // LINHA, não de coluna (ver comentário na policy "vendor can update own profile").
-  // A policy de UPDATE libera o fornecedor a atualizar A PRÓPRIA linha inteira, sem
-  // nenhuma restrição de coluna — não existe forma de RLS negar update de
-  // status/featured mas permitir o resto na MESMA linha. Este teste PASSA
-  // demonstrando que a atualização TEM SUCESSO, exatamente para deixar registrado
-  // que a única defesa real contra auto-aprovação/auto-destaque é o endpoint de
-  // autoedição do fornecedor (fase futura) nunca incluir esses campos no schema Zod
-  // de update — a RLS sozinha NÃO é suficiente aqui.
-  it('RLS permite tecnicamente que o fornecedor grave featured=true e status=active em si mesmo via UPDATE direto — a API é quem PRECISA bloquear esses campos', async () => {
+  // CORRIGIDO em 20260831000001 (defesa em profundidade, auditoria de comparação
+  // Fase 1-9): RLS sozinha é só de LINHA (ver comentário histórico na policy "vendor
+  // can update own profile") — mas agora um trigger BEFORE UPDATE
+  // (fn_protect_vendor_profile_privileged_fields) reescreve status/featured/
+  // rejection_reason/deleted_at/user_id de volta pro valor OLD sempre que quem
+  // escreve não é service_role nem admin. O UPDATE ainda "funciona" (sem erro,
+  // porque a RLS em si permite a linha), mas os campos privilegiados nunca mudam de
+  // verdade — a API continua sendo a primeira linha de defesa (nunca aceita esses
+  // campos no schema Zod), e agora o banco é a segunda, independente da API.
+  it('não deve permitir que o fornecedor grave featured=true e status=active em si mesmo via UPDATE direto — trigger reverte pro valor anterior', async () => {
     const { data, error } = await vendorA.client
       .from('vendor_profiles')
       .update({ featured: true, status: 'active' })
@@ -93,10 +93,31 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_profiles', () => {
       .select('featured, status')
 
     expect(error).toBeNull()
+    // O trigger reescreveu NEW.featured/NEW.status de volta pro valor anterior
+    // (draft/false) antes do INSERT gravar — mesmo o UPDATE "tendo sucesso", nada mudou.
+    expect(data).toEqual([{ featured: false, status: 'draft' }])
+
+    const { data: check } = await service.from('vendor_profiles').select('featured, status').eq('id', vendorAId).single()
+    expect(check).toEqual({ featured: false, status: 'draft' })
+  })
+
+  it('deve permitir que um ADMIN altere status/featured de qualquer fornecedor (trigger libera fn_is_admin)', async () => {
+    const admin = await createTestUser(service, 'vendor-admin')
+    await service.from('profiles').update({ role: 'admin' }).eq('id', admin.userId)
+
+    const { data, error } = await admin.client
+      .from('vendor_profiles')
+      .update({ status: 'active', featured: true })
+      .eq('id', vendorAId)
+      .select('featured, status')
+
+    expect(error).toBeNull()
     expect(data).toEqual([{ featured: true, status: 'active' }])
-    // Sem assinatura ativa, mesmo com status='active' o fornecedor continua fora do
-    // marketplace público (fn_vendor_is_publicly_visible exige as duas coisas) —
-    // mas a LINHA em si foi alterada com sucesso, e é isso que este teste documenta.
+
+    // Devolve o fornecedor pro estado original pra não vazar estado entre os testes
+    // deste describe (afterAll só apaga o usuário, não reseta vendor_profiles).
+    await service.from('vendor_profiles').update({ status: 'draft', featured: false }).eq('id', vendorAId)
+    await deleteTestUser(service, admin.userId)
   })
 
   // Diferente do UPDATE acima: CRIAR uma linha nova é diferente de editar uma
