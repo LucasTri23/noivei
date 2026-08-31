@@ -40,6 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin/planos/modulos',   label: 'Módulos por plano' },
     { href: '/admin/wedding-score',    label: 'Wedding Score' },
     { href: '/admin/cupons',           label: 'Cupons' },
+    { href: '/admin/fornecedores',     label: 'Fornecedores' },
     { href: '/admin/configuracoes',    label: 'Configurações' },
   ]
 
