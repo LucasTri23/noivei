@@ -1,3 +1,5 @@
+vi.mock('@/lib/auth/account-type', () => ({ requireAccountType: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/lib/supabase/server', () => ({ createSupabaseServer: vi.fn().mockResolvedValue({}) }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // vi.mock é hoisted — factories não podem referenciar variáveis externas, só vi.fn()

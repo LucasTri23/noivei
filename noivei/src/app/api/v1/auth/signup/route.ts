@@ -11,6 +11,7 @@ import { createSupabaseService } from '@/lib/supabase/service'
 // e-mail antes) — diferente do login, não há cookie de sessão a sincronizar aqui,
 // então mover pro servidor é estritamente mais simples/seguro, sem esse risco.
 const SignupBodySchema = z.object({
+  accountType: z.enum(['couple', 'vendor']).default('couple'),
   fullName:     z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres').max(120),
   email:        z.string().trim().toLowerCase().email('E-mail inválido').max(255),
   password:     z.string().min(8, 'Senha deve ter pelo menos 8 caracteres').max(200),
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
       return err(400, 'VALIDATION_ERROR', 'Revise os campos destacados e tente novamente.', parsed.error.flatten())
     }
 
-    const { fullName, email, password, captchaToken, origin } = parsed.data
+    const { fullName, email, password, captchaToken, origin, accountType } = parsed.data
     const ip = getClientIp(req)
     const limits = AUTH_RATE_LIMITS.signup
 
@@ -43,13 +44,18 @@ export async function POST(req: Request) {
       return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde alguns minutos e tente novamente.')
     }
 
+    const { data: existingType, error: typeError } = await rateLimitSupabase.rpc('fn_account_type_for_email', { p_email: email })
+    if (typeError) return err(500, 'DB_ERROR', 'Não foi possível verificar o cadastro.')
+    if (existingType && existingType !== accountType) {
+      return err(400, 'SIGNUP_FAILED', 'Não foi possível criar a conta. Se você já tem cadastro, tente entrar.')
+    }
     const supabase = await createSupabaseServer()
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data:            { full_name: fullName },
-        emailRedirectTo: `${origin}/auth/callback`,
+        data:            { full_name: fullName, account_type: accountType },
+        emailRedirectTo: origin + '/auth/callback?next=' + encodeURIComponent(accountType === 'vendor' ? '/fornecedor/cadastro' : '/onboarding'),
         captchaToken,
       },
     })

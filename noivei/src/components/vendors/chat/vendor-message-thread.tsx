@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import VendorAvatar from '@/components/vendors/vendor-avatar'
 import { useEffect, useRef, useState } from 'react'
 import Spinner from '@/components/ui/spinner'
 import { useVendorConversationThread } from '@/hooks/use-vendor-conversation-thread'
@@ -8,6 +9,7 @@ import { formatMessageTimestamp } from '@/lib/vendor/format-message-timestamp'
 import type { ChatMessage } from '@/lib/vendor/reconcile-chat-message'
 
 interface VendorMessageThreadProps {
+  avatarUrl?: string
   conversationId: string
   currentUserId:  string
   otherPartyName: string
@@ -100,7 +102,7 @@ function MessageBubble({ message, isMine, onRetry }: { message: ChatMessage; isM
  * em nenhum outro do chat, é a primeira vez que texto livre de um usuário é
  * renderizado na tela de OUTRO usuário neste app.
  */
-export default function VendorMessageThread({ conversationId, currentUserId, otherPartyName, backHref }: VendorMessageThreadProps) {
+export default function VendorMessageThread({ conversationId, currentUserId, otherPartyName, backHref, avatarUrl }: VendorMessageThreadProps) {
   const {
     messages, isLoading, isError, hasMoreOlder, isLoadingOlder, loadOlder,
     sendMessage, isSending, markRead,
@@ -159,6 +161,7 @@ export default function VendorMessageThread({ conversationId, currentUserId, oth
         >
           <BackIcon />
         </Link>
+        <VendorAvatar name={otherPartyName} src={avatarUrl} size={40} />
         <h1 className="font-display" style={{ fontSize: '19px', fontWeight: 500, color: 'var(--fg)', margin: 0 }}>
           {otherPartyName}
         </h1>

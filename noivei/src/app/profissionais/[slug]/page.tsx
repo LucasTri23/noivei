@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 
+import VendorAvatar from '@/components/vendors/vendor-avatar'
 import VendorContactActions from '@/components/vendors/vendor-contact-actions'
 import VendorPortfolioGallery from '@/components/vendors/vendor-portfolio-gallery'
 import { createSupabaseServer } from '@/lib/supabase/server'
@@ -96,7 +97,6 @@ export default async function ProfissionalPage({ params }: ProfissionalPageProps
 
   if (!vendor) notFound()
 
-  const initial  = vendor.business_name.charAt(0).toUpperCase()
   const location = [vendor.city, vendor.state].filter(Boolean).join(', ')
   const instagramUrl = vendor.instagram
     ? `https://instagram.com/${vendor.instagram.replace(/^@/, '')}`
@@ -110,12 +110,7 @@ export default async function ProfissionalPage({ params }: ProfissionalPageProps
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: 'clamp(20px, 4vw, 48px) clamp(16px, 4vw, 24px)' }}>
         {/* Header */}
         <div className="flex flex-wrap items-center gap-4" style={{ marginBottom: '28px' }}>
-          <div
-            className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full font-display text-2xl font-semibold"
-            style={{ background: 'color-mix(in srgb, var(--wedding-color) 18%, transparent)', color: 'var(--wedding-color-dark)' }}
-          >
-            {initial}
-          </div>
+          <VendorAvatar name={vendor.business_name} size={64} src={vendor.logo_storage_path ? '/api/v1/vendors/' + vendor.slug + '/avatar' : null} />
           <div style={{ minWidth: 0 }}>
             <h1
               className="font-display"

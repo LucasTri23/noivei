@@ -9,6 +9,7 @@ import { z } from 'zod'
 import GoogleButton from '@/components/auth/google-button'
 import PasswordInput from '@/components/auth/password-input'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
+import { accountTypeForPath } from '@/lib/auth/account-type'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
 interface LoginApiErrorBody {
@@ -30,7 +31,8 @@ function LoginForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const next         = searchParams.get('next') ?? '/dashboard'
-  const [serverError, setServerError] = useState('')
+  const accountType = accountTypeForPath(next)
+  const [serverError, setServerError] = useState(searchParams.get('error') === 'account_type_conflict' ? 'Este e-mail pertence a outro tipo de conta. Entre pela área correta ou use outro e-mail.' : '')
   const [loading, setLoading]         = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [turnstileKey, setTurnstileKey] = useState(0)
@@ -65,7 +67,7 @@ function LoginForm() {
     const res = await fetch('/api/v1/auth/login', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email: data.email, password: data.password, captchaToken }),
+      body:    JSON.stringify({ email: data.email, password: data.password, captchaToken, accountType }),
     })
 
     if (!res.ok) {
@@ -97,7 +99,7 @@ function LoginForm() {
         Entrar
       </h1>
       <p style={{ fontSize: '14.5px', color: '#9A7A60', margin: '0 0 26px' }}>
-        Continue de onde parou o planejamento.
+        {accountType === 'vendor' ? 'Entre na conta de fornecedor da sua empresa.' : 'Entre na sua conta de noivos para continuar o planejamento.'}
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -144,7 +146,7 @@ function LoginForm() {
 
       <div style={{ textAlign: 'center', marginTop: '26px', fontSize: '14px', color: '#9A7A60' }}>
         Ainda não tem conta?{' '}
-        <Link href="/signup" style={{ color: '#C6943A', fontWeight: 600 }}>Criar conta</Link>
+        <Link href={accountType === 'vendor' ? '/signup?next=/fornecedor/cadastro' : '/signup'} style={{ color: '#C6943A', fontWeight: 600 }}>Criar conta</Link>
       </div>
     </div>
   )

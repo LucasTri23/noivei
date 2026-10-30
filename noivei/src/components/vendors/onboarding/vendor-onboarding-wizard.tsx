@@ -1,5 +1,6 @@
 'use client'
 
+import VendorAvatarManager from '@/components/vendors/dashboard/vendor-avatar-manager'
 import { isCnpj } from '@/lib/vendor/cnpj'
 
 import { useEffect, useState } from 'react'
@@ -91,6 +92,7 @@ export default function VendorOnboardingWizard({
 }: VendorOnboardingWizardProps) {
   const router = useRouter()
   const [vendorId, setVendorId] = useState<string | null>(initialProfile?.id ?? null)
+  const [vendorSlug, setVendorSlug] = useState<string | null>(initialProfile?.slug ?? null)
   const [step, setStep] = useState(() => computeStartStep(initialProfile, initialCategoryIds))
   const [savingEmpresa, setSavingEmpresa] = useState(false)
   const [submitting, setSubmitting]       = useState(false)
@@ -183,6 +185,7 @@ export default function VendorOnboardingWizard({
     if (!vendorId) {
       const body = (await res.json()) as { data: VendorProfile }
       setVendorId(body.data.id)
+      setVendorSlug(body.data.slug)
     }
 
     setStep(STEP_CATEGORIA)
@@ -532,6 +535,7 @@ export default function VendorOnboardingWizard({
         </div>
       )}
 
+      {vendorSlug && step === STEP_REVISAO && <VendorAvatarManager name={empresa.business_name} slug={vendorSlug} hasPhoto={Boolean(initialProfile?.logo_storage_path)} />}
       {/* ── Passo 4: Revisão ── */}
       {step === STEP_REVISAO && (
         <div>

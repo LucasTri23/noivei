@@ -1,3 +1,4 @@
+import { validateTemplateContent } from '@/lib/site/validate-template-content'
 import { isPlusPlan } from '@/constants/plans'
 import { isExclusiveSiteTemplate } from '@/lib/site/templates'
 import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
@@ -7,7 +8,7 @@ import { UpdateSiteConfigSchema } from '@/lib/api/validation/site.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { SiteConfig } from '@/types/database'
+import type { SiteConfig, SiteTemplate } from '@/types/database'
 
 // O template 'portfolio' reaproveita o mesmo módulo 'album' do mural de fotos
 // (plan_module_access) — mesmo critério usado em getAlbumBySlug. Checado aqui
@@ -81,11 +82,14 @@ export async function PATCH(req: Request, { params }: RouteContext) {
 
     const { data: existingData, error: fetchError } = await supabase
       .from('site_config')
-      .select('id')
+      .select('id, template, content')
       .eq('wedding_id', wid)
       .maybeSingle()
 
     if (fetchError) return err(500, 'DB_ERROR', 'Erro ao buscar configuração do site.')
+
+    const contentError = validateTemplateContent((parsed.data.template ?? existingData?.template ?? 'classic') as SiteTemplate, parsed.data.content, existingData?.content ?? {})
+    if (contentError) return err(400, 'INVALID_TEMPLATE_CONTENT', contentError)
 
     if (!existingData) {
       if (!parsed.data.slug) {

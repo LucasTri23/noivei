@@ -1,3 +1,5 @@
+import { accountTypeForPath, requireAccountType } from '@/lib/auth/account-type'
+import { ApiError } from '@/lib/api/response'
 import { NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
@@ -30,6 +32,16 @@ export async function GET(request: Request) {
       // encontra o casamento de quem acabou de aceitar um convite)
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        const accountType = accountTypeForPath(next)
+        try { await requireAccountType(supabase, accountType) }
+        catch (accountError) {
+          await supabase.auth.signOut({ scope: 'local' })
+          if (accountError instanceof ApiError && accountError.code === 'ACCOUNT_TYPE_CONFLICT') {
+            return NextResponse.redirect(origin + '/login?next=' + encodeURIComponent(next) + '&error=account_type_conflict')
+          }
+          return NextResponse.redirect(origin + '/login?error=auth_callback_failed')
+        }
+        if (accountType === 'vendor') return NextResponse.redirect(origin + next)
         const wedding = await getUserWedding(supabase, user.id)
 
         // New user — no wedding yet → onboarding

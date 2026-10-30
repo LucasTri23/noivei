@@ -1,3 +1,4 @@
+import { requireAccountType } from '@/lib/auth/account-type'
 import { requireVendorProfile } from '@/lib/api/guards/vendor'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
   try {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
+    await requireAccountType(supabase, 'vendor')
 
     // Isso só deveria acontecer uma vez de verdade por fornecedor — teto baixo,
     // mesmo espírito do rate limit de export-data (ação pesada e não repetível em

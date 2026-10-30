@@ -1,11 +1,14 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
+import VendorAvatar from '@/components/vendors/vendor-avatar'
 import Spinner from '@/components/ui/spinner'
 import { useVendorConversations } from '@/hooks/use-vendor-conversations'
 import { formatMessageTimestamp } from '@/lib/vendor/format-message-timestamp'
 
 interface VendorConversationsListProps {
+  activeId?: string
   as:            'couple' | 'vendor'
   basePath:      string
   currentUserId: string
@@ -28,8 +31,10 @@ function ChatIcon() {
  * (`basePath`), então unificar num componente parametrizado por `as` evita
  * duplicar a mesma UI de lista duas vezes.
  */
-export default function VendorConversationsList({ as, basePath, currentUserId, emptyTitle, emptyBody }: VendorConversationsListProps) {
+export default function VendorConversationsList({ as, basePath, currentUserId, emptyTitle, emptyBody, activeId }: VendorConversationsListProps) {
   const { data: conversations, isLoading, isError } = useVendorConversations(as)
+  const [search, setSearch] = useState('')
+  const [unreadOnly, setUnreadOnly] = useState(false)
 
   if (isLoading) {
     return (
@@ -75,11 +80,14 @@ export default function VendorConversationsList({ as, basePath, currentUserId, e
     )
   }
 
+  const visibleConversations = conversations.filter((conversation) => (!unreadOnly || conversation.unread_count > 0) && (as === 'couple' ? conversation.vendor_business_name : conversation.wedding_couple_names).toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
+
   return (
     <div className="flex flex-col" style={{ gap: '2px' }}>
-      {conversations.map((conversation) => {
+      <div style={{ padding: '12px', background: 'var(--surface)', position: 'sticky', top: 0, zIndex: 1 }}><input aria-label="Buscar conversa" placeholder="Buscar conversa…" value={search} onChange={(event) => setSearch(event.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)', color: 'var(--fg)', fontSize: 13 }} /><label style={{ display: 'flex', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--muted-fg)' }}><input type="checkbox" checked={unreadOnly} onChange={(event) => setUnreadOnly(event.target.checked)} />Somente não lidas</label></div>
+      {visibleConversations.length === 0 && <p style={{ padding: 20, textAlign: 'center', color: 'var(--muted-fg)', fontSize: 13 }}>Nenhuma conversa corresponde à busca.</p>}
+      {visibleConversations.map((conversation) => {
         const otherName = as === 'couple' ? conversation.vendor_business_name : conversation.wedding_couple_names
-        const initial = (otherName || '?').charAt(0).toUpperCase()
         const hasUnread = conversation.unread_count > 0
         const previewPrefix = conversation.last_message_sender_user_id === currentUserId ? 'Você: ' : ''
         const preview = conversation.last_message_body ? `${previewPrefix}${conversation.last_message_body}` : 'Nenhuma mensagem ainda.'
@@ -88,22 +96,14 @@ export default function VendorConversationsList({ as, basePath, currentUserId, e
           <Link
             key={conversation.id}
             href={`${basePath}/${conversation.id}`}
+            aria-current={activeId === conversation.id ? 'page' : undefined}
             className="flex items-center gap-3"
             style={{
               padding: '14px 12px', borderRadius: 'var(--radius-lg)',
-              textDecoration: 'none', transition: 'background var(--duration-base, 0.15s) ease',
+              background: activeId === conversation.id ? 'var(--wedding-color-subtle)' : undefined, textDecoration: 'none', transition: 'background var(--duration-base, 0.15s) ease',
             }}
           >
-            <span
-              className="flex items-center justify-center flex-shrink-0"
-              style={{
-                width: '42px', height: '42px', borderRadius: '50%',
-                background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)',
-                fontWeight: 700, fontSize: '15px',
-              }}
-            >
-              {initial}
-            </span>
+            <VendorAvatar name={otherName} src={as === 'couple' ? '/api/v1/vendors/' + conversation.vendor_slug + '/avatar' : null} size={46} />
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="flex items-center justify-between gap-2">

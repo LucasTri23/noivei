@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import StyleContentFields from './style-content-fields'
+import { SITE_TEMPLATE_CONFIG } from '@/lib/site/template-config'
 import { useEffect, useRef, useState } from 'react'
 
 import Spinner from '@/components/ui/spinner'
@@ -190,6 +192,7 @@ function GuardNotice({ onGoToCapa }: { onGoToCapa: () => void }) {
 }
 
 interface CapaSectionProps {
+  content: SiteContent
   coupleNames:         string
   slug:                string
   published:           boolean
@@ -206,7 +209,7 @@ interface CapaSectionProps {
   onDeletePhoto: (url: string) => Promise<boolean>
   onSave: (values: {
     slug: string; published: boolean; template: SiteTemplate
-    coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number; coverPhotoZoom: number
+    styleContent: Partial<SiteContent>; coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number; coverPhotoZoom: number
   }) => Promise<PatchResult>
 }
 
@@ -499,9 +502,10 @@ export function TemplatePicker({ value, albumEnabled, exclusiveTemplatesEnabled,
 }
 
 function CapaSection({
-  coupleNames, slug, published, template, albumEnabled, exclusiveTemplatesEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
+  content, coupleNames, slug, published, template, albumEnabled, exclusiveTemplatesEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
   onUploadPhoto, onDeletePhoto, onSave,
 }: CapaSectionProps) {
+  const [styleDraft, setStyleDraft] = useState<SiteContent>(content)
   const [slugDraft, setSlugDraft]   = useState(slug)
   const [titleDraft, setTitleDraft] = useState(coverTitle)
   const [publishedDraft, setPublishedDraft] = useState(published)
@@ -550,6 +554,7 @@ function CapaSection({
 
     const result = await onSave({
       slug: parsedSlug.data, published: publishedDraft, template: templateDraft,
+      styleContent: Object.fromEntries(SITE_TEMPLATE_CONFIG[templateDraft].fields.map(({ key }) => [key, styleDraft[key]?.trim() ?? ''])),
       coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft, coverPhotoPosition: positionDraft, coverPhotoZoom: zoomDraft,
     })
     if (!result.ok) {
@@ -562,6 +567,7 @@ function CapaSection({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <TemplatePicker value={templateDraft} albumEnabled={albumEnabled} exclusiveTemplatesEnabled={exclusiveTemplatesEnabled} onChange={setTemplateDraft} />
+      <StyleContentFields template={templateDraft} content={styleDraft} onChange={(key, value) => setStyleDraft((current) => ({ ...current, [key]: value }))} />
 
       <div>
         <label htmlFor="site-cover-title" style={labelStyle}>Título da capa</label>
@@ -644,8 +650,7 @@ function CapaSection({
               />
               <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '2px' }}>
                 {zoomDraft === 0 ? 'Sem zoom extra' : `${zoomDraft}%`}
-                {' — '}aumente se a foto estiver aparecendo pequena/afastada demais no estilo Portfólio
-                {templateDraft === 'portfolio' ? ' (capa em tela cheia).' : ' (também vale para o estilo Clássico, em fotos com composição ruim).'}
+                {' — '}ajuste o enquadramento da capa do estilo {SITE_TEMPLATE_CONFIG[templateDraft].label}.
               </p>
             </div>
           </>
@@ -788,20 +793,20 @@ function HistoriaSection({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
-        <label htmlFor="site-our-story" style={labelStyle}>Nossa história</label>
+        <label htmlFor="site-our-story" style={labelStyle}>{SITE_TEMPLATE_CONFIG[template].storyLabel}</label>
         <textarea
           id="site-our-story"
           rows={8}
           maxLength={4000}
           value={storyDraft}
           onChange={(e) => setStoryDraft(e.target.value)}
-          placeholder="Como vocês se conheceram, o pedido, curiosidades sobre o casal…"
+          placeholder={template === 'invitation' ? 'Escreva uma mensagem de convite para as pessoas que vão celebrar com vocês.' : 'Como vocês se conheceram, o pedido, curiosidades sobre o casal…'}
           style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
 
-      {/* Só o Portfólio lê story_photo_url (portfolio-site.tsx) — no Clássico o campo não teria efeito nenhum */}
-      {template === 'portfolio' && (
+      {/* Exibe apenas campos de foto usados pelo modelo escolhido. */}
+      {SITE_TEMPLATE_CONFIG[template].storyPhoto && (
         <div>
           <label style={labelStyle}>Foto de destaque desta seção</label>
           <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '-2px 0 8px' }}>
@@ -1120,6 +1125,10 @@ function GaleriaSection({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (galleryLimit !== null && urls.length > galleryLimit) {
+      toastError(`Selecione até ${galleryLimit} fotos para este estilo antes de salvar a galeria.`)
+      return
+    }
     const result = await onSave({ gallery_urls: urls })
     if (!result.ok) {
       toastError(result.message)
@@ -1151,9 +1160,7 @@ function GaleriaSection({
         </div>
       </div>
 
-      {/* Teto de fotos do estilo atual (só o portfólio tem um) — a grade dele foi desenhada
-          pra uma quantidade controlada, então o limite existe pra manter o equilíbrio visual,
-          não é uma cota de armazenamento (essa já aparece acima). */}
+      {/* Limite visual do estilo, separado da cota de armazenamento do plano. */}
       {galleryLimit !== null && (
         <div
           className="flex items-center justify-between rounded-2xl p-4"
@@ -1167,7 +1174,7 @@ function GaleriaSection({
           </span>
           {atGalleryLimit && (
             <span style={{ fontSize: '12.5px', color: '#A87050' }}>
-              Limite do estilo Portfólio atingido — remova uma foto ou troque de estilo na aba Capa.
+              Limite do estilo {SITE_TEMPLATE_CONFIG[template].label} atingido — remova uma foto ou troque de estilo na aba Capa.
             </span>
           )}
         </div>
@@ -1209,7 +1216,7 @@ function GaleriaSection({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading || atGalleryLimit}
-          title={atGalleryLimit ? `Limite de ${galleryLimit} fotos do estilo Portfólio atingido.` : undefined}
+          title={atGalleryLimit ? `Limite de ${galleryLimit} fotos do estilo ${SITE_TEMPLATE_CONFIG[template].label} atingido.` : undefined}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', border: 'none',
@@ -1532,10 +1539,10 @@ export default function SiteBuilder({
   async function saveCapa(
     values: {
       slug: string; published: boolean; template: SiteTemplate
-      coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number; coverPhotoZoom: number
+      styleContent: Partial<SiteContent>; coverTitle: string; coverPhotoUrl: string | null; coverPhotoPosition: number; coverPhotoZoom: number
     },
   ): Promise<PatchResult> {
-    const nextContent: SiteContent = { ...content }
+    const nextContent: SiteContent = { ...content, ...values.styleContent }
     if (values.coverTitle) nextContent.cover_title = values.coverTitle
     else delete nextContent.cover_title
 
@@ -1548,7 +1555,7 @@ export default function SiteBuilder({
   async function saveContentPatch(patch: Partial<SiteContent>): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
 
-    const textKeys = ['cover_title', 'our_story', 'story_photo_url', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code'] as const
+    const textKeys = ['cover_title', 'our_story', 'story_photo_url', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code', 'hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint'] as const
     for (const key of textKeys) {
       if (!(key in patch)) continue
       const value = patch[key]
@@ -1672,6 +1679,7 @@ export default function SiteBuilder({
           <div style={{ padding: '26px' }}>
             {active === 'capa' && (
               <CapaSection
+                content={content}
                 coupleNames={coupleNames}
                 slug={slug}
                 published={published}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import VendorAvatar from './vendor-avatar'
 
 import type { VendorListItem } from '@/lib/vendor/list-vendors'
 
@@ -6,14 +7,8 @@ interface VendorCardProps {
   vendor: VendorListItem
 }
 
-// Card de marketplace — mesmo tratamento visual de PlanCard (plan-cards-grid.tsx):
-// superfície elevada, ring sutil, lift no hover. Sem foto (o bucket de portfólio é
-// privado e signed URLs em lote pra uma grade inteira de cards ficaria caro/fora de
-// escopo desta fase — só o perfil público gera signed URL, ver
-// GET /api/v1/vendors/[slug]/portfolio); o avatar de iniciais cobre a ausência de
-// imagem sem deixar o card com aparência de tabela administrativa.
+// Foto da empresa com acesso controlado; sem imagem, mostra a inicial.
 export default function VendorCard({ vendor }: VendorCardProps) {
-  const initial = vendor.business_name.charAt(0).toUpperCase()
   const location = [vendor.city, vendor.state].filter(Boolean).join(', ')
 
   return (
@@ -23,12 +18,7 @@ export default function VendorCard({ vendor }: VendorCardProps) {
         style={{ boxShadow: 'var(--shadow), var(--shadow-lg)' }}
       >
         <div className="flex items-center gap-3" style={{ marginBottom: '14px' }}>
-          <div
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-display text-lg font-semibold"
-            style={{ background: 'color-mix(in srgb, var(--wedding-color) 18%, transparent)', color: 'var(--wedding-color-dark)' }}
-          >
-            {initial}
-          </div>
+          <VendorAvatar name={vendor.business_name} src={vendor.logo_storage_path ? '/api/v1/vendors/' + vendor.slug + '/avatar' : null} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {vendor.business_name}

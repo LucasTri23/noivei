@@ -1,21 +1,22 @@
+import VendorChatNotifications from '@/components/vendors/chat/vendor-chat-notifications'
 import { headers } from 'next/headers'
+import { requireAccountType } from '@/lib/auth/account-type'
+import { ApiError } from '@/lib/api/response'
 import { redirect } from 'next/navigation'
 import VendorTopBar from '@/components/layout/vendor-top-bar'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
-// Grupo de rotas da área do PRÓPRIO fornecedor (/fornecedor, /fornecedor/cadastro) —
-// de propósito FORA de (app): src/app/(app)/layout.tsx força redirect pra
-// /onboarding quando a conta não tem nenhuma linha em `weddings`, e uma conta
-// 100% fornecedor (sem casamento nenhum) precisa conseguir usar esta área. Uma
-// conta híbrida (casamento E fornecedor) também não deve ser barrada aqui por
-// nenhuma lógica de casamento — por isso este layout nunca chama
-// getUserWedding()/checa módulo de casamento, só autenticação + existência de
-// vendor_profiles.
+// Área exclusiva de contas de fornecedor, independente dos módulos de casamento.
 export default async function VendorLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
+  if (!user) redirect('/login?next=/fornecedor')
+  try { await requireAccountType(supabase, 'vendor') }
+  catch (error) {
+    if (error instanceof ApiError && error.code === 'ACCOUNT_TYPE_CONFLICT') redirect('/dashboard')
+    throw error
+  }
 
   const { data: vendorProfile } = await supabase
     .from('vendor_profiles')
@@ -49,6 +50,7 @@ export default async function VendorLayout({ children }: { children: React.React
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font-body)', color: 'var(--fg)' }}>
+      {approved && <VendorChatNotifications as="vendor" userId={user.id} />}
       <VendorTopBar approved={approved} businessName={vendorProfile?.business_name ?? null} hasUnreadVendorMessages={hasUnreadVendorMessages} />
       <main style={{ padding: 'clamp(20px, 3.5vw, 44px)', paddingBottom: '64px', maxWidth: '760px', margin: '0 auto' }}>
         {children}

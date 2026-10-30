@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { requireAccountType } from '@/lib/auth/account-type'
 
 import { AUTH_RATE_LIMITS } from '@/lib/auth/rate-limit-config'
 import { parseJsonBody } from '@/lib/api/parse-body'
@@ -15,6 +16,7 @@ import { createSupabaseService } from '@/lib/supabase/service'
 // sessão ser gravada como cookie na resposta desta rota — o client de browser nunca
 // autentica sozinho neste fluxo.
 const LoginBodySchema = z.object({
+  accountType: z.enum(['couple', 'vendor']).default('couple'),
   email:        z.string().trim().toLowerCase().email('E-mail inválido').max(255),
   password:     z.string().min(1, 'Senha obrigatória').max(200),
   captchaToken: z.string().min(1, 'Confirme que você não é um robô.'),
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
       return err(400, 'VALIDATION_ERROR', 'Revise os campos destacados e tente novamente.', parsed.error.flatten())
     }
 
-    const { email, password, captchaToken } = parsed.data
+    const { email, password, captchaToken, accountType } = parsed.data
     const ip = getClientIp(req)
     const limits = AUTH_RATE_LIMITS.login
 
@@ -62,6 +64,8 @@ export async function POST(req: Request) {
       return err(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos.')
     }
 
+    try { await requireAccountType(supabase, accountType) }
+    catch (accountError) { await supabase.auth.signOut({ scope: 'local' }); throw accountError }
     return ok({ userId: data.user.id })
   } catch (error) {
     return handleApiError(error)

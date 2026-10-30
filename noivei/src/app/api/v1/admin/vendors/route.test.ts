@@ -17,12 +17,13 @@ import { POST } from './route'
 const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const valid = { email: 'fornecedor@example.com', business_name: 'Empresa', cnpj: '11.222.333/0001-81', category_ids: [categoryId] }
 function request(body: unknown) { return new Request('https://example.com/api/v1/admin/vendors', { method: 'POST', body: JSON.stringify(body) }) }
-function setup(accountId: string | null = 'existing-user') {
+function setup(accountId: string | null = 'existing-user', accountType = 'vendor') {
   const session = {
     from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnThis(), in: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ data: [{ id: categoryId }], error: null }) }),
     rpc: vi.fn().mockResolvedValue({ data: 'vendor-1', error: null }),
   }
   const service = {
+    from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { account_type: accountType }, error: null }) }),
     rpc: vi.fn().mockResolvedValue({ data: accountId, error: null }),
     auth: { admin: { inviteUserByEmail: vi.fn().mockResolvedValue({ data: { user: { id: 'invited-user' } }, error: null }) } },
   }
@@ -63,7 +64,7 @@ describe('cadastro administrativo de fornecedor', () => {
     const { session, service } = setup(null)
     const res = await POST(request(valid))
     expect(res.status).toBe(201)
-    expect(service.auth.admin.inviteUserByEmail).toHaveBeenCalledWith(valid.email, { redirectTo: 'https://example.com/reset-password?next=/fornecedor' })
+    expect(service.auth.admin.inviteUserByEmail).toHaveBeenCalledWith(valid.email, { data: { account_type: 'vendor' }, redirectTo: 'https://example.com/reset-password?next=/fornecedor' })
     expect(session.rpc).toHaveBeenCalledWith('fn_admin_create_vendor', expect.objectContaining({ p_user_id: 'invited-user' }))
     expect((await res.json()).data.invited).toBe(true)
   })
@@ -86,4 +87,17 @@ describe('cadastro administrativo de fornecedor', () => {
     expect((await POST(request(valid))).status).toBe(409)
     expect(deliverVendorEmails).not.toHaveBeenCalled()
   })
+})
+
+
+it('não permite ao administrador vincular um e-mail de noivos como fornecedor', async () => {
+  vi.mocked(requireAuth).mockResolvedValue({ user: { id: 'admin-1' } } as never)
+  vi.mocked(requireAdmin).mockResolvedValue(undefined)
+  vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true, remaining: 19 })
+  const { session, service } = setup('couple-user', 'couple')
+  const res = await POST(request(valid))
+  expect(res.status).toBe(409)
+  expect((await res.json()).error.code).toBe('ACCOUNT_TYPE_CONFLICT')
+  expect(session.rpc).not.toHaveBeenCalled()
+  expect(service.auth.admin.inviteUserByEmail).not.toHaveBeenCalled()
 })

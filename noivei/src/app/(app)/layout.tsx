@@ -1,3 +1,6 @@
+import VendorChatNotifications from '@/components/vendors/chat/vendor-chat-notifications'
+import { requireAccountType } from '@/lib/auth/account-type'
+import { ApiError } from '@/lib/api/response'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isPaidPlan, PLAN_NAMES } from '@/constants/plans'
@@ -19,6 +22,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect('/login')
+  try { await requireAccountType(supabase, 'couple') }
+  catch (error) {
+    if (error instanceof ApiError && error.code === 'ACCOUNT_TYPE_CONFLICT') redirect('/fornecedor')
+    throw error
+  }
 
   const userWedding = await getUserWedding(supabase, user.id)
 
@@ -147,6 +155,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             margin: '0 auto',
           }}
         >
+          {visibleModules.fornecedores && <VendorChatNotifications as="couple" userId={user.id} />}
           {children}
         </main>
         <MobileBottomNav

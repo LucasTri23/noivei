@@ -1,3 +1,4 @@
+import { limitTemplateGallery } from '@/lib/site/template-config'
 import { isPlusPlan } from '@/constants/plans'
 import { resolveSiteTemplate } from '@/lib/site/templates'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -102,7 +103,7 @@ export async function getPublicSiteBySlug(
     .order('created_at', { ascending: true })
 
   const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
-  const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, content.gallery_urls ?? [])
+  const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, limitTemplateGallery(content.gallery_urls ?? [], template))
 
   // Foto enviada do dispositivo: recalcula a URL pública a partir do path a cada leitura
   // (nunca confia num image_url gravado) — mesmo motivo de resolveGalleryPhotos acima.

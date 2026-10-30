@@ -9,6 +9,7 @@ import { z } from 'zod'
 import GoogleButton from '@/components/auth/google-button'
 import PasswordInput from '@/components/auth/password-input'
 import TurnstileWidget from '@/components/auth/turnstile-widget'
+import { accountTypeForPath } from '@/lib/auth/account-type'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 
 interface SignupApiErrorBody {
@@ -39,6 +40,7 @@ function SignupForm() {
   // aqui alimenta tanto o Google (redirectTo do OAuth) quanto o e-mail/senha (via
   // /verify?next=, que faz o push final depois de confirmar o código).
   const next = searchParams.get('next') ?? '/onboarding'
+  const accountType = accountTypeForPath(next)
   const [serverError, setServerError] = useState('')
   const [loading, setLoading]         = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
@@ -74,7 +76,7 @@ function SignupForm() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
         fullName: data.full_name, email: data.email, password: data.password,
-        terms: data.terms, captchaToken, origin: window.location.origin,
+        terms: data.terms, captchaToken, origin: window.location.origin, accountType,
       }),
     })
 
@@ -103,10 +105,10 @@ function SignupForm() {
         Comece de graça
       </div>
       <h1 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(30px,4vw,38px)', margin: '8px 0 4px', color: '#3C2818' }}>
-        Criar sua conta
+        {accountType === 'vendor' ? 'Criar conta de fornecedor' : 'Criar conta de noivos'}
       </h1>
       <p style={{ fontSize: '14.5px', color: '#9A7A60', margin: '0 0 26px' }}>
-        Organize seu casamento do início ao fim.
+        {accountType === 'vendor' ? 'Solicite o cadastro da sua empresa com um e-mail exclusivo para fornecedor.' : 'Organize seu casamento com uma conta exclusiva para noivos.'}
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -169,7 +171,7 @@ function SignupForm() {
 
       <div style={{ textAlign: 'center', marginTop: '26px', fontSize: '14px', color: '#9A7A60' }}>
         Já tem conta?{' '}
-        <Link href="/login" style={{ color: '#C6943A', fontWeight: 600 }}>Entrar</Link>
+        <Link href={accountType === 'vendor' ? '/login?next=/fornecedor' : '/login'} style={{ color: '#C6943A', fontWeight: 600 }}>Entrar</Link>
       </div>
     </div>
   )

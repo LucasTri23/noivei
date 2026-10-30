@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const checkRateLimitMock = vi.fn()
 const signInWithPasswordMock = vi.fn()
+const claimMock = vi.fn()
+const signOutMock = vi.fn()
 
 vi.mock('@/lib/security/rate-limit', () => ({
   checkRateLimit: (...args: unknown[]) => checkRateLimitMock(...args),
@@ -14,7 +16,8 @@ vi.mock('@/lib/supabase/service', () => ({
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServer: async () => ({
-    auth: { signInWithPassword: (...args: unknown[]) => signInWithPasswordMock(...args) },
+    rpc: (...args: unknown[]) => claimMock(...args),
+    auth: { signInWithPassword: (...args: unknown[]) => signInWithPasswordMock(...args), signOut: signOutMock },
   }),
 }))
 
@@ -35,6 +38,8 @@ describe('POST /api/v1/auth/login', () => {
     vi.resetModules()
     checkRateLimitMock.mockReset()
     signInWithPasswordMock.mockReset()
+    claimMock.mockReset().mockResolvedValue({ data: 'couple', error: null })
+    signOutMock.mockReset().mockResolvedValue({ error: null })
     checkRateLimitMock.mockResolvedValue({ allowed: true, remaining: 10 })
   })
 
@@ -134,5 +139,34 @@ describe('POST /api/v1/auth/login', () => {
 
     expect(rawBody).not.toContain('senha-secreta')
     expect(rawBody).not.toContain('token-secreto')
+  })
+})
+
+
+describe('separação dos tipos de login', () => {
+  beforeEach(() => {
+    checkRateLimitMock.mockResolvedValue({ allowed: true })
+    signInWithPasswordMock.mockResolvedValue({ data: { session: { access_token: 'token' }, user: { id: 'vendor-1' } }, error: null })
+    claimMock.mockReset().mockResolvedValue({ data: 'vendor', error: null })
+    signOutMock.mockReset().mockResolvedValue({ error: null })
+  })
+  it('confere o tipo fornecedor após autenticar as credenciais', async () => {
+    const { POST } = await importRoute()
+    expect((await POST(makeRequest({ email: 'v@example.com', password: 'senha1234', captchaToken: 'tk', accountType: 'vendor' }))).status).toBe(200)
+    expect(claimMock).toHaveBeenCalledWith('fn_claim_account_type', { p_type: 'vendor' })
+  })
+  it('encerra a sessão ao tentar entrar pelo tipo errado', async () => {
+    claimMock.mockResolvedValue({ error: { code: '22023' } })
+    const { POST } = await importRoute()
+    const res = await POST(makeRequest({ email: 'v@example.com', password: 'senha1234', captchaToken: 'tk' }))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error.code).toBe('ACCOUNT_TYPE_CONFLICT')
+    expect(signOutMock).toHaveBeenCalledWith({ scope: 'local' })
+  })
+  it('fecha a sessão se a verificação do tipo falhar', async () => {
+    claimMock.mockResolvedValue({ error: { code: '500' } })
+    const { POST } = await importRoute()
+    expect((await POST(makeRequest({ email: 'v@example.com', password: 'senha1234', captchaToken: 'tk' }))).status).toBe(500)
+    expect(signOutMock).toHaveBeenCalled()
   })
 })

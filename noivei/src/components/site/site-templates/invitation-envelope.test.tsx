@@ -26,3 +26,11 @@ describe('convite selado', () => {
     expect(gate).not.toBeInTheDocument()
   })
 })
+
+
+it('mostra a dedicatória e a instrução personalizadas do casal', () => {
+  render(<InvitationEnvelope names="Ana & João" date={null} initials="A & J" caption="Para nossa família" openingHint="Abra esta lembrança"><p>Nosso convite</p></InvitationEnvelope>)
+  expect(screen.getByText('Para nossa família')).toBeInTheDocument()
+  expect(screen.getByText('Abra esta lembrança')).toBeVisible()
+  expect(screen.queryByText('Toque no selo dourado para abrir')).not.toBeInTheDocument()
+})

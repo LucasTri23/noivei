@@ -56,10 +56,12 @@ export default async function ParaFornecedoresPage() {
   const plans      = (plansData ?? []) as VendorPlan[]
   const categories = (categoriesData ?? []) as VendorCategory[]
 
-  // Autenticado pula direto pro wizard; visitante passa pelo signup existente, que
-  // devolve pra cá via ?next= (mesma convenção do resto do app — ver
-  // src/middleware.ts e o próprio /login, que já usa searchParams.get('next')).
-  const ctaHref = user ? '/fornecedor/cadastro' : '/signup?next=/fornecedor/cadastro'
+  // Apenas contas de fornecedor entram diretamente no cadastro.
+  const { data: profile } = user
+    ? await supabase.from('profiles').select('account_type').eq('id', user.id).maybeSingle()
+    : { data: null }
+  const isVendor = profile?.account_type === 'vendor'
+  const ctaHref = user && isVendor ? '/fornecedor/cadastro' : '/signup?next=/fornecedor/cadastro'
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -73,7 +75,7 @@ export default async function ParaFornecedoresPage() {
             Wednest
           </span>
         </Link>
-        <Link href={user ? '/fornecedor' : '/login?next=/fornecedor'} className="text-sm font-semibold" style={{ color: 'var(--fg)', textDecoration: 'none' }}>
+        <Link href={user ? (isVendor ? '/fornecedor' : '/dashboard') : '/login?next=/fornecedor'} className="text-sm font-semibold" style={{ color: 'var(--fg)', textDecoration: 'none' }}>
           {user ? 'Ir para o painel' : 'Entrar'}
         </Link>
       </header>

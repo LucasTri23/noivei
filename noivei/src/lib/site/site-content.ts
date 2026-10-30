@@ -3,6 +3,11 @@ import type { Json } from '@/types/database'
 // Shape tipado do JSON livre salvo em `site_config.content`. Usado tanto pelo
 // editor autenticado (/site) quanto pela renderização pública (/[slug]).
 export interface SiteContent {
+  hero_subtitle?: string
+  story_heading?: string
+  gallery_heading?: string
+  envelope_caption?: string
+  opening_hint?: string
   cover_title?:     string
   our_story?:       string
   story_photo_url?: string
@@ -18,6 +23,9 @@ export function parseSiteContent(raw: Record<string, Json | undefined> | null | 
   if (!raw) return {}
 
   const content: SiteContent = {}
+  for (const key of ['hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint'] as const) {
+    if (typeof raw[key] === 'string') content[key] = raw[key]
+  }
   if (typeof raw.cover_title === 'string') content.cover_title = raw.cover_title
   if (typeof raw.our_story === 'string') content.our_story = raw.our_story
   if (typeof raw.story_photo_url === 'string') content.story_photo_url = raw.story_photo_url

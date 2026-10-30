@@ -30,7 +30,9 @@ Verificação em homologação: enviar solicitação, conferir os dois e-mails e
 
 No painel /admin/fornecedores, usar "Adicionar fornecedor". Nome, e-mail, CNPJ e ao menos uma categoria ativa são obrigatórios.
 O cadastro do admin já é aprovado, com auditoria. Não cria assinatura nem concede destaque automaticamente.
-Se o e-mail já tem conta, vincula o perfil sem alterar a senha. Se não tem, o Supabase Auth envia convite para definir senha em /reset-password?next=/fornecedor.
+Se o e-mail já tem conta de fornecedor, vincula o perfil sem alterar a senha. E-mails de contas de noivos são recusados; os dois tipos precisam de e-mails distintos. Se não tem, o Supabase Auth envia convite para definir senha em /reset-password?next=/fornecedor.
 Configurar também o SMTP de autenticação no Supabase e permitir essa URL de redirecionamento em Authentication > URL Configuration.
 Aplicar a migration 20261030000002_admin-create-vendors.sql após a 20261030000001.
 Perfil, categorias, aprovação e auditoria são salvos juntos. O convite de autenticação é externo à transação: se falhar a criação do perfil depois do convite, cadastrar novamente com o mesmo e-mail; a conta convidada é reutilizada.
+
+Separação dos tipos e migração de contas existentes: [account-types.md](account-types.md).

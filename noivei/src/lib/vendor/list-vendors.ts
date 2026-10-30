@@ -16,6 +16,7 @@ export interface VendorListCategory {
 export interface VendorListItem {
   id:            string
   slug:          string
+  logo_storage_path?: string | null
   business_name: string
   city:          string | null
   state:         string | null
@@ -63,7 +64,7 @@ export async function listVendors(
 
   let query = supabase
     .from('vendor_profiles')
-    .select('id, slug, business_name, city, state, price_range, description')
+    .select('id, slug, business_name, city, state, price_range, description, logo_storage_path')
     .order('featured', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(VENDOR_LIST_LIMIT)
@@ -93,6 +94,7 @@ export async function listVendors(
     id:            vendor.id as string,
     slug:          vendor.slug as string,
     business_name: vendor.business_name as string,
+    logo_storage_path: vendor.logo_storage_path as string | null,
     city:          vendor.city as string | null,
     state:         vendor.state as string | null,
     price_range:   vendor.price_range as string | null,

@@ -3,6 +3,7 @@
 import { isCnpj } from '@/lib/vendor/cnpj'
 
 import Link from 'next/link'
+import VendorAvatarManager from './vendor-avatar-manager'
 import { useEffect, useState } from 'react'
 import { sanitizeFileName } from '@/lib/files/upload-wedding-file'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
@@ -237,6 +238,7 @@ export default function VendorProfileManager({ profile, initialPortfolioItems }:
 
   return (
     <div>
+      <VendorAvatarManager name={profile.business_name} slug={profile.slug} hasPhoto={Boolean(profile.logo_storage_path)} />
       {/* Status */}
       <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
         <div>

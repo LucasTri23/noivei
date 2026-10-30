@@ -130,6 +130,11 @@ export async function POST(req: Request) {
     const service = createSupabaseService()
     const { data: accountId, error: lookupError } = await service.rpc('fn_vendor_account_by_email', { p_email: email })
     if (lookupError) return err(500, 'DB_ERROR', 'Erro ao localizar a conta do fornecedor.')
+    if (accountId) {
+      const { data: target, error: accountError } = await service.from('profiles').select('account_type').eq('id', accountId).single()
+      if (accountError) return err(500, 'DB_ERROR', 'Erro ao verificar tipo de conta.')
+      if (target.account_type === 'couple') return err(409, 'ACCOUNT_TYPE_CONFLICT', 'Este e-mail pertence a uma conta de noivos. Use outro e-mail para o fornecedor.')
+    }
     let targetUserId = accountId as string | null
     let invited = false
     if (!targetUserId) {
@@ -137,6 +142,7 @@ export async function POST(req: Request) {
       if (!appUrl) return err(503, 'INVITE_NOT_CONFIGURED', 'Configure a URL do site para enviar convites.')
       const { data: invitation, error: inviteError } = await service.auth.admin.inviteUserByEmail(email, {
         redirectTo: appUrl.replace(/\/$/, '') + '/reset-password?next=/fornecedor',
+        data: { account_type: 'vendor' },
       })
       if (inviteError || !invitation.user) {
         return err(502, 'INVITE_FAILED', 'Não foi possível enviar o convite. Confira o e-mail e tente novamente.')
@@ -151,6 +157,7 @@ export async function POST(req: Request) {
       p_slug: slugifyBusinessName(profile.business_name) + '-' + crypto.randomUUID().slice(0, 8),
     })
     if (createError) {
+      if (createError.message?.includes('ACCOUNT_TYPE_CONFLICT')) return err(409, 'ACCOUNT_TYPE_CONFLICT', 'Este e-mail pertence a uma conta de noivos. Use outro e-mail.')
       if (createError.code === '23505') return err(409, 'VENDOR_ALREADY_EXISTS', 'Essa conta já possui um cadastro de fornecedor.')
       if (createError.code === '22023' || createError.code === '23514') return err(400, 'VALIDATION_ERROR', 'Confira o CNPJ e as categorias selecionadas.')
       console.error('[admin/vendors] Falha ao cadastrar fornecedor:', createError.code)

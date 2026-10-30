@@ -36,7 +36,7 @@ async function FornecedoresContent({ searchParams }: FornecedoresPageProps) {
           Fornecedores
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--muted-fg)', marginTop: '4px' }}>
-          Encontre fornecedores para o seu casamento e entre em contato direto pelo WhatsApp.
+          Encontre fornecedores para o seu casamento e converse por aqui ou pelo WhatsApp.
         </p>
       </div>
 

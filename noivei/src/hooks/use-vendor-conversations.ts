@@ -37,6 +37,8 @@ export function useVendorConversations(as: 'couple' | 'vendor') {
   return useQuery({
     queryKey: keys.list(as),
     queryFn:  () => fetchVendorConversations(as),
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   })
 }
 

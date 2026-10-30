@@ -40,7 +40,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
     <div className={`${styles.site} ${styles[variant]}`}>
       <header className={styles.header}>
         <a className={styles.monogram} href="#inicio" aria-label="Início">{initials}</a>
-        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{content.our_story && <a href="#historia">Nossa história</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
+        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{content.our_story && <a href="#historia">{variant === 'invitation' ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
         <span className={styles.headerDate}>{date || 'Vamos celebrar'}</span>
       </header>
 
@@ -50,7 +50,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
           <p className={styles.eyebrow}>{variant === 'editorial' ? 'UM NOVO CAPÍTULO, JUNTOS' : variant === 'garden' ? 'O AMOR FLORESCE AQUI' : 'TEMOS A ALEGRIA DE CONVIDAR VOCÊ'}</p>
           {variant === 'invitation' && <div className={styles.crest} aria-hidden="true">{initials}</div>}
           <h1 id="wedding-title">{title}</h1>
-          <p className={styles.heroSubtitle}>Para a vida inteira.<br />E para celebrar com quem faz parte dela.</p>
+          <p className={styles.heroSubtitle}>{content.hero_subtitle || 'Para a vida inteira. E para celebrar com quem faz parte dela.'}</p>
           {date && <p className={styles.weddingDate}>{date}</p>}
           {place && <p className={styles.place}>{place}</p>}
           <a className={styles.button} href="#celebracao">Conheça o nosso grande dia <span aria-hidden="true">↗</span></a>
@@ -67,7 +67,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
 
       {content.our_story && <section id="historia" className={styles.story}>
         {storyPhoto && <figure><img src={storyPhoto} alt={`Um momento especial de ${wedding.couple_names}`} loading="lazy" /><figcaption>NÓS, EM TODOS OS CAPÍTULOS.</figcaption></figure>}
-        <div><p className={styles.eyebrow}>01 / A NOSSA HISTÓRIA</p><h2>De todos os encontros,<br /><em>o nosso.</em></h2><p className={styles.prose}>{content.our_story}</p></div>
+        <div><p className={styles.eyebrow}>{variant === 'invitation' ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p><h2>{variant === 'invitation' ? 'Com carinho, para você.' : content.story_heading || 'De todos os encontros, o nosso.'}</h2><p className={styles.prose}>{content.our_story}</p></div>
       </section>}
 
       <section id="celebracao" className={styles.celebration}>
@@ -82,7 +82,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
       {content.custom_message && <section className={styles.message}><span aria-hidden="true">“</span><blockquote>{content.custom_message}</blockquote><p>COM AMOR, {wedding.couple_names}</p></section>}
 
       {site.galleryPhotos.length > 0 && <section className={styles.gallerySection}>
-        <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>O amor mora <em>nos detalhes.</em></h2>
+        <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>{variant === 'invitation' ? 'Memórias de nós dois.' : content.gallery_heading || 'O amor mora nos detalhes.'}</h2>
         <div className={styles.gallery}>{site.galleryPhotos.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={`Memória ${index + 1} de ${wedding.couple_names}`} loading="lazy" style={{ objectFit: photo.fit_contain ? 'contain' : 'cover', objectPosition: `center ${photo.position_y}%` }} /><figcaption>{String(index + 1).padStart(2, '0')} / NOSSOS MOMENTOS</figcaption></figure>)}</div>
       </section>}
 
@@ -102,5 +102,5 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
       <footer className={styles.footer}><span>{wedding.couple_names}</span><span>{date || 'Com amor'}</span><small>Feito com amor no Wednest</small></footer>
     </div>
   )
-  return variant === 'invitation' ? <InvitationEnvelope names={wedding.couple_names} date={date} initials={initials}>{page}</InvitationEnvelope> : page
+  return variant === 'invitation' ? <InvitationEnvelope names={wedding.couple_names} date={date} initials={initials} caption={content.envelope_caption} openingHint={content.opening_hint}>{page}</InvitationEnvelope> : page
 }

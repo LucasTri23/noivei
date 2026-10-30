@@ -14,6 +14,7 @@ export interface PublicVendorProfile {
   state:              string | null
   description:        string | null
   price_range:        string | null
+  logo_storage_path: string | null
   cover_storage_path: string | null
   categories:         VendorListCategory[]
 }
@@ -36,7 +37,7 @@ export async function getVendorBySlug(
 ): Promise<PublicVendorProfile | null> {
   const { data: vendor, error } = await supabase
     .from('vendor_profiles')
-    .select('id, business_name, slug, whatsapp, show_whatsapp, instagram, website, city, state, description, price_range, cover_storage_path')
+    .select('id, business_name, slug, whatsapp, show_whatsapp, instagram, website, city, state, description, price_range, cover_storage_path, logo_storage_path')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -65,6 +66,7 @@ export async function getVendorBySlug(
     state:              vendor.state as string | null,
     description:        vendor.description as string | null,
     price_range:        vendor.price_range as string | null,
+    logo_storage_path: vendor.logo_storage_path as string | null,
     cover_storage_path: vendor.cover_storage_path as string | null,
     categories,
   }

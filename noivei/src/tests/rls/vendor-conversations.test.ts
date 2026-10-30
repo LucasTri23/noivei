@@ -21,6 +21,7 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_conversations / vendor_messages'
 
   let weddingAId: string
   let vendorVId: string
+  let vendorWId: string
   let conversationId: string
   let messageId: string
 
@@ -33,10 +34,10 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_conversations / vendor_messages'
 
     weddingAId = await createTestWedding(service, coupleA.userId, 'Casamento A')
     await createTestWedding(service, coupleB.userId, 'Casamento B')
-    vendorVId  = await createTestVendor(service, vendorV.userId)
-    await createTestVendor(service, vendorW.userId)
+    vendorVId  = await createTestVendor(service, vendorV.userId, { status: 'active' })
+    vendorWId = await createTestVendor(service, vendorW.userId, { status: 'active' })
 
-    const { data: conv, error: convError } = await service
+    const { data: conv, error: convError } = await coupleA.client
       .from('vendor_conversations')
       .insert({ wedding_id: weddingAId, vendor_id: vendorVId, created_by: coupleA.userId })
       .select('id')
@@ -60,6 +61,21 @@ describe.skipIf(!hasLiveSupabase())('RLS vendor_conversations / vendor_messages'
       deleteTestUser(service, vendorV.userId),
       deleteTestUser(service, vendorW.userId),
     ])
+  })
+
+  it('retorna a conversa recém-criada pelo casal e bloqueia fornecedor que perdeu aprovação', async () => {
+    const { data, error } = await coupleA.client.from('vendor_conversations')
+      .insert({ wedding_id: weddingAId, vendor_id: vendorWId, created_by: coupleA.userId })
+      .select('id, wedding_id, vendor_id').single()
+    expect(error).toBeNull()
+    expect(data).toMatchObject({ wedding_id: weddingAId, vendor_id: vendorWId })
+    expect(data?.id).toBeTruthy()
+
+    const { error: updateError } = await service.from('vendor_profiles').update({ status: 'draft' }).eq('id', vendorWId)
+    expect(updateError).toBeNull()
+    const { data: blocked, error: readError } = await vendorW.client.from('vendor_conversations').select('id').eq('id', data!.id)
+    expect(readError).toBeNull()
+    expect(blocked).toEqual([])
   })
 
   it('deve permitir que o casal A (parte da conversa) leia a própria conversa e mensagens', async () => {

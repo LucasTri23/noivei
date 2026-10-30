@@ -47,7 +47,7 @@ export default function AdminVendorCreateForm({ categories }: { categories: { id
     <div style={{ maxWidth: '760px' }}>
       <Link href="/admin/fornecedores" style={{ color: '#8A5A2E', fontSize: '14px' }}>Voltar para fornecedores</Link>
       <h1 className="font-display" style={{ fontSize: '28px', color: '#3C2818', margin: '16px 0 10px' }}>Adicionar fornecedor</h1>
-      <p style={{ color: '#6B5B47', lineHeight: 1.6 }}>O cadastro feito pelo administrador já fica aprovado. Uma conta existente será vinculada pelo e-mail; quem ainda não tem conta receberá um convite para definir a senha. Para aparecer no marketplace, o fornecedor também precisa de uma assinatura ativa.</p>
+      <p style={{ color: '#6B5B47', lineHeight: 1.6 }}>O cadastro feito pelo administrador já fica aprovado. Uma conta de fornecedor existente será vinculada pelo e-mail. Contas de noivos precisam usar outro e-mail; quem ainda não tem conta receberá um convite para definir a senha. Para aparecer no marketplace, o fornecedor também precisa de uma assinatura ativa.</p>
       <form onSubmit={submit} style={{ background: '#fff', borderRadius: '16px', padding: '24px', marginTop: '20px' }}>
         <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
           <div className="grid gap-4 sm:grid-cols-2">

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const checkRateLimitMock = vi.fn()
 const signUpMock = vi.fn()
+const lookupMock = vi.fn()
 
 vi.mock('@/lib/security/rate-limit', () => ({
   checkRateLimit: (...args: unknown[]) => checkRateLimitMock(...args),
@@ -9,7 +10,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
 }))
 
 vi.mock('@/lib/supabase/service', () => ({
-  createSupabaseService: () => ({}),
+  createSupabaseService: () => ({ rpc: (...args: unknown[]) => lookupMock(...args) }),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,6 +40,7 @@ describe('POST /api/v1/auth/signup', () => {
   beforeEach(() => {
     checkRateLimitMock.mockReset()
     signUpMock.mockReset()
+    lookupMock.mockReset().mockResolvedValue({ data: null, error: null })
     checkRateLimitMock.mockResolvedValue({ allowed: true, remaining: 10 })
   })
 
@@ -55,8 +57,8 @@ describe('POST /api/v1/auth/signup', () => {
       email:    'ana@example.com',
       password: 'senha1234',
       options: {
-        data:            { full_name: 'Ana Silva' },
-        emailRedirectTo: 'https://app.wednest.com.br/auth/callback',
+        data:            { full_name: 'Ana Silva', account_type: 'couple' },
+        emailRedirectTo: 'https://app.wednest.com.br/auth/callback?next=%2Fonboarding',
         captchaToken:    'tk',
       },
     })
@@ -99,6 +101,28 @@ describe('POST /api/v1/auth/signup', () => {
     const res = await POST(makeRequest({ ...validBody, password: '123' }))
 
     expect(res.status).toBe(400)
+    expect(signUpMock).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('e-mail exclusivo por tipo de conta', () => {
+  beforeEach(() => {
+    checkRateLimitMock.mockResolvedValue({ allowed: true })
+    lookupMock.mockReset().mockResolvedValue({ data: null, error: null })
+    signUpMock.mockReset().mockResolvedValue({ data: {}, error: null })
+  })
+  it('grava o tipo fornecedor e mantém o destino da confirmação', async () => {
+    const { POST } = await importRoute()
+    expect((await POST(makeRequest({ ...validBody, accountType: 'vendor' }))).status).toBe(200)
+    expect(signUpMock).toHaveBeenCalledWith(expect.objectContaining({ options: expect.objectContaining({ data: { full_name: 'Ana Silva', account_type: 'vendor' }, emailRedirectTo: 'https://app.wednest.com.br/auth/callback?next=%2Ffornecedor%2Fcadastro' }) }))
+  })
+  it.each(['couple', 'vendor'])('bloqueia e-mail já usado no outro tipo (%s) sem revelar a conta', async (existingType) => {
+    lookupMock.mockResolvedValue({ data: existingType, error: null })
+    const { POST } = await importRoute()
+    const res = await POST(makeRequest({ ...validBody, accountType: existingType === 'couple' ? 'vendor' : 'couple' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error.code).toBe('SIGNUP_FAILED')
     expect(signUpMock).not.toHaveBeenCalled()
   })
 })

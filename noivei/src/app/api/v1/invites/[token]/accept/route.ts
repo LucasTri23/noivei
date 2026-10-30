@@ -2,10 +2,12 @@ import { after } from 'next/server'
 
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { AcceptInviteBodySchema, AcceptInviteSchema } from '@/lib/api/validation/invite.schema'
+import { requireAccountType } from '@/lib/auth/account-type'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkMemberLimit } from '@/lib/billing/check-limit'
 import { notifyMemberJoined } from '@/lib/invites/notify-member-joined'
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit'
+import { createSupabaseServer } from '@/lib/supabase/server'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { getUserWedding } from '@/lib/weddings/get-user-wedding'
 
@@ -21,6 +23,7 @@ interface RouteContext {
 export async function POST(req: Request, { params }: RouteContext) {
   try {
     const { user } = await requireAuth()
+    await requireAccountType(await createSupabaseServer(), 'couple')
     const { token } = await params
 
     const parsedToken = AcceptInviteSchema.safeParse({ token })
