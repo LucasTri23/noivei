@@ -138,6 +138,9 @@ function LoginForm() {
       </div>
 
       <GoogleButton onClick={handleGoogle} />
+      <Link href="/para-fornecedores" style={{ display: 'block', textAlign: 'center', marginTop: '18px', padding: '13px', border: '1.5px solid #EBDDD0', borderRadius: '12px', color: '#8A5A2E', fontWeight: 600 }}>
+        Sou fornecedor
+      </Link>
 
       <div style={{ textAlign: 'center', marginTop: '26px', fontSize: '14px', color: '#9A7A60' }}>
         Ainda não tem conta?{' '}

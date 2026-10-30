@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { acceptVendorInvite } from '@/lib/auth/accept-vendor-invite'
 
 const Schema = z.object({
   password:        z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
@@ -31,6 +32,8 @@ const inputStyle = {
 // caminho pra pedir um novo link, em vez de deixar o formulário quebrado sem explicação.
 export default function ResetPasswordPage() {
   const [checkingSession, setCheckingSession] = useState(true)
+  const [vendorInvite, setVendorInvite] = useState(false)
+  const inviteAttempt = useRef<Promise<boolean | null> | null>(null)
   const [hasSession, setHasSession]           = useState(false)
   const [done, setDone]                       = useState(false)
   const [loading, setLoading]                 = useState(false)
@@ -41,11 +44,24 @@ export default function ResetPasswordPage() {
   })
 
   useEffect(() => {
-    const supabase = createSupabaseBrowser()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setHasSession(Boolean(user))
-      setCheckingSession(false)
+    let cancelled = false
+    async function initialize() {
+      const url = new URL(window.location.href)
+      inviteAttempt.current ??= acceptVendorInvite(url, () => {
+        window.history.replaceState(null, '', url.pathname + url.search)
+      }, createSupabaseBrowser)
+      const inviteSession = await inviteAttempt.current
+      const valid = inviteSession ?? Boolean((await createSupabaseBrowser().auth.getUser()).data.user)
+      if (!cancelled) {
+        setVendorInvite(url.searchParams.get('next') === '/fornecedor')
+        setHasSession(valid)
+        setCheckingSession(false)
+      }
+    }
+    void initialize().catch(() => {
+      if (!cancelled) { setHasSession(false); setCheckingSession(false) }
     })
+    return () => { cancelled = true }
   }, [])
 
   async function onSubmit(data: Fields) {
@@ -113,7 +129,7 @@ export default function ResetPasswordPage() {
         <p style={{ fontSize: '14.5px', color: '#6E6A72', lineHeight: 1.6, marginBottom: '28px' }}>
           Sua senha foi alterada com sucesso. Entre com a nova senha.
         </p>
-        <Link href="/login"
+        <Link href={vendorInvite ? '/login?next=/fornecedor' : '/login'}
           style={{ display: 'inline-block', background: '#22304F', color: '#fff', borderRadius: '12px', padding: '14px 28px', fontWeight: 600, fontSize: '15px', textDecoration: 'none' }}>
           Entrar
         </Link>

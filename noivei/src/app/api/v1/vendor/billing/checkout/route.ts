@@ -21,6 +21,9 @@ export async function POST(req: Request) {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     const vendor = await requireVendorProfile(supabase, user.id)
+    if (!['active', 'paused'].includes(vendor.status)) {
+      return err(403, 'VENDOR_APPROVAL_REQUIRED', 'Aguarde a aprovação do administrador para contratar um plano ou usar cupons.')
+    }
 
     const limitCheck = await checkRateLimit(supabase, `vendor-billing-checkout:${vendor.id}`, 15, 3600)
     if (!limitCheck.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco e tente de novo.')

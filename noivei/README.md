@@ -295,6 +295,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=
 
 # E-mail transacional (opcional em dev — sem isso, e-mails só são logados no console)
+VENDOR_ADMIN_EMAIL= # caixa do administrador para solicitações de fornecedores
 EMAIL_SMTP_HOST=
 EMAIL_SMTP_PORT=
 EMAIL_SMTP_USER=

@@ -51,7 +51,7 @@ export default function AdminVendorsManager() {
   const [vendors, setVendors] = useState<VendorRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
-  const [status, setStatus]   = useState('')
+  const [status, setStatus]   = useState('pending_review')
 
   async function loadVendors() {
     setLoading(true)
@@ -79,8 +79,9 @@ export default function AdminVendorsManager() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
-        <h1 className="font-display" style={{ fontSize: '26px', fontWeight: 500, color: '#3C2818', margin: 0 }}>Fornecedores</h1>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <h1 className="font-display" style={{ fontSize: '26px', fontWeight: 500, color: '#3C2818', margin: 0 }}>Solicitações de fornecedores</h1>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <Link href="/admin/fornecedores/novo" style={{ fontSize: '13.5px', fontWeight: 700, color: '#8A5A2E', textDecoration: 'none' }}>+ Adicionar fornecedor</Link>
           <Link href="/admin/fornecedores/planos" style={{ fontSize: '13.5px', fontWeight: 700, color: '#8A5A2E', textDecoration: 'none' }}>Planos</Link>
           <Link href="/admin/fornecedores/cupons" style={{ fontSize: '13.5px', fontWeight: 700, color: '#8A5A2E', textDecoration: 'none' }}>Cupons</Link>
           <Link href="/admin/fornecedores/categorias" style={{ fontSize: '13.5px', fontWeight: 700, color: '#8A5A2E', textDecoration: 'none' }}>Categorias</Link>

@@ -1,5 +1,7 @@
 'use client'
 
+import { isCnpj } from '@/lib/vendor/cnpj'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { NextButton, StepTitle } from '@/components/checklist/questionnaire-wizard'
@@ -145,12 +147,16 @@ export default function VendorOnboardingWizard({
       setBusinessNameError('Informe o nome da sua empresa.')
       return
     }
+    if (!isCnpj(empresa.cnpj)) {
+      toastError('Informe o CNPJ da empresa com 14 caracteres.')
+      return
+    }
     setBusinessNameError(null)
     setSavingEmpresa(true)
 
     const payload = {
       business_name: empresa.business_name.trim(),
-      cnpj:          empresa.cnpj.trim() || undefined,
+      cnpj:          empresa.cnpj.trim(),
       phone:         empresa.phone.trim() || undefined,
       whatsapp:      empresa.whatsapp.trim() || undefined,
       show_whatsapp: empresa.show_whatsapp,
@@ -406,9 +412,9 @@ export default function VendorOnboardingWizard({
             </div>
 
             <div>
-              <label htmlFor="vendor-cnpj" style={labelStyle}>CNPJ (opcional)</label>
+              <label htmlFor="vendor-cnpj" style={labelStyle}>CNPJ *</label>
               <div style={inputStyle}>
-                <input id="vendor-cnpj" value={empresa.cnpj} onChange={(e) => setField('cnpj', e.target.value)} placeholder="00.000.000/0000-00"
+                <input id="vendor-cnpj" required aria-required="true" value={empresa.cnpj} onChange={(e) => setField('cnpj', e.target.value)} placeholder="00.000.000/0000-00"
                   style={{ border: 'none', outline: 'none', fontSize: '15px', color: 'var(--fg)', width: '100%', background: 'transparent' }} />
               </div>
             </div>
@@ -529,7 +535,7 @@ export default function VendorOnboardingWizard({
       {/* ── Passo 4: Revisão ── */}
       {step === STEP_REVISAO && (
         <div>
-          <StepTitle title="Revise seu cadastro" subtitle="Confira os dados antes de enviar para análise." />
+          <StepTitle title="Revise sua solicitação" subtitle="Confira os dados antes de enviar para análise." />
 
           <div style={{ background: 'var(--surface)', border: '1px solid #EBDDD0', borderRadius: '16px', padding: '18px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div>
@@ -554,10 +560,10 @@ export default function VendorOnboardingWizard({
           </div>
 
           <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginBottom: '18px', lineHeight: 1.6 }}>
-            Ao enviar, seu cadastro entra na fila de análise da nossa equipe. Você pode continuar editando os dados a qualquer momento antes da aprovação.
+            Ao enviar, sua solicitação entra na fila de análise do administrador. O painel completo será liberado após a aprovação. Você receberá a confirmação e o resultado por e-mail.
           </p>
 
-          <NextButton onClick={handleSubmitForReview} disabled={submitting} label={submitting ? 'Enviando…' : 'Enviar para análise'} />
+          <NextButton onClick={handleSubmitForReview} disabled={submitting} label={submitting ? 'Enviando…' : 'Enviar solicitação'} />
         </div>
       )}
     </div>

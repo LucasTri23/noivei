@@ -17,7 +17,7 @@ const STATUS_COPY: Record<MarketplaceVendorStatus, { title: string; body: string
   },
   active: {
     title: 'Seu perfil está ativo',
-    body:  'Seu perfil já está aprovado e visível no marketplace de fornecedores. Casais já podem te encontrar e conversar com você pelo Wednest — veja em "Mensagens". Gerencie seus dados em "Perfil" e seu plano em "Assinatura".',
+    body:  'Sua solicitação foi aprovada. Para aparecer no marketplace e receber contatos de casais, você tamb?m precisa de uma assinatura ativa e válida. Gerencie seus dados em "Perfil" e seu plano em "Assinatura".',
   },
   paused: {
     title: 'Seu perfil está pausado',

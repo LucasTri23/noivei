@@ -1,3 +1,5 @@
+import { isPlusPlan } from '@/constants/plans'
+import { resolveSiteTemplate } from '@/lib/site/templates'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
@@ -90,7 +92,7 @@ export async function getPublicSiteBySlug(
     .maybeSingle()
   const albumEnabled = (albumAccessRow?.enabled as boolean | undefined) ?? true
   const storedTemplate = (site.template as SiteTemplate | null) ?? 'classic'
-  const template: SiteTemplate = storedTemplate === 'portfolio' && albumEnabled ? 'portfolio' : 'classic'
+  const template = resolveSiteTemplate(storedTemplate, albumEnabled, isPlusPlan(planId))
 
   const { data: gifts } = await supabase
     .from('gift_registry_items')

@@ -1,3 +1,5 @@
+import { isCnpj } from '@/lib/vendor/cnpj'
+import { deliverVendorEmails } from '@/lib/vendor/deliver-vendor-emails'
 import { requireVendorProfile } from '@/lib/api/guards/vendor'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/require-auth'
@@ -30,6 +32,9 @@ export async function POST() {
     }
 
     const vendor = await requireVendorProfile(supabase, user.id)
+    if (!vendor.cnpj || !isCnpj(vendor.cnpj)) {
+      return err(400, 'CNPJ_REQUIRED', 'Informe o CNPJ da empresa antes de enviar a solicitação.')
+    }
 
     if (!ALLOWED_FROM_STATUSES.includes(vendor.status)) {
       return err(409, 'INVALID_STATUS_TRANSITION', 'Seu cadastro não está em um estado que permite envio para análise.')
@@ -60,6 +65,7 @@ export async function POST() {
     if (error) return err(500, 'DB_ERROR', 'Erro ao enviar para análise.')
     if (!data) return err(409, 'INVALID_STATUS_TRANSITION', 'Seu cadastro não está em um estado que permite envio para análise.')
 
+    await deliverVendorEmails(vendor.id)
     return ok(data as VendorProfile)
   } catch (error) {
     return handleApiError(error)

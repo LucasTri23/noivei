@@ -12,7 +12,7 @@ export const SiteSlugSchema = z
 // 'album' (mesmo módulo do mural de fotos) — checado na Route Handler, não
 // aqui (Zod valida forma, não regra de negócio/plano). Ver PATCH
 // /api/v1/weddings/[wid]/site.
-export const SiteTemplateSchema = z.enum(['classic', 'portfolio'])
+export const SiteTemplateSchema = z.enum(['classic', 'portfolio', 'editorial', 'garden', 'invitation'])
 
 export const UpdateSiteConfigSchema = z
   .object({

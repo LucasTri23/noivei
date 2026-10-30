@@ -1,3 +1,4 @@
+import { deliverVendorEmails } from '@/lib/vendor/deliver-vendor-emails'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { UuidSchema } from '@/lib/api/validation/common.schema'
@@ -21,7 +22,7 @@ const ALLOWED_FROM_STATUS: Record<string, MarketplaceVendorStatus[]> = {
   approve:    ['pending_review'],
   reject:     ['pending_review'],
   suspend:    ['active', 'paused'],
-  reactivate: ['suspended'],
+  reactivate: ['suspended', 'paused'],
   pause:      ['active'],
 }
 
@@ -96,6 +97,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       reason:    parsed.data.reason ?? null,
     })
 
+    await deliverVendorEmails(id)
     return ok(updated as VendorProfile)
   } catch (error) {
     return handleApiError(error)

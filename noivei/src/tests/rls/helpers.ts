@@ -99,6 +99,7 @@ export async function createTestVendor(
     .insert({
       user_id:       userId,
       business_name: 'Fornecedor de Teste',
+      cnpj:          '11222333000181',
       slug:          overrides.slug ?? `fornecedor-teste-${crypto.randomUUID()}`,
       status:        overrides.status ?? 'draft',
       featured:      overrides.featured ?? false,

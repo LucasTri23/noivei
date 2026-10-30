@@ -1,3 +1,9 @@
+import { parseJsonBody } from '@/lib/api/parse-body'
+import { AdminCreateVendorSchema } from '@/lib/api/validation/admin-vendor.schema'
+import { createSupabaseService } from '@/lib/supabase/service'
+import { checkRateLimit } from '@/lib/security/rate-limit'
+import { slugifyBusinessName } from '@/lib/vendor/slug'
+import { deliverVendorEmails } from '@/lib/vendor/deliver-vendor-emails'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { requireAdmin } from '@/lib/auth/require-admin'
 import { requireAuth } from '@/lib/auth/require-auth'
@@ -99,6 +105,61 @@ export async function GET(req: Request) {
     }
 
     return ok(rows)
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const { user } = await requireAuth()
+    const supabase = await createSupabaseServer()
+    await requireAdmin(supabase, user.id)
+    const limit = await checkRateLimit(supabase, 'admin-create-vendor:' + user.id, 20, 3600)
+    if (!limit.allowed) return err(429, 'RATE_LIMITED', 'Muitas tentativas. Aguarde um pouco.')
+    const parsed = AdminCreateVendorSchema.safeParse(await parseJsonBody(req))
+    if (!parsed.success) return err(400, 'VALIDATION_ERROR', 'Revise o e-mail, CNPJ e as categorias.', parsed.error.flatten())
+    const { email, category_ids, ...profile } = parsed.data
+
+    // Valida antes de convidar; a RPC repete a checagem dentro da transação.
+    const { data: categories, error: categoryError } = await supabase.from('vendor_categories')
+      .select('id').in('id', category_ids).eq('active', true)
+    if (categoryError) return err(500, 'DB_ERROR', 'Erro ao verificar categorias.')
+    if (categories?.length !== category_ids.length) return err(400, 'INVALID_CATEGORIES', 'Selecione categorias ativas.')
+
+    const service = createSupabaseService()
+    const { data: accountId, error: lookupError } = await service.rpc('fn_vendor_account_by_email', { p_email: email })
+    if (lookupError) return err(500, 'DB_ERROR', 'Erro ao localizar a conta do fornecedor.')
+    let targetUserId = accountId as string | null
+    let invited = false
+    if (!targetUserId) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      if (!appUrl) return err(503, 'INVITE_NOT_CONFIGURED', 'Configure a URL do site para enviar convites.')
+      const { data: invitation, error: inviteError } = await service.auth.admin.inviteUserByEmail(email, {
+        redirectTo: appUrl.replace(/\/$/, '') + '/reset-password?next=/fornecedor',
+      })
+      if (inviteError || !invitation.user) {
+        return err(502, 'INVITE_FAILED', 'Não foi possível enviar o convite. Confira o e-mail e tente novamente.')
+      }
+      targetUserId = invitation.user.id
+      invited = true
+    }
+    const { data: vendorId, error: createError } = await supabase.rpc('fn_admin_create_vendor', {
+      p_user_id: targetUserId,
+      p_profile: profile,
+      p_category_ids: category_ids,
+      p_slug: slugifyBusinessName(profile.business_name) + '-' + crypto.randomUUID().slice(0, 8),
+    })
+    if (createError) {
+      if (createError.code === '23505') return err(409, 'VENDOR_ALREADY_EXISTS', 'Essa conta já possui um cadastro de fornecedor.')
+      if (createError.code === '22023' || createError.code === '23514') return err(400, 'VALIDATION_ERROR', 'Confira o CNPJ e as categorias selecionadas.')
+      console.error('[admin/vendors] Falha ao cadastrar fornecedor:', createError.code)
+      return err(500, 'DB_ERROR', invited
+        ? 'O convite foi enviado, mas o perfil não foi salvo. Tente cadastrar novamente com o mesmo e-mail.'
+        : 'Não foi possível cadastrar o fornecedor.')
+    }
+    await deliverVendorEmails(vendorId as string)
+    return ok({ id: vendorId, invited }, undefined, 201)
   } catch (error) {
     return handleApiError(error)
   }

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import PremiumSite from '@/components/site/site-templates/premium-site'
+import { isExclusiveSiteTemplate } from '@/lib/site/templates'
 import ClassicSite from '@/components/site/site-templates/classic-site'
 import PortfolioSite from '@/components/site/site-templates/portfolio-site'
 import { getPublicSiteBySlug } from '@/lib/site/get-public-site-by-slug'
@@ -59,7 +61,9 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           get-public-site-by-slug.ts — nunca é 'portfolio' se o plano ATUAL não
           libera mais o módulo 'album', mesmo que o valor salvo esteja
           'portfolio' (downgrade de plano depois de escolher o template). */}
-      {site.template === 'portfolio'
+      {isExclusiveSiteTemplate(site.template)
+        ? <PremiumSite slug={slug} site={site} variant={site.template} />
+        : site.template === 'portfolio'
         ? <PortfolioSite slug={slug} site={site} />
         : <ClassicSite slug={slug} site={site} />}
     </div>

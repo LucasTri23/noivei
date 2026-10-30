@@ -147,7 +147,7 @@ export interface TableAssignment {
 // módulo 'album' — mesmo módulo que libera o mural de fotos (ver
 // plan_module_access, checado em tempo de leitura, nunca confiando cegamente
 // no valor salvo aqui — ver src/lib/site/get-public-site-by-slug.ts).
-export type SiteTemplate = 'classic' | 'portfolio'
+export type SiteTemplate = 'classic' | 'portfolio' | 'editorial' | 'garden' | 'invitation'
 
 export interface SiteConfig {
   id:                    string

@@ -44,6 +44,7 @@ const ACTION_LABEL: Record<string, string> = {
 }
 
 const ACTION_HISTORY_LABEL: Record<string, string> = {
+  create:      'Cadastrado e aprovado pelo administrador',
   approve:     'Aprovado',
   reject:      'Rejeitado',
   suspend:     'Suspenso',
@@ -159,6 +160,7 @@ export default function AdminVendorDetail({ vendorId }: { vendorId: string }) {
       <div style={cardStyle}>
         <p style={{ fontSize: '12px', fontWeight: 700, color: '#8A7D6E', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Dados</p>
         <p style={{ fontSize: '13.5px', color: '#3C2818', margin: '4px 0' }}>Status: <strong>{vendor.status}</strong></p>
+        <p style={{ fontSize: '13.5px', margin: '4px 0' }}>CNPJ: <strong>{vendor.cnpj || 'Não informado'}</strong></p>
         <p style={{ fontSize: '13.5px', color: '#3C2818', margin: '4px 0' }}>Cidade: {[vendor.city, vendor.state].filter(Boolean).join(' - ') || '—'}</p>
         <p style={{ fontSize: '13.5px', color: '#3C2818', margin: '4px 0' }}>Categorias: {categories.map((c) => c.label).join(', ') || '—'}</p>
         <p style={{ fontSize: '13.5px', color: '#3C2818', margin: '4px 0' }}>Portfólio: {portfolio_count} foto(s)</p>

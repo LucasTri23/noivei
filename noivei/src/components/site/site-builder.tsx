@@ -12,6 +12,7 @@ import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
+import { isExclusiveSiteTemplate } from '@/lib/site/templates'
 import type { SiteConfig, SiteTemplate } from '@/types/database'
 
 // Marcador do endpoint público do bucket "wedding-photos" — presente numa URL indica que
@@ -79,6 +80,7 @@ interface SiteBuilderProps {
   // "portfolio" aparece SELECIONÁVEL aqui; a Route Handler PATCH /site
   // reforça a mesma regra do lado do servidor, e a renderização pública em
   // /[slug] nunca confia no valor salvo (sempre reavalia o plano atual).
+  exclusiveTemplatesEnabled: boolean
   albumEnabled:      boolean
 }
 
@@ -192,6 +194,7 @@ interface CapaSectionProps {
   slug:                string
   published:           boolean
   template:            SiteTemplate
+  exclusiveTemplatesEnabled: boolean
   albumEnabled:        boolean
   coverTitle:          string
   coverPhotoUrl:       string | null
@@ -210,6 +213,9 @@ interface CapaSectionProps {
 const TEMPLATE_OPTIONS: { id: SiteTemplate; label: string; description: string }[] = [
   { id: 'classic',   label: 'Clássico',  description: 'O estilo atual: capa elegante, história em polaroids, seções tradicionais.' },
   { id: 'portfolio', label: 'Portfólio', description: 'Visual ousado e editorial, com grade assimétrica de fotos e o mural de fotos em destaque.' },
+  { id: 'editorial', label: 'Editorial', description: 'Composição de revista, fotografia em destaque e tipografia marcante. Exclusivo.' },
+  { id: 'garden', label: 'Jardim Romântico', description: 'Molduras em arco, ramos delicados e a cor do casal em cada detalhe. Exclusivo.' },
+  { id: 'invitation', label: 'Convite Selado', description: 'Uma capa na cor do casamento, selo dourado e abertura animada ao toque. Exclusivo.' },
 ]
 
 // Maquete animada de cada estilo — não é um screenshot real (o projeto não tem esse
@@ -257,6 +263,12 @@ const PREVIEW_DEMO_DATE  = '15 . 08 . 2026'
 // diagonal, como a capa de `PortfolioSite` (eyebrow + h1 grande + CTA em pílula),
 // em vez de centralizado.
 function PreviewHeroFrame({ template }: { template: SiteTemplate }) {
+  if (isExclusiveSiteTemplate(template)) {
+    return <div style={{ position: 'absolute', inset: 0, background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', padding: '12px', textAlign: 'center', overflow: 'hidden' }}>
+      {template === 'invitation' ? <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'var(--wedding-color-dark)', color: '#e8ca82' }}><span style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: '1px', background: '#d8b660' }} /><span style={{ zIndex: 1, borderRadius: '50%', padding: '10px', border: '3px double #d8b660', background: 'linear-gradient(135deg,#f8e7a4,#bd913d)', color: 'var(--wedding-color-dark)', fontFamily: 'var(--font-display)', fontSize: '18px' }}>A & J</span></div>
+      : <div style={{ height: '100%', border: template === 'garden' ? '1px solid var(--wedding-color)' : 0, borderRadius: template === 'garden' ? '50% 50% 0 0' : 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: template === 'editorial' ? 'flex-start' : 'center', padding: '6px 12px' }}><span style={{ fontSize: '6px', letterSpacing: '2px' }}>{template === 'garden' ? 'JARDIM ROMÂNTICO' : 'O NOSSO GRANDE DIA'}</span><span style={{ fontFamily: 'var(--font-display)', fontSize: '24px', lineHeight: 1.1 }}>Ana & João</span><span style={{ fontSize: '7px', marginTop: '5px' }}>15 · 08 · 2026</span></div>}
+    </div>
+  }
   if (template === 'portfolio') {
     return (
       <div
@@ -448,12 +460,12 @@ function MiniSitePreview({ template }: { template: SiteTemplate }) {
   )
 }
 
-function TemplatePicker({ value, albumEnabled, onChange }: { value: SiteTemplate; albumEnabled: boolean; onChange: (t: SiteTemplate) => void }) {
+export function TemplatePicker({ value, albumEnabled, exclusiveTemplatesEnabled, onChange }: { value: SiteTemplate; albumEnabled: boolean; exclusiveTemplatesEnabled: boolean; onChange: (t: SiteTemplate) => void }) {
   return (
     <div>
       <label style={labelStyle}>Estilo do site</label>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {TEMPLATE_OPTIONS.map((opt) => {
+        {TEMPLATE_OPTIONS.filter((opt) => !isExclusiveSiteTemplate(opt.id) || exclusiveTemplatesEnabled).map((opt) => {
           const locked   = opt.id === 'portfolio' && !albumEnabled
           const selected = value === opt.id
           return (
@@ -487,7 +499,7 @@ function TemplatePicker({ value, albumEnabled, onChange }: { value: SiteTemplate
 }
 
 function CapaSection({
-  coupleNames, slug, published, template, albumEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
+  coupleNames, slug, published, template, albumEnabled, exclusiveTemplatesEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
   onUploadPhoto, onDeletePhoto, onSave,
 }: CapaSectionProps) {
   const [slugDraft, setSlugDraft]   = useState(slug)
@@ -549,7 +561,7 @@ function CapaSection({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <TemplatePicker value={templateDraft} albumEnabled={albumEnabled} onChange={setTemplateDraft} />
+      <TemplatePicker value={templateDraft} albumEnabled={albumEnabled} exclusiveTemplatesEnabled={exclusiveTemplatesEnabled} onChange={setTemplateDraft} />
 
       <div>
         <label htmlFor="site-cover-title" style={labelStyle}>Título da capa</label>
@@ -1337,7 +1349,7 @@ function GaleriaSection({
 }
 
 export default function SiteBuilder({
-  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes, albumEnabled,
+  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes, albumEnabled, exclusiveTemplatesEnabled,
 }: SiteBuilderProps) {
   const [active, setActive]       = useState<SectionId>('capa')
   const [siteId, setSiteId]       = useState<string | null>(initialSite?.id ?? null)
@@ -1665,6 +1677,7 @@ export default function SiteBuilder({
                 published={published}
                 template={template}
                 albumEnabled={albumEnabled}
+                exclusiveTemplatesEnabled={exclusiveTemplatesEnabled}
                 coverTitle={content.cover_title ?? ''}
                 coverPhotoUrl={coverPhotoUrl}
                 coverPhotoPosition={coverPhotoPosition}

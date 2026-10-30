@@ -15,11 +15,12 @@ export default async function VendorAssinaturaPage() {
 
   const { data: vendor } = await supabase
     .from('vendor_profiles')
-    .select('id')
+    .select('id, status')
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (!vendor) redirect('/fornecedor/cadastro')
+  if (!['active', 'paused'].includes(vendor.status)) redirect('/fornecedor')
 
   const [{ data: plans }, { data: subscription }] = await Promise.all([
     supabase.from('vendor_plans').select('*').eq('active', true).order('sort_order'),

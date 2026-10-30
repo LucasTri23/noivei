@@ -27,6 +27,9 @@ export async function POST(req: Request) {
     const { user } = await requireAuth()
     const supabase = await createSupabaseServer()
     const vendor = await requireVendorProfile(supabase, user.id)
+    if (!['active', 'paused'].includes(vendor.status)) {
+      return err(403, 'VENDOR_APPROVAL_REQUIRED', 'Aguarde a aprovação do administrador para contratar um plano ou usar cupons.')
+    }
 
     // Tentativa de adivinhar código de cupom por força bruta — limita por
     // fornecedor e por IP (mesmo raciocínio de /api/v1/coupons/redeem).

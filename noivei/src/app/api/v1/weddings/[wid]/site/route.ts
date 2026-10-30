@@ -1,3 +1,5 @@
+import { isPlusPlan } from '@/constants/plans'
+import { isExclusiveSiteTemplate } from '@/lib/site/templates'
 import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
@@ -67,6 +69,10 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const parsed = UpdateSiteConfigSchema.safeParse(body)
     if (!parsed.success) {
       return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsed.error.flatten())
+    }
+
+    if (isExclusiveSiteTemplate(parsed.data.template) && !isPlusPlan(await resolveWeddingPlanId(supabase, wid))) {
+      return err(403, 'TEMPLATE_NOT_AVAILABLE', 'Este estilo está disponível apenas no plano Exclusivo.')
     }
 
     if (parsed.data.template === 'portfolio' && !(await planAllowsPortfolioTemplate(supabase, wid))) {

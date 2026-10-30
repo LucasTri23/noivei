@@ -8,7 +8,9 @@ import { PUBLIC_ROUTES, APP_ROUTE_PREFIXES } from '@/constants/routes'
 // com uma resposta diferente (403 JSON) quebraria essa escolha de privacidade.
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const { supabase, response } = createSupabaseMiddleware(request)
+  request.headers.set('x-pathname', pathname)
+  const session = createSupabaseMiddleware(request)
+  const { supabase } = session
 
   // Next.js não expõe pathname pra Server Components de layout — só pra Client
   // Components via usePathname(). src/app/(vendor)/layout.tsx precisa saber se já
@@ -16,10 +18,12 @@ export async function middleware(request: NextRequest) {
   // perfil ainda: layout manda pra /fornecedor/cadastro, mas a própria página do
   // wizard não pode se autorredirecionar). Header próprio, lido via headers() do
   // lado do servidor — padrão comum pra esse gap do App Router.
-  response.headers.set('x-pathname', pathname)
+  // O pathname é encaminhado nos headers da requisição.
 
   // Atualiza sessão — obrigatório para manter tokens frescos
   const { data: { user } } = await supabase.auth.getUser()
+
+  const response = session.response
 
   // Rotas de API sempre passam — cada uma já faz sua própria checagem de auth
   // (requireAuth/requireAdmin) e responde com JSON de erro; redirecionar uma

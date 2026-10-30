@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('@/lib/vendor/deliver-vendor-emails', () => ({ deliverVendorEmails: vi.fn().mockResolvedValue({ sent: 2, failed: 0 }) }))
 vi.mock('@/lib/auth/require-auth', () => ({ requireAuth: vi.fn() }))
 vi.mock('@/lib/auth/require-admin', () => ({ requireAdmin: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServer: vi.fn() }))

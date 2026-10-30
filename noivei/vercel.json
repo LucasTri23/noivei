@@ -1,8 +1,24 @@
 {
   "crons": [
-    { "path": "/api/cron/notify-overdue", "schedule": "0 12 * * *" },
-    { "path": "/api/cron/notify-wedding-milestones", "schedule": "0 12 * * *" },
-    { "path": "/api/cron/purge-accounts", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/auto-delete-after-wedding", "schedule": "0 4 * * *" }
+    {
+      "path": "/api/cron/notify-overdue",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/notify-wedding-milestones",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/purge-accounts",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/auto-delete-after-wedding",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/vendor-emails",
+      "schedule": "0 13 * * *"
+    }
   ]
 }

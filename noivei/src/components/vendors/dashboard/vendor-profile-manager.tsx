@@ -1,5 +1,7 @@
 'use client'
 
+import { isCnpj } from '@/lib/vendor/cnpj'
+
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { sanitizeFileName } from '@/lib/files/upload-wedding-file'
@@ -113,13 +115,17 @@ export default function VendorProfileManager({ profile, initialPortfolioItems }:
       toastError('Informe o nome da sua empresa.')
       return
     }
+    if (!isCnpj(form.cnpj)) {
+      toastError('Informe o CNPJ da empresa com 14 caracteres.')
+      return
+    }
     setSaving(true)
     const res = await fetch('/api/v1/vendor/profile', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         business_name: form.business_name.trim(),
-        cnpj:          form.cnpj.trim() || undefined,
+        cnpj:          form.cnpj.trim(),
         phone:         form.phone.trim() || undefined,
         whatsapp:      form.whatsapp.trim() || undefined,
         show_whatsapp: form.show_whatsapp,
@@ -342,9 +348,9 @@ export default function VendorProfileManager({ profile, initialPortfolioItems }:
           </div>
 
           <div>
-            <label htmlFor="perfil-cnpj" style={labelStyle}>CNPJ (opcional)</label>
+            <label htmlFor="perfil-cnpj" style={labelStyle}>CNPJ *</label>
             <div style={inputStyle}>
-              <input id="perfil-cnpj" value={form.cnpj} onChange={(e) => setField('cnpj', e.target.value)}
+              <input id="perfil-cnpj" required aria-required="true" value={form.cnpj} onChange={(e) => setField('cnpj', e.target.value)}
                 style={{ border: 'none', outline: 'none', fontSize: '15px', color: 'var(--fg)', width: '100%', background: 'transparent' }} />
             </div>
           </div>

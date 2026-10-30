@@ -17,4 +17,7 @@ import type { SiteTemplate } from '@/types/database'
 export const GALLERY_PHOTO_LIMIT_BY_TEMPLATE: Record<SiteTemplate, number | null> = {
   classic:   null,
   portfolio: 14,
+  editorial: null,
+  garden: null,
+  invitation: null,
 }

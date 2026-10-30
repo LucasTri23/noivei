@@ -1,3 +1,5 @@
+import { isPlusPlan } from '@/constants/plans'
+import { resolveSiteTemplate } from '@/lib/site/templates'
 import PaywallGate from '@/components/billing/paywall-gate'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
 import SiteBuilder from '@/components/site/site-builder'
@@ -55,7 +57,8 @@ async function SiteContent() {
     <SiteBuilder
       weddingId={weddingId}
       coupleNames={wedding.couple_names as string}
-      initialSite={site as SiteConfig | null}
+      initialSite={site ? { ...(site as SiteConfig), template: resolveSiteTemplate(site.template, albumEnabled, isPlusPlan(planId)) } : null}
+      exclusiveTemplatesEnabled={isPlusPlan(planId)}
       storageLimitBytes={limitCheck.limit}
       storageUsedBytes={limitCheck.current}
       albumEnabled={albumEnabled}

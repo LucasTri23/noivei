@@ -70,9 +70,16 @@ describe('POST /api/v1/vendor/billing/checkout', () => {
     mockedCreateOneTimeCheckout.mockReset()
 
     mockedRequireAuth.mockResolvedValue({ user: { id: 'user-1', email: 'fornecedor@example.com' } } as never)
-    mockedRequireVendorProfile.mockResolvedValue({ id: VENDOR_ID } as never)
+    mockedRequireVendorProfile.mockResolvedValue({ id: VENDOR_ID, status: 'active' } as never)
     mockedCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 99 })
     mockedCreateOneTimeCheckout.mockResolvedValue({ id: 'pref-1', redirectUrl: 'https://mp.example/checkout' })
+  })
+
+  it.each(['draft', 'pending_review', 'rejected', 'suspended'])('bloqueia checkout para status %s', async (status) => {
+    mockedRequireVendorProfile.mockResolvedValue({ id: VENDOR_ID, status } as never)
+    const res = await POST(buildRequest({ vendor_plan_id: 'vendor_lifetime' }))
+    expect(res.status).toBe(403)
+    expect(mockedCreateOneTimeCheckout).not.toHaveBeenCalled()
   })
 
   it('nunca deve confiar em preço/valor vindo do body — sempre usa vendor_plans.price_cents do banco', async () => {

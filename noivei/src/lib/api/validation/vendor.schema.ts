@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isCnpj, normalizeCnpj } from '@/lib/vendor/cnpj'
 
 // Sem CHECK constraint no banco (vendor_profiles.price_range é texto livre, ver
 // migration 20260806000002) — o enum fica só na Zod, decisão de UI pra manter os
@@ -12,7 +13,7 @@ export const VendorPriceRangeSchema = z.enum(['$', '$$', '$$$'])
 // como repassá-los pro .insert()/.update()).
 const VendorProfileFieldsSchema = z.object({
   business_name: z.string().trim().min(2, 'Informe o nome da empresa.').max(160),
-  cnpj:          z.string().trim().max(20),
+  cnpj:          z.string().max(30).refine(isCnpj, 'Informe um CNPJ com 14 caracteres.').transform(normalizeCnpj),
   phone:         z.string().trim().max(30),
   whatsapp:      z.string().trim().max(30),
   show_whatsapp: z.boolean(),
@@ -26,6 +27,7 @@ const VendorProfileFieldsSchema = z.object({
 
 export const CreateVendorProfileSchema = VendorProfileFieldsSchema.partial().required({
   business_name: true,
+  cnpj: true,
 })
 export type CreateVendorProfileInput = z.infer<typeof CreateVendorProfileSchema>
 

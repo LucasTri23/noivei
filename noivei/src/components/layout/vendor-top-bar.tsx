@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 interface VendorTopBarProps {
+  approved: boolean
   businessName:            string | null
   // Ponto (não contagem), mesmo critério do badge do lado do casal (sidebar.tsx) —
   // a contagem por conversa já aparece na lista.
@@ -19,7 +20,7 @@ function ChatIcon() {
 // app do casal (Sidebar/MobileTopBar), que carrega tema de wedding-color e módulos
 // do casamento, nenhum dos dois fazendo sentido aqui. "Perfil" e "Assinatura"
 // (Fase 6) completam a navegação ao lado de "Mensagens" (Fase 4).
-export default function VendorTopBar({ businessName, hasUnreadVendorMessages }: VendorTopBarProps) {
+export default function VendorTopBar({ businessName, hasUnreadVendorMessages, approved }: VendorTopBarProps) {
   return (
     <header
       style={{
@@ -60,33 +61,37 @@ export default function VendorTopBar({ businessName, hasUnreadVendorMessages }: 
           Perfil
         </Link>
 
-        <Link
-          href="/fornecedor/assinatura"
-          style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)', textDecoration: 'none' }}
-        >
-          Assinatura
-        </Link>
+        {approved && (
+          <>
+            <Link
+              href="/fornecedor/assinatura"
+              style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)', textDecoration: 'none' }}
+            >
+              Assinatura
+            </Link>
 
-        <Link
-          href="/fornecedor/conversas"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '7px',
-            fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)', textDecoration: 'none',
-          }}
-        >
-          <ChatIcon />
-          Mensagens
-          {hasUnreadVendorMessages && (
-            <span
-              aria-label="Mensagens não lidas"
+            <Link
+              href="/fornecedor/conversas"
               style={{
-                width: '7px', height: '7px', borderRadius: '50%',
-                background: 'var(--wedding-color)', flexShrink: 0,
+                display: 'flex', alignItems: 'center', gap: '7px',
+                fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)', textDecoration: 'none',
               }}
-            />
-          )}
-        </Link>
+            >
+              <ChatIcon />
+              Mensagens
+              {hasUnreadVendorMessages && (
+                <span
+                  aria-label="Mensagens não lidas"
+                  style={{
+                    width: '7px', height: '7px', borderRadius: '50%',
+                    background: 'var(--wedding-color)', flexShrink: 0,
+                  }}
+                />
+              )}
+            </Link>
 
+          </>
+        )}
         {businessName && (
           <span style={{ fontSize: '13.5px', color: 'var(--muted-fg)', fontWeight: 600, textAlign: 'right' }}>
             {businessName}

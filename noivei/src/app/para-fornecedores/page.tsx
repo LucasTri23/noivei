@@ -73,7 +73,7 @@ export default async function ParaFornecedoresPage() {
             Wednest
           </span>
         </Link>
-        <Link href={user ? '/dashboard' : '/login'} className="text-sm font-semibold" style={{ color: 'var(--fg)', textDecoration: 'none' }}>
+        <Link href={user ? '/fornecedor' : '/login?next=/fornecedor'} className="text-sm font-semibold" style={{ color: 'var(--fg)', textDecoration: 'none' }}>
           {user ? 'Ir para o painel' : 'Entrar'}
         </Link>
       </header>
