@@ -18,7 +18,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('vendor_categories')
-      .select('*')
+      .select('*, vendor_category_links(count)')
       .order('sort_order', { ascending: true })
 
     if (error) return err(500, 'DB_ERROR', 'Erro ao listar categorias de fornecedor.')
@@ -52,6 +52,10 @@ export async function POST(req: Request) {
 
     if (error) {
       if (error.code === '23505') return err(409, 'CATEGORY_SLUG_TAKEN', 'Já existe uma categoria com esse identificador.')
+      // 23514 = trigger de hierarquia (pai escolhido já é subcategoria); 23503 = pai inexistente.
+      if (error.code === '23514' || error.code === '23503') {
+        return err(400, 'INVALID_PARENT', 'A categoria principal escolhida não é válida.')
+      }
       return err(500, 'DB_ERROR', 'Erro ao criar categoria de fornecedor.')
     }
 

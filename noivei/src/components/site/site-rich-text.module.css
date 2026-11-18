@@ -1,0 +1,10 @@
+/*
+ * Estilos mínimos do texto formatado — só espaçamento entre parágrafos e
+ * aparência de link. Tudo com :where() (especificidade zero): fonte, cor,
+ * tamanho e entrelinha continuam vindo do template, que sempre vence.
+ */
+.root :where(p) { margin: 0; }
+.root :where(p + p) { margin-top: 1em; }
+.root :where(strong) { font-weight: 700; }
+.root :where(a) { color: inherit; text-decoration: underline; text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+.root :where(a:hover) { text-decoration-thickness: 2px; }

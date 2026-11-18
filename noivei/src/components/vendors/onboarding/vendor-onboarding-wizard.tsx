@@ -1,6 +1,7 @@
 'use client'
 
 import VendorAvatarManager from '@/components/vendors/dashboard/vendor-avatar-manager'
+import VendorCategoryPicker from '@/components/vendors/vendor-category-picker'
 import { isCnpj } from '@/lib/vendor/cnpj'
 
 import { useEffect, useState } from 'react'
@@ -219,7 +220,10 @@ export default function VendorOnboardingWizard({
   }
 
   function handleCategoriaNext() {
-    if (selectedCategoryIds.length === 0) {
+    // Conta só subcategorias ativas do catálogo — um vínculo antigo com categoria
+    // desativada não deve bastar para seguir.
+    const activeSelected = categories.filter((cat) => cat.parent_id && selectedCategoryIds.includes(cat.id))
+    if (activeSelected.length === 0) {
       setCategoriesError('Selecione ao menos uma categoria.')
       return
     }
@@ -284,7 +288,7 @@ export default function VendorOnboardingWizard({
   }
 
   const progressPct = ((step + 1) / TOTAL_STEPS) * 100
-  const selectedCategories = categories.filter((cat) => selectedCategoryIds.includes(cat.id))
+  const selectedCategories = categories.filter((cat) => cat.parent_id && selectedCategoryIds.includes(cat.id))
 
   return (
     <div>
@@ -454,28 +458,12 @@ export default function VendorOnboardingWizard({
         <div>
           <StepTitle title="Em quais categorias você atua?" subtitle="Selecione ao menos uma — pode marcar mais de uma." />
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
-            {categories.map((cat) => {
-              const active = selectedCategoryIds.includes(cat.id)
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => toggleCategory(cat.id)}
-                  style={{
-                    padding: '10px 14px', borderRadius: '12px',
-                    border: `1.5px solid ${active ? 'var(--wedding-color)' : '#EBDDD0'}`,
-                    background: active ? 'var(--wedding-color-subtle)' : 'var(--surface)',
-                    color: active ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
-                    fontWeight: active ? 700 : 500, fontSize: '13.5px', cursor: 'pointer', textAlign: 'left',
-                  }}
-                >
-                  {cat.label}
-                </button>
-              )
-            })}
-          </div>
-          {categoriesError && <p role="alert" style={{ ...errorTextStyle, marginBottom: '14px' }}>{categoriesError}</p>}
+          <VendorCategoryPicker
+            categories={categories}
+            selectedIds={selectedCategoryIds}
+            onToggle={(id) => { void toggleCategory(id) }}
+            error={categoriesError}
+          />
 
           <div style={{ marginTop: '24px' }}>
             <NextButton onClick={handleCategoriaNext} label="Continuar" />

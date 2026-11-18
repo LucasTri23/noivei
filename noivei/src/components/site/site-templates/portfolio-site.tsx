@@ -3,6 +3,9 @@ import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo, PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
+import SiteRichText from '@/components/site/site-rich-text'
+import StoryImage, { storyPhotoAlt, storyPhotoAspect } from '@/components/site/story/story-image'
+import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
 import PortfolioCountdown from './portfolio-countdown'
 
 interface PortfolioSiteProps {
@@ -261,6 +264,159 @@ function PortfolioGalleryGrid({ photos }: { photos: PublicGalleryPhoto[] }) {
   )
 }
 
+/* ───────────────────────── Nossa História (apresentações novas) ─────────────────────────
+ * Só entra quando o casal escolhe uma apresentação no editor; até lá a seção
+ * "Sobre os noivos" original (uma foto de destaque + texto) fica intacta.
+ * Fotografia em primeiro plano, grade assimétrica e legendas discretas. */
+const portfolioStoryText: React.CSSProperties = { fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line', margin: 0 }
+
+// Padrão de 6 posições: uma foto grande (2×2), uma alta (1×2) e quatro simples.
+function storyTileClass(index: number): string {
+  const slot = index % 6
+  if (slot === 0) return 'col-span-2 row-span-2'
+  if (slot === 3) return 'row-span-2'
+  return ''
+}
+
+function PortfolioCaption({ text }: { text: string | null }) {
+  if (!text) return null
+  return <figcaption style={{ fontSize: '12.5px', color: 'var(--muted-fg)', marginTop: '10px', lineHeight: 1.5 }}>{text}</figcaption>
+}
+
+function PortfolioStoryGrid({ photos, coupleNames }: { photos: StoryPhotoView[]; coupleNames: string }) {
+  if (photos.length === 0) return null
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 auto-rows-[150px] sm:auto-rows-[190px] lg:auto-rows-[220px]" style={{ gap: '10px', gridAutoFlow: 'dense' }}>
+      {photos.map((photo, index) => (
+        <figure key={photo.id} className={storyTileClass(index)} style={{ position: 'relative', margin: 0, borderRadius: '18px', overflow: 'hidden', background: 'var(--muted)' }}>
+          <StoryImage photo={photo} alt={storyPhotoAlt(photo, coupleNames, index)} style={{ width: '100%', height: '100%', display: 'block' }} />
+          {photo.displayCaption && (
+            <figcaption
+              style={{
+                position: 'absolute', left: 0, right: 0, bottom: 0, padding: '28px 12px 10px',
+                fontSize: '12px', lineHeight: 1.4, color: '#fff',
+                background: 'linear-gradient(transparent, rgba(0,0,0,0.55))',
+              }}
+            >
+              {photo.displayCaption}
+            </figcaption>
+          )}
+        </figure>
+      ))}
+    </div>
+  )
+}
+
+function PortfolioPhotoGroup({ photos, coupleNames, offset }: { photos: StoryPhotoView[]; coupleNames: string; offset: number }) {
+  return (
+    <div className={photos.length > 1 ? 'grid grid-cols-1 sm:grid-cols-2' : 'grid grid-cols-1'} style={{ gap: '14px', margin: '36px 0' }}>
+      {photos.map((photo, index) => (
+        <figure key={photo.id} style={{ margin: 0 }}>
+          <div style={{ borderRadius: '28px', overflow: 'hidden', background: 'var(--muted)', aspectRatio: photos.length > 1 ? '4 / 5' : storyPhotoAspect(photo, '16 / 10'), maxHeight: '560px' }}>
+            <StoryImage photo={photo} alt={storyPhotoAlt(photo, coupleNames, offset + index)} style={{ width: '100%', height: '100%', display: 'block' }} />
+          </div>
+          <PortfolioCaption text={photo.displayCaption} />
+        </figure>
+      ))}
+    </div>
+  )
+}
+
+function PortfolioMoments({ moments, showPhotos, coupleNames, markdown }: {
+  moments: StoryMomentView[]; showPhotos: boolean; coupleNames: string; markdown: boolean
+}) {
+  if (moments.length === 0) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '56px', marginTop: '64px' }}>
+      {moments.map((moment, index) => {
+        const cover = showPhotos ? moment.photos[0] : undefined
+        const extras = showPhotos ? moment.photos.slice(1, 3) : []
+        return (
+          <article key={moment.id} className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
+            {cover && (
+              <figure style={{ margin: 0 }} className={index % 2 === 1 ? 'lg:order-2' : ''}>
+                <div style={{ borderRadius: '28px', overflow: 'hidden', background: 'var(--muted)', aspectRatio: storyPhotoAspect(cover, '4 / 3'), maxHeight: '520px' }}>
+                  <StoryImage photo={cover} alt={storyPhotoAlt(cover, coupleNames, index)} style={{ width: '100%', height: '100%', display: 'block' }} />
+                </div>
+                <PortfolioCaption text={cover.caption} />
+              </figure>
+            )}
+            <div className={cover ? '' : 'lg:col-span-2'} style={{ maxWidth: cover ? undefined : '720px' }}>
+              {moment.dateLabel && (
+                <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', background: 'var(--wedding-color-subtle)', borderRadius: '999px', padding: '5px 12px', marginBottom: '14px' }}>
+                  {moment.dateLabel}
+                </span>
+              )}
+              {moment.title && (
+                <h3 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(24px,3vw,32px)', color: 'var(--fg)', margin: '0 0 12px', lineHeight: 1.1 }}>
+                  {moment.title}
+                </h3>
+              )}
+              {moment.description && <SiteRichText text={moment.description} markdown={markdown} style={portfolioStoryText} />}
+              {extras.length > 0 && (
+                <div className="grid grid-cols-2" style={{ gap: '10px', marginTop: '20px' }}>
+                  {extras.map((photo, extraIndex) => (
+                    <div key={photo.id} style={{ borderRadius: '18px', overflow: 'hidden', background: 'var(--muted)', aspectRatio: '1 / 1' }}>
+                      <StoryImage photo={photo} alt={storyPhotoAlt(photo, coupleNames, index + extraIndex + 1)} style={{ width: '100%', height: '100%', display: 'block' }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+interface PortfolioStoryProps {
+  view:        Exclude<StoryView, { layout: 'legacy' }>
+  coupleNames: string
+  markdown:    boolean
+}
+
+/** Nossa História do estilo Portfólio nas apresentações novas — também usada na pré-visualização do editor. */
+export function PortfolioStory({ view, coupleNames, markdown }: PortfolioStoryProps) {
+  const intro = view.text && (
+    <div style={{ maxWidth: '720px', marginBottom: '36px' }}>
+      <SiteRichText text={view.text} markdown={markdown} style={portfolioStoryText} />
+    </div>
+  )
+
+  if (view.layout === 'illustrated') {
+    return (
+      <div style={{ maxWidth: '900px' }}>
+        {view.blocks.map((block, index) => {
+          if (block.type === 'text') {
+            return <div key={`t-${index}`} style={{ maxWidth: '720px', marginBottom: '18px' }}><SiteRichText text={block.text} markdown={markdown} style={portfolioStoryText} /></div>
+          }
+          return <PortfolioPhotoGroup key={`p-${index}`} photos={block.photos} coupleNames={coupleNames} offset={block.offset} />
+        })}
+        <PortfolioMoments moments={view.moments} showPhotos coupleNames={coupleNames} markdown={markdown} />
+      </div>
+    )
+  }
+
+  if (view.layout === 'timeline') {
+    return (
+      <div>
+        {intro}
+        <PortfolioStoryGrid photos={view.loosePhotos} coupleNames={coupleNames} />
+        <PortfolioMoments moments={view.moments} showPhotos coupleNames={coupleNames} markdown={markdown} />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {intro}
+      <PortfolioStoryGrid photos={view.allPhotos} coupleNames={coupleNames} />
+      <PortfolioMoments moments={view.moments} showPhotos={false} coupleNames={coupleNames} markdown={markdown} />
+    </div>
+  )
+}
+
 /* ───────────────────────── Linha do tempo de horários (Cerimônia/Festa) ─────────────────────────
  * Sem campo estruturado de horário no conteúdo do site (só os blocos de texto livre
  * `ceremony_info`/`reception_info`, os mesmos que o template clássico usa) — em vez de
@@ -272,7 +428,7 @@ interface ScheduleNode {
   text:  string
 }
 
-function ScheduleTimeline({ nodes }: { nodes: ScheduleNode[] }) {
+function ScheduleTimeline({ nodes, markdown }: { nodes: ScheduleNode[]; markdown: boolean }) {
   if (nodes.length === 0) return null
 
   return (
@@ -283,9 +439,7 @@ function ScheduleTimeline({ nodes }: { nodes: ScheduleNode[] }) {
             <IconCircle size={36}><ClockLineIcon /></IconCircle>
             <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--fg)' }}>{node.label}</span>
           </div>
-          <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0, paddingLeft: '46px' }}>
-            {node.text}
-          </p>
+          <SiteRichText text={node.text} markdown={markdown} style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0, paddingLeft: '46px' }} />
           {index < nodes.length - 1 && (
             <span
               aria-hidden
@@ -319,6 +473,9 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   const hasVenue         = Boolean(site.wedding.venue || site.wedding.city)
   const hasGallery       = galleryPhotos.length > 0
   const hasGifts         = site.gifts.length > 0
+  const legacyStory      = site.story.layout === 'legacy'
+  const markdown         = site.content.rich_text === true
+  const hasStory         = site.story.layout === 'legacy' ? Boolean(site.content.our_story) : site.story.hasContent
 
   // Foto de destaque da seção "Nossa história" — usa `content.story_photo_url` quando o
   // casal escolheu explicitamente uma foto pra essa seção (ver HistoriaSection no editor).
@@ -340,7 +497,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   // casal de fato preencheu — "Início" e "Confirmação de presença" sempre existem.
   const navItems: { href: string; label: string }[] = [
     { href: '#hero', label: 'Início' },
-    ...(site.content.our_story ? [{ href: '#historia', label: 'Sobre os noivos' }] : []),
+    ...(hasStory ? [{ href: '#historia', label: 'Sobre os noivos' }] : []),
     ...(hasCeremony ? [{ href: '#cerimonia', label: 'Cerimônia e Festa' }] : []),
     ...(hasGallery ? [{ href: '#galeria', label: 'Álbum de Fotos' }] : []),
     ...(hasGifts ? [{ href: '#presentes', label: 'Lista de Presentes' }] : []),
@@ -348,7 +505,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   ]
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
-    ...(site.content.our_story
+    ...(hasStory
       ? [{ href: '#historia', icon: <HeartLineIcon />, title: 'Sobre os noivos', desc: 'Conheça um pouco da nossa história.' }]
       : []),
     ...(hasCeremony
@@ -512,17 +669,32 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
           <section style={{ padding: '80px 0', textAlign: 'center' }}>
             <Eyebrow>Uma mensagem para vocês</Eyebrow>
             <SectionDivider />
-            <p
+            <SiteRichText
+              text={`\u201C${site.content.custom_message}\u201D`}
+              markdown={markdown}
               className="font-display"
               style={{ fontStyle: 'italic', fontSize: 'clamp(20px,3vw,30px)', color: 'var(--fg)', lineHeight: 1.5, margin: '0 auto', maxWidth: '760px' }}
+            />
+          </section>
+        )}
+
+        {/* ── Sobre os noivos / Nossa história (apresentações novas) ── */}
+        {site.story.layout !== 'legacy' && site.story.hasContent && (
+          <section id="historia" style={{ padding: '40px 0 80px' }}>
+            <Eyebrow>Nossa história</Eyebrow>
+            <SectionDivider className="justify-start" />
+            <h2
+              className="font-display"
+              style={{ fontWeight: 500, fontSize: 'clamp(30px,4.4vw,46px)', color: 'var(--fg)', margin: '0 0 28px', lineHeight: 1.06 }}
             >
-              &ldquo;{site.content.custom_message}&rdquo;
-            </p>
+              Como tudo começou
+            </h2>
+            <PortfolioStory view={site.story} coupleNames={site.wedding.couple_names} markdown={markdown} />
           </section>
         )}
 
         {/* ── Sobre os noivos / Nossa história ── */}
-        {site.content.our_story && (
+        {legacyStory && site.content.our_story && (
           <section id="historia" style={{ padding: '40px 0 80px' }}>
             <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center">
               {aboutPhoto && (
@@ -551,9 +723,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
                 <p style={{ fontStyle: 'italic', fontSize: '15.5px', color: 'var(--wedding-color-dark)', margin: '0 0 18px' }}>
                   Uma história para contar durante toda a vida.
                 </p>
-                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line', margin: 0 }}>
-                  {site.content.our_story}
-                </p>
+                <SiteRichText text={site.content.our_story} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line', margin: 0 }} />
               </div>
             </div>
           </section>
@@ -591,7 +761,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
                 <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 20px' }}>
                   Horários
                 </h3>
-                <ScheduleTimeline nodes={scheduleNodes} />
+                <ScheduleTimeline nodes={scheduleNodes} markdown={markdown} />
               </div>
 
               {site.content.dress_code && (
@@ -605,9 +775,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
                       <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '6px' }}>
                         Dress code
                       </div>
-                      <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }}>
-                        {site.content.dress_code}
-                      </p>
+                      <SiteRichText text={site.content.dress_code} markdown={markdown} style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }} />
                     </div>
                   </div>
                 </div>

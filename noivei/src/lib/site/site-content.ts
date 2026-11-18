@@ -1,3 +1,4 @@
+import { isStoryLayout, type StoryLayout } from '@/lib/site/story/story-layouts'
 import type { Json } from '@/types/database'
 
 // Shape tipado do JSON livre salvo em `site_config.content`. Usado tanto pelo
@@ -16,6 +17,13 @@ export interface SiteContent {
   gallery_urls?:    string[]
   custom_message?:  string
   dress_code?:      string
+  /** Apresentação escolhida para Nossa História; ausente = apresentação original do estilo. */
+  story_layout?:    StoryLayout
+  /**
+   * Formatação Markdown ativada explicitamente pelo casal. Ausente/false = os
+   * textos continuam exibidos como texto simples (sites existentes intactos).
+   */
+  rich_text?:       boolean
 }
 
 /** Normaliza o JSON livre de `site_config.content` para o shape tipado — ignora chaves desconhecidas ou malformadas. */
@@ -33,6 +41,8 @@ export function parseSiteContent(raw: Record<string, Json | undefined> | null | 
   if (typeof raw.reception_info === 'string') content.reception_info = raw.reception_info
   if (typeof raw.custom_message === 'string') content.custom_message = raw.custom_message
   if (typeof raw.dress_code === 'string') content.dress_code = raw.dress_code
+  if (isStoryLayout(raw.story_layout)) content.story_layout = raw.story_layout
+  if (raw.rich_text === true) content.rich_text = true
   if (Array.isArray(raw.gallery_urls)) {
     content.gallery_urls = raw.gallery_urls.filter((url): url is string => typeof url === 'string')
   }

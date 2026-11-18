@@ -3,6 +3,9 @@ import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo, PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
+import SiteRichText from '@/components/site/site-rich-text'
+import { storyPhotoAlt } from '@/components/site/story/story-image'
+import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
 
 interface ClassicSiteProps {
   slug: string
@@ -103,6 +106,8 @@ function PolaroidPhoto({ photo, index, alt }: { photo: PublicGalleryPhoto; index
         <img
           src={photo.url}
           alt={alt}
+          loading="lazy"
+          decoding="async"
           style={{
             width: '100%', height: '205px', display: 'block', borderRadius: '2px',
             objectFit: photo.fit_contain ? 'contain' : 'cover',
@@ -163,6 +168,159 @@ function StorySidePhoto({ photo, index, side }: { photo: PublicGalleryPhoto; ind
   )
 }
 
+/* ───────────────────────── Nossa História (apresentações novas) ─────────────────────────
+ * Só entra quando o casal escolhe uma apresentação no editor (site.story.layout !==
+ * 'legacy'); até lá a seção original acima (polaroids da galeria) fica intacta.
+ * Reaproveita a PolaroidPhoto e o coração da linha do tempo deste estilo. */
+const storyTextStyle: React.CSSProperties = { fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line', margin: 0 }
+
+function ClassicStoryPhoto({ photo, index, coupleNames }: { photo: StoryPhotoView; index: number; coupleNames: string }) {
+  return (
+    <figure style={{ margin: 0 }}>
+      <PolaroidPhoto photo={photo} index={index} alt={storyPhotoAlt(photo, coupleNames, index)} />
+      {photo.displayCaption && (
+        <figcaption
+          className="font-display"
+          style={{ fontStyle: 'italic', fontSize: '14px', color: 'var(--muted-fg)', textAlign: 'center', marginTop: '16px', lineHeight: 1.4 }}
+        >
+          {photo.displayCaption}
+        </figcaption>
+      )}
+    </figure>
+  )
+}
+
+function ClassicPhotoRow({ photos, coupleNames, offset = 0 }: { photos: StoryPhotoView[]; coupleNames: string; offset?: number }) {
+  if (photos.length === 0) return null
+  return (
+    <div
+      className={photos.length === 1 ? 'grid grid-cols-1' : 'grid grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(200px,255px))] sm:justify-center'}
+      style={{ gap: '36px 28px', maxWidth: '620px', margin: '40px auto' }}
+    >
+      {photos.map((photo, index) => (
+        <ClassicStoryPhoto key={photo.id} photo={photo} index={offset + index} coupleNames={coupleNames} />
+      ))}
+    </div>
+  )
+}
+
+// Linha do tempo: eixo central com o coração do estilo; no celular o eixo vai
+// para a esquerda e tudo fica em uma coluna. Texto e fotos alternam de lado.
+function ClassicTimeline({ moments, showPhotos, coupleNames, markdown }: {
+  moments: StoryMomentView[]; showPhotos: boolean; coupleNames: string; markdown: boolean
+}) {
+  if (moments.length === 0) return null
+  return (
+    <ol style={{ position: 'relative', listStyle: 'none', padding: 0, margin: '48px auto 0', maxWidth: '980px' }}>
+      <span
+        aria-hidden
+        className="left-[17px] md:left-1/2"
+        style={{ position: 'absolute', top: 0, bottom: 0, width: '2px', transform: 'translateX(-1px)', background: 'color-mix(in srgb, var(--wedding-color-secondary) 45%, transparent)' }}
+      />
+      {moments.map((moment, index) => {
+        const photos = showPhotos ? moment.photos.slice(0, 2) : []
+        const textFirst = index % 2 === 0
+        return (
+          <li key={moment.id} className="relative grid grid-cols-1 md:grid-cols-2 md:gap-x-20" style={{ paddingLeft: 0, marginBottom: '56px' }}>
+            <span
+              aria-hidden
+              className="left-[17px] md:left-1/2"
+              style={{
+                position: 'absolute', top: '6px', width: '30px', height: '30px', transform: 'translateX(-50%)', borderRadius: '50%',
+                background: 'var(--wedding-color-secondary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 3px 8px rgba(60,40,24,0.2)', zIndex: 1,
+              }}
+            >
+              <TimelineHeartIcon />
+            </span>
+
+            <div className={`pl-12 md:pl-0 ${textFirst ? 'md:text-right md:pr-6' : 'md:order-2 md:pl-6'}`}>
+              {moment.dateLabel && (
+                <p style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', margin: '8px 0 6px' }}>
+                  {moment.dateLabel}
+                </p>
+              )}
+              {moment.title && (
+                <h3 className="font-display" style={{ fontSize: '26px', fontWeight: 500, color: 'var(--fg)', margin: '0 0 10px', lineHeight: 1.15 }}>
+                  {moment.title}
+                </h3>
+              )}
+              {moment.description && <SiteRichText text={moment.description} markdown={markdown} style={{ ...storyTextStyle, fontSize: '14.5px', lineHeight: 1.8 }} />}
+            </div>
+
+            {photos.length > 0 && (
+              <div className={`pl-12 md:pl-0 ${textFirst ? 'md:pl-6' : 'md:order-1 md:pr-6'}`} style={{ marginTop: '22px' }}>
+                <div className={photos.length > 1 ? 'grid grid-cols-2' : 'grid grid-cols-1'} style={{ gap: '24px', maxWidth: photos.length > 1 ? '420px' : '255px' }}>
+                  {photos.map((photo, photoIndex) => (
+                    <ClassicStoryPhoto key={photo.id} photo={photo} index={index + photoIndex} coupleNames={coupleNames} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+interface ClassicStoryProps {
+  view:        Exclude<StoryView, { layout: 'legacy' }>
+  coupleNames: string
+  markdown:    boolean
+}
+
+/** Nossa História do estilo Clássico nas apresentações novas — também usada na pré-visualização do editor. */
+export function ClassicStory({ view, coupleNames, markdown }: ClassicStoryProps) {
+  const intro = view.text && (
+    <div style={{ maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
+      <SiteRichText text={view.text} markdown={markdown} style={storyTextStyle} />
+    </div>
+  )
+
+  if (view.layout === 'illustrated') {
+    return (
+      <div>
+        {view.blocks.map((block, index) => {
+          if (block.type === 'text') {
+            return (
+              <div key={`t-${index}`} style={{ maxWidth: '560px', margin: '0 auto 18px', textAlign: 'center' }}>
+                <SiteRichText text={block.text} markdown={markdown} style={storyTextStyle} />
+              </div>
+            )
+          }
+          return <ClassicPhotoRow key={`p-${index}`} photos={block.photos} coupleNames={coupleNames} offset={block.offset} />
+        })}
+        <ClassicTimeline moments={view.moments} showPhotos coupleNames={coupleNames} markdown={markdown} />
+      </div>
+    )
+  }
+
+  if (view.layout === 'gallery') {
+    return (
+      <div>
+        {intro}
+        {view.allPhotos.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4" style={{ gap: '44px 28px', marginTop: '44px' }}>
+            {view.allPhotos.map((photo, index) => (
+              <ClassicStoryPhoto key={photo.id} photo={photo} index={index} coupleNames={coupleNames} />
+            ))}
+          </div>
+        )}
+        <ClassicTimeline moments={view.moments} showPhotos={false} coupleNames={coupleNames} markdown={markdown} />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {intro}
+      <ClassicPhotoRow photos={view.loosePhotos} coupleNames={coupleNames} />
+      <ClassicTimeline moments={view.moments} showPhotos coupleNames={coupleNames} markdown={markdown} />
+    </div>
+  )
+}
+
 // Estilo de site "clássico" — renderização inalterada do site público original
 // (capa + história em polaroids + cerimônia/festa + presentes + galeria +
 // RSVP), com uma seção nova: uma prévia pequena do mural de fotos ao vivo
@@ -182,7 +340,11 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
   const storyPhotos      = galleryPhotos.slice(0, TIMELINE_MAX_PHOTOS)
   const leftStoryPhotos  = storyPhotos.filter((_, index) => index % 2 === 0)
   const rightStoryPhotos = storyPhotos.filter((_, index) => index % 2 === 1)
-  const consumedPhotos   = storyPhotos.length
+  // Na apresentação nova a história usa as próprias fotos (purpose = 'story') e
+  // todas as fotos da galeria voltam para a seção de galeria.
+  const legacyStory      = site.story.layout === 'legacy'
+  const markdown         = site.content.rich_text === true
+  const consumedPhotos   = legacyStory ? storyPhotos.length : 0
   const remainingPhotos  = galleryPhotos.slice(consumedPhotos)
 
   // Posição vertical ajustável pelo casal no editor (0=topo, 50=centro, 100=base) —
@@ -271,7 +433,14 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
             espaço do que isso disponível (o container tem no máximo 1180px, e ainda
             perde padding lateral), estourando a borda. No mobile/tablet, o texto
             aparece inteiro primeiro e as fotos vêm depois, numa grade de 2 colunas. */}
-        {site.content.our_story && (
+        {site.story.layout !== 'legacy' && site.story.hasContent && (
+          <section id="historia" style={{ marginBottom: '64px' }}>
+            <SectionTitle>Nossa história</SectionTitle>
+            <ClassicStory view={site.story} coupleNames={site.wedding.couple_names} markdown={markdown} />
+          </section>
+        )}
+
+        {legacyStory && site.content.our_story && (
           <section style={{ marginBottom: '64px' }}>
             <SectionTitle>Nossa história</SectionTitle>
 
@@ -289,9 +458,11 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
                   background: 'color-mix(in srgb, var(--bg) 96%, transparent)',
                 }}
               >
-                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 2, whiteSpace: 'pre-line', margin: 0 }}>
-                  {site.content.our_story}
-                </p>
+                <SiteRichText
+                  text={site.content.our_story}
+                  markdown={markdown}
+                  style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 2, whiteSpace: 'pre-line', margin: 0 }}
+                />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '150px' }}>
@@ -303,14 +474,14 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
 
             {/* No celular/tablet, o texto continua inteiro e as fotos aparecem abaixo em duas colunas. */}
             <div className="xl:hidden">
-              <p
+              <SiteRichText
+                text={site.content.our_story}
+                markdown={markdown}
                 style={{
                   maxWidth: '560px', margin: '0 auto', textAlign: 'center',
                   fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line',
                 }}
-              >
-                {site.content.our_story}
-              </p>
+              />
 
               {storyPhotos.length > 0 && (
                 <div className="grid grid-cols-2 gap-6" style={{ marginTop: '38px' }}>
@@ -331,9 +502,7 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
                 <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
                   Cerimônia
                 </div>
-                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }}>
-                  {site.content.ceremony_info}
-                </p>
+                <SiteRichText text={site.content.ceremony_info} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }} />
               </div>
             )}
 
@@ -342,9 +511,7 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
                 <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
                   Festa
                 </div>
-                <p style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }}>
-                  {site.content.reception_info}
-                </p>
+                <SiteRichText text={site.content.reception_info} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }} />
               </div>
             )}
 
@@ -380,21 +547,19 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
               <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '8px' }}>
                 Dress code
               </div>
-              <p style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }}>
-                {site.content.dress_code}
-              </p>
+              <SiteRichText text={site.content.dress_code} markdown={markdown} style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }} />
             </div>
           </section>
         )}
 
         {site.content.custom_message && (
           <section style={{ marginBottom: '56px', textAlign: 'center' }}>
-            <p
+            <SiteRichText
+              text={`\u201C${site.content.custom_message}\u201D`}
+              markdown={markdown}
               className="font-display"
               style={{ fontStyle: 'italic', fontSize: '20px', color: 'var(--wedding-color-dark)', lineHeight: 1.6, margin: 0 }}
-            >
-              &ldquo;{site.content.custom_message}&rdquo;
-            </p>
+            />
           </section>
         )}
 

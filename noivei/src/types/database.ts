@@ -304,7 +304,39 @@ export interface WeddingGalleryPhoto {
   // fit_contain troca pra object-fit: contain (mostra a foto inteira, sem cortar).
   position_y:   number
   fit_contain:  boolean
+  // 'gallery' = galeria do site/capa/destaque (comportamento original);
+  // 'story' = foto da seção Nossa História — fora da galeria pública e do teto
+  // de fotos por estilo, mas dentro da cota de armazenamento do plano.
+  purpose:      WeddingGalleryPhotoPurpose
+  width:        number | null
+  height:       number | null
   created_at:   string
+}
+
+export type WeddingGalleryPhotoPurpose = 'gallery' | 'story'
+
+export type StoryDatePrecision = 'day' | 'month' | 'year'
+
+export interface SiteStoryMoment {
+  id:             string
+  wedding_id:     string
+  title:          string | null
+  description:    string | null
+  happened_on:    string | null
+  date_precision: StoryDatePrecision
+  sort_order:     number
+  created_at:     string
+  updated_at:     string
+}
+
+export interface SiteStoryPhoto {
+  photo_id:   string
+  wedding_id: string
+  moment_id:  string | null
+  caption:    string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 export interface AlbumContributor {
@@ -537,13 +569,17 @@ export interface VendorProfile {
 }
 
 export interface VendorCategory {
-  id:         string
-  slug:       string
-  label:      string
-  icon:       string | null
-  sort_order: number
-  active:     boolean
-  created_at: string
+  id:          string
+  slug:        string
+  label:       string
+  icon:        string | null
+  sort_order:  number
+  active:      boolean
+  /** NULL = categoria principal; preenchido = subcategoria (única que recebe fornecedores). */
+  parent_id:   string | null
+  description: string | null
+  created_at:  string
+  updated_at:  string
 }
 
 export interface VendorCategoryLink {

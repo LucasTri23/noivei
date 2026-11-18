@@ -16,6 +16,7 @@ const emptyPayload: ExportPayload = {
   site_config:    null,
   files:          [],
   gallery_photos: [],
+  site_story:     { moments: [], photos: [] },
   preferences:    null,
   members:        [],
   invites_sent:   [],
@@ -84,8 +85,16 @@ const fullPayload: ExportPayload = {
     { id: 'fi1', file_name: 'contrato-buffet.pdf', size_bytes: 204_800, mime_type: 'application/pdf', uploaded_by: 'u1', created_at: '2026-01-01T00:00:00.000Z' },
   ],
   gallery_photos: [
-    { id: 'ph1', size_bytes: 1_048_576, mime_type: 'image/jpeg', uploaded_by: 'u1', created_at: '2026-01-01T00:00:00.000Z' },
+    { id: 'ph1', size_bytes: 1_048_576, mime_type: 'image/jpeg', purpose: 'gallery', uploaded_by: 'u1', created_at: '2026-01-01T00:00:00.000Z' },
   ],
+  site_story: {
+    moments: [
+      { id: 'mo1', wedding_id: 'w1', title: 'O primeiro encontro', description: 'Foi num **café**.', happened_on: '2018-03-02', date_precision: 'month', sort_order: 0, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' },
+    ],
+    photos: [
+      { photo_id: 'ph2', wedding_id: 'w1', moment_id: 'mo1', caption: 'Na praia', sort_order: 0, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' },
+    ],
+  },
   preferences: {
     id: 'p1', wedding_id: 'w1', answers: { estilo: 'rustico', orcamento: 'medio' },
     created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-02T00:00:00.000Z',

@@ -20,6 +20,8 @@ import type {
   Guest,
   Profile,
   SiteConfig,
+  SiteStoryMoment,
+  SiteStoryPhoto,
   Subscription,
   TableConfig,
   Wedding,
@@ -159,7 +161,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
         .eq('wedding_id', wid),
       supabase
         .from('wedding_gallery_photos')
-        .select('id, size_bytes, mime_type, uploaded_by, created_at')
+        .select('id, size_bytes, mime_type, purpose, uploaded_by, created_at')
         .eq('wedding_id', wid),
       supabase
         .from('wedding_preferences')
@@ -188,6 +190,25 @@ export async function GET(_req: Request, { params }: RouteContext) {
       return err(500, 'DB_ERROR', 'Erro ao gerar a exportação. Tente novamente.')
     }
 
+    // Nossa História: momentos (texto do casal) e legendas das fotos.
+    const [storyMomentsRes, storyPhotosRes] = await Promise.all([
+      supabase
+        .from('site_story_moments')
+        .select('id, wedding_id, title, description, happened_on, date_precision, sort_order, created_at, updated_at')
+        .eq('wedding_id', wid)
+        .order('sort_order'),
+      supabase
+        .from('site_story_photos')
+        .select('photo_id, wedding_id, moment_id, caption, sort_order, created_at, updated_at')
+        .eq('wedding_id', wid)
+        .order('sort_order'),
+    ])
+    const storyError = storyMomentsRes.error ?? storyPhotosRes.error
+    if (storyError) {
+      console.error('[weddings/export] erro ao buscar a história do site:', storyError)
+      return err(500, 'DB_ERROR', 'Erro ao gerar a exportação. Tente novamente.')
+    }
+
     const payload: ExportPayload = {
       exported_at: new Date().toISOString(),
       wedding:     (weddingRes.data as Wedding | null) ?? null,
@@ -213,6 +234,10 @@ export async function GET(_req: Request, { params }: RouteContext) {
       site_config: (siteConfigRes.data as SiteConfig | null) ?? null,
       files:          (filesRes.data ?? []) as ExportedFileMeta[],
       gallery_photos: (galleryPhotosRes.data ?? []) as ExportedGalleryPhotoMeta[],
+      site_story: {
+        moments: (storyMomentsRes.data ?? []) as SiteStoryMoment[],
+        photos:  (storyPhotosRes.data ?? []) as SiteStoryPhoto[],
+      },
       preferences: (preferencesRes.data as WeddingPreferences | null) ?? null,
       members:     (membersRes.data ?? []) as WeddingMember[],
       invites_sent: (invitesRes.data ?? []) as WeddingInvite[],

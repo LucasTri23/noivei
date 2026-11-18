@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { buildCategoryTree } from '@/lib/vendor/category-tree'
 import type { VendorCategory, VendorPlan } from '@/types/database'
 
 // Página pública de aquisição — genuína landing de marketing, indexável (diferente
@@ -55,6 +56,7 @@ export default async function ParaFornecedoresPage() {
 
   const plans      = (plansData ?? []) as VendorPlan[]
   const categories = (categoriesData ?? []) as VendorCategory[]
+  const categoryTree = buildCategoryTree(categories).filter((g) => g.children.length > 0)
 
   // Apenas contas de fornecedor entram diretamente no cadastro.
   const { data: profile } = user
@@ -151,22 +153,23 @@ export default async function ParaFornecedoresPage() {
       </section>
 
       {/* Categorias */}
-      {categories.length > 0 && (
+      {categoryTree.length > 0 && (
         <section className="mx-auto" style={{ maxWidth: '1000px', padding: '0 clamp(20px, 4vw, 44px) clamp(48px, 6vw, 72px)' }}>
           <h2 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(24px, 3vw, 32px)', textAlign: 'center', color: 'var(--fg)', marginBottom: '24px' }}>
             Categorias no marketplace
           </h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
-            {categories.map((cat) => (
-              <span
-                key={cat.id}
-                style={{
-                  fontSize: '13.5px', fontWeight: 600, color: 'var(--wedding-color-dark)',
-                  background: 'var(--wedding-color-subtle)', padding: '8px 16px', borderRadius: '999px',
-                }}
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))' }}>
+            {categoryTree.map(({ group, children }) => (
+              <div
+                key={group.id}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px 18px' }}
               >
-                {cat.label}
-              </span>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--wedding-color-dark)', margin: '0 0 6px' }}>{group.label}</h3>
+                <p style={{ fontSize: '13px', color: 'var(--muted-fg)', margin: 0, lineHeight: 1.55 }}>
+                  {children.slice(0, 5).map((c) => c.label).join(' · ')}
+                  {children.length > 5 && ` e mais ${children.length - 5}`}
+                </p>
+              </div>
             ))}
           </div>
         </section>

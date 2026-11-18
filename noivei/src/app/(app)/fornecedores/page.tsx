@@ -21,10 +21,10 @@ async function FornecedoresContent({ searchParams }: FornecedoresPageProps) {
   const filters    = parseVendorMarketplaceFilters(rawParams)
   const hasFilters = hasActiveVendorFilters(filters)
 
-  const [categories, vendors] = await Promise.all([
-    listActiveVendorCategories(supabase),
-    listVendors(supabase, filters),
-  ])
+  // Catálogo primeiro: listVendors precisa dele para resolver principal →
+  // subcategorias e para a busca por serviço.
+  const categories = await listActiveVendorCategories(supabase)
+  const vendors    = await listVendors(supabase, filters, categories)
 
   return (
     <div>

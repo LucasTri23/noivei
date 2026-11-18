@@ -1,4 +1,5 @@
 import type { SiteTemplate } from '@/types/database'
+import { isStoryLayout } from './story/story-layouts'
 import { SITE_TEMPLATE_CONFIG } from './template-config'
 
 /** Campos ocultos e fotos excedentes antigos ficam preservados ao trocar de estilo. */
@@ -12,6 +13,10 @@ export function validateTemplateContent(template: SiteTemplate, content: Record<
     if (typeof value !== 'string' || value.length > field.maxLength) return 'Revise o campo ' + field.label + '.'
     if (value && !config.fields.some((allowed) => allowed.key === key)) return 'Este campo não está disponível no estilo ' + config.label + '.'
   }
+  // Modo incompatível com o estilo não é erro: fica salvo e o site usa o padrão
+  // do estilo na renderização (resolveStoryLayout), preservando a escolha.
+  if (content.story_layout !== undefined && !isStoryLayout(content.story_layout)) return 'Escolha uma apresentação válida para a história.'
+  if (content.rich_text !== undefined && typeof content.rich_text !== 'boolean') return 'Configuração de formatação inválida.'
   const photos = content.gallery_urls
   if (photos === undefined) return null
   if (!Array.isArray(photos) || photos.some((url) => typeof url !== 'string' || !URL.canParse(url) || !/^https?:/.test(url))) return 'Informe URLs válidas para as fotos da galeria.'

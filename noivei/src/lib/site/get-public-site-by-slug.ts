@@ -6,6 +6,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { toGiftPhotoPublicUrl } from '@/lib/gifts/gift-photo-storage'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
+import { loadStoryRecords, toStoryData } from '@/lib/site/story/load-story'
+import { resolveStoryLayout } from '@/lib/site/story/story-layouts'
+import { buildStoryView, type StoryView } from '@/lib/site/story/story-model'
+import { toWeddingPhotoPublicUrl } from '@/lib/site/wedding-photo-storage'
 import type { GiftRegistryType, Json, SiteTemplate } from '@/types/database'
 
 // Foto da galeria com metadados de recorte já resolvidos — position_y/fit_contain vêm de
@@ -30,6 +34,9 @@ export interface PublicSiteInfo {
   }
   content:              SiteContent
   galleryPhotos:        PublicGalleryPhoto[]
+  // Nossa História já resolvida (modo efetivo + momentos/fotos ordenados) —
+  // { layout: 'legacy' } enquanto o casal não escolher uma apresentação nova.
+  story:                StoryView
   cover_photo_url:      string | null
   cover_photo_position: number
   cover_photo_zoom:     number
@@ -103,7 +110,13 @@ export async function getPublicSiteBySlug(
     .order('created_at', { ascending: true })
 
   const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
-  const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, limitTemplateGallery(content.gallery_urls ?? [], template))
+  const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, content.gallery_urls ?? [], template)
+
+  // Momentos/fotos só são buscados quando o casal escolheu uma apresentação
+  // nova — sites que não usam o recurso não fazem nenhuma consulta a mais.
+  const story: StoryView = resolveStoryLayout(template, content.story_layout) === 'legacy'
+    ? { layout: 'legacy' }
+    : buildStoryView(template, content.story_layout, content.our_story, toStoryData(await loadStoryRecords(supabase, weddingId)))
 
   // Foto enviada do dispositivo: recalcula a URL pública a partir do path a cada leitura
   // (nunca confia num image_url gravado) — mesmo motivo de resolveGalleryPhotos acima.
@@ -124,6 +137,7 @@ export async function getPublicSiteBySlug(
     },
     content,
     galleryPhotos,
+    story,
     cover_photo_url:      (site.cover_photo_url as string | null) ?? null,
     cover_photo_position: (site.cover_photo_position as number | null) ?? 50,
     cover_photo_zoom:     (site.cover_photo_zoom as number | null) ?? 0,
@@ -136,27 +150,36 @@ export async function getPublicSiteBySlug(
 // Junta as URLs livres de content.gallery_urls (ordem/fonte da verdade de exibição) com os
 // metadados de recorte de wedding_gallery_photos (só existem pra fotos enviadas do
 // computador, casadas pela URL pública derivada do storage_path). URL sem correspondência
-// (colada manualmente) cai no padrão: centro, sem "contain".
+// (colada manualmente) cai no padrão: centro, sem "contain". Fotos da história
+// (purpose = 'story') nunca entram na galeria pública, mesmo que a URL apareça na lista;
+// o teto do estilo é aplicado depois desse filtro.
 async function resolveGalleryPhotos(
   supabase:    SupabaseClient,
   weddingId:   string,
   galleryUrls: string[],
+  template:    SiteTemplate,
 ): Promise<PublicGalleryPhoto[]> {
   if (galleryUrls.length === 0) return []
 
   const { data: photoRows } = await supabase
     .from('wedding_gallery_photos')
-    .select('storage_path, position_y, fit_contain')
+    .select('storage_path, position_y, fit_contain, purpose')
     .eq('wedding_id', weddingId)
 
   const metaByUrl = new Map<string, { position_y: number; fit_contain: boolean }>()
+  const storyUrls = new Set<string>()
   for (const row of photoRows ?? []) {
-    const publicUrl = supabase.storage.from('wedding-photos').getPublicUrl(row.storage_path as string).data.publicUrl
+    const publicUrl = toWeddingPhotoPublicUrl(supabase, row.storage_path as string)
+    if (row.purpose === 'story') {
+      storyUrls.add(publicUrl)
+      continue
+    }
     metaByUrl.set(publicUrl, {
       position_y:  (row.position_y as number | null) ?? 50,
       fit_contain: (row.fit_contain as boolean | null) ?? false,
     })
   }
 
-  return galleryUrls.map((url) => ({ url, ...(metaByUrl.get(url) ?? { position_y: 50, fit_contain: false }) }))
+  return limitTemplateGallery(galleryUrls.filter((url) => !storyUrls.has(url)), template)
+    .map((url) => ({ url, ...(metaByUrl.get(url) ?? { position_y: 50, fit_contain: false }) }))
 }

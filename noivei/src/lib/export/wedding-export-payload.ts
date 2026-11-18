@@ -8,9 +8,12 @@ import type {
   Guest,
   Profile,
   SiteConfig,
+  SiteStoryMoment,
+  SiteStoryPhoto,
   Subscription,
   TableConfig,
   Wedding,
+  WeddingGalleryPhotoPurpose,
   WeddingInvite,
   WeddingMember,
   WeddingPartyEntry,
@@ -33,6 +36,7 @@ export interface ExportedGalleryPhotoMeta {
   id:          string
   size_bytes:  number
   mime_type:   string | null
+  purpose:     WeddingGalleryPhotoPurpose
   uploaded_by: string
   created_at:  string
 }
@@ -66,6 +70,10 @@ export interface ExportPayload {
   site_config: SiteConfig | null
   files:          ExportedFileMeta[]
   gallery_photos: ExportedGalleryPhotoMeta[]
+  site_story: {
+    moments: SiteStoryMoment[]
+    photos:  SiteStoryPhoto[]
+  }
   preferences: WeddingPreferences | null
   members:     WeddingMember[]
   invites_sent: WeddingInvite[]

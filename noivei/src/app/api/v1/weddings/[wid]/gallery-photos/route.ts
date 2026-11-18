@@ -5,6 +5,11 @@ import { CreateGalleryPhotoSchema } from '@/lib/api/validation/gallery-photo.sch
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkStorageLimit } from '@/lib/billing/check-limit'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
+import {
+  deletePhotoRecordAfterStorage,
+  getStoredObjectInfo,
+  PHOTO_DELETE_INCOMPLETE_MESSAGE,
+} from '@/lib/site/wedding-photo-storage'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import type { SiteTemplate, WeddingGalleryPhoto } from '@/types/database'
 
@@ -36,6 +41,8 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .from('wedding_gallery_photos')
       .select('*')
       .eq('wedding_id', wid)
+      // Fotos da história têm rota própria e não fazem parte da galeria.
+      .eq('purpose', 'gallery')
       .order('created_at', { ascending: false })
       // Defesa em profundidade: a cota de armazenamento (compartilhada com Central de
       // arquivos) já limita o volume real; este teto só evita devolver a tabela inteira.
@@ -89,10 +96,13 @@ export async function POST(req: Request, { params }: RouteContext) {
     const galleryLimit = GALLERY_PHOTO_LIMIT_BY_TEMPLATE[template]
 
     if (galleryLimit !== null) {
+      // Só fotos de galeria contam no teto do estilo — fotos da história
+      // (purpose = 'story') têm teto próprio e não aparecem na galeria.
       const { count: currentPhotoCount, error: countError } = await supabase
         .from('wedding_gallery_photos')
         .select('id', { count: 'exact', head: true })
         .eq('wedding_id', wid)
+        .eq('purpose', 'gallery')
 
       if (countError) return err(500, 'DB_ERROR', 'Erro ao verificar limite de fotos da galeria.')
 
@@ -108,17 +118,12 @@ export async function POST(req: Request, { params }: RouteContext) {
     // `size_bytes` do body é o que o client alega, não o que foi de fato gravado no
     // Storage — sem conferir aqui, dava pra mentir um valor baixo e furar a cota do
     // plano indefinidamente. `list()` retorna os metadados reais do objeto gravado.
-    const objectName = parsed.data.storage_path.slice(wid.length + 1)
-    const { data: listing, error: listError } = await supabase.storage
-      .from('wedding-photos')
-      .list(wid, { search: objectName })
-
-    const storedObject = listing?.find((item) => item.name === objectName)
-    if (listError || !storedObject) {
+    const storedObject = await getStoredObjectInfo(supabase, wid, parsed.data.storage_path)
+    if (!storedObject) {
       return err(400, 'VALIDATION_ERROR', 'Foto não encontrada no armazenamento. Envie novamente.')
     }
 
-    const actualSizeBytes = (storedObject.metadata?.size as number | undefined) ?? parsed.data.size_bytes
+    const actualSizeBytes = storedObject.sizeBytes ?? parsed.data.size_bytes
 
     // Mesma cota da Central de arquivos (checkStorageLimit soma wedding_files +
     // wedding_gallery_photos) — não é um pool de armazenamento separado.
@@ -169,29 +174,30 @@ export async function DELETE(req: Request, { params }: RouteContext) {
       .select('storage_path')
       .eq('storage_path', storagePath)
       .eq('wedding_id', wid)
+      // Fotos da história são removidas pela rota própria (/story/photos/[id]).
+      .eq('purpose', 'gallery')
       .maybeSingle()
 
     if (fetchError) return err(500, 'DB_ERROR', 'Erro ao buscar foto.')
     if (!photo) return err(404, 'PHOTO_NOT_FOUND', 'Foto não encontrada.')
 
-    // Apaga do storage antes do banco: se o storage falhar, o registro continua
-    // consistente. Um objeto órfão no storage (banco sem apontar mais pra ele) é
-    // menos grave que um registro no banco apontando pra uma foto que não existe mais.
+    // Storage antes do banco — ver deletePhotoRecordAfterStorage.
     const { error: storageError } = await supabase.storage
       .from('wedding-photos')
       .remove([storagePath])
 
     if (storageError) return err(500, 'STORAGE_ERROR', 'Erro ao remover foto do armazenamento.')
 
-    const { data, error } = await supabase
+    const { data, error } = await deletePhotoRecordAfterStorage(() => supabase
       .from('wedding_gallery_photos')
       .delete()
       .eq('storage_path', storagePath)
       .eq('wedding_id', wid)
+      .eq('purpose', 'gallery')
       .select('id')
-      .maybeSingle()
+      .maybeSingle())
 
-    if (error) return err(500, 'DB_ERROR', 'Erro ao remover registro da foto.')
+    if (error) return err(500, 'PHOTO_DELETE_INCOMPLETE', PHOTO_DELETE_INCOMPLETE_MESSAGE)
     if (!data) return err(404, 'PHOTO_NOT_FOUND', 'Foto não encontrada.')
 
     return ok({ storage_path: storagePath })

@@ -11,6 +11,7 @@
 
 import { Document, Page, View, Text, StyleSheet, renderToBuffer } from '@react-pdf/renderer'
 import type { ExportPayload } from '@/lib/export/wedding-export-payload'
+import { formatStoryDate } from '@/lib/site/story/story-model'
 
 const styles = StyleSheet.create({
   page: {
@@ -489,6 +490,36 @@ function WeddingDataExportDocument({ data }: { data: ExportPayload }) {
               { header: 'Enviado em',  width: '35%' },
             ]}
             rows={data.gallery_photos.map((p) => [formatBytes(p.size_bytes), p.mime_type ?? '—', formatDateTimeBR(p.created_at)])}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <SectionTitle>{`Nossa história — momentos (${data.site_story.moments.length})`}</SectionTitle>
+          <DataTable
+            emptyLabel="Nenhum momento cadastrado."
+            columns={[
+              { header: 'Título',    width: '25%' },
+              { header: 'Data',      width: '15%' },
+              { header: 'Descrição', width: '60%' },
+            ]}
+            rows={data.site_story.moments.map((m) => [
+              m.title ?? '—', formatStoryDate(m.happened_on, m.date_precision) ?? '—', m.description ?? '—',
+            ])}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <SectionTitle>{`Nossa história — legendas das fotos (${data.site_story.photos.length})`}</SectionTitle>
+          <DataTable
+            emptyLabel="Nenhuma foto na história."
+            columns={[
+              { header: 'Legenda', width: '60%' },
+              { header: 'Momento', width: '40%' },
+            ]}
+            rows={data.site_story.photos.map((p) => [
+              p.caption ?? '—',
+              data.site_story.moments.find((m) => m.id === p.moment_id)?.title ?? '—',
+            ])}
           />
         </View>
 

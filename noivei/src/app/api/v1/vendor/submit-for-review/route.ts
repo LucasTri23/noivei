@@ -42,10 +42,14 @@ export async function POST() {
 
     // Mesma regra de "pelo menos 1 categoria" que trava o Passo 2 do wizard — checada
     // de novo aqui pra não depender só da UI (defesa em profundidade).
+    // !inner + RLS de vendor_categories (só ativas, com principal ativa) faz um
+    // vínculo antigo com categoria desativada não contar; parent_id não nulo
+    // garante que é subcategoria.
     const { count, error: countError } = await supabase
       .from('vendor_category_links')
-      .select('*', { count: 'exact', head: true })
+      .select('category_id, vendor_categories!inner(id)', { count: 'exact', head: true })
       .eq('vendor_id', vendor.id)
+      .not('vendor_categories.parent_id', 'is', null)
 
     if (countError) return err(500, 'DB_ERROR', 'Erro ao verificar categorias.')
     if (!count) return err(400, 'NO_CATEGORIES', 'Selecione ao menos uma categoria antes de enviar para análise.')

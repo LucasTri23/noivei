@@ -61,7 +61,7 @@ export async function GET(req: Request) {
     const [{ data: categoryLinks }, { data: subscriptions }] = await Promise.all([
       supabase
         .from('vendor_category_links')
-        .select('vendor_id, vendor_categories(label)')
+        .select('vendor_id, vendor_categories(slug, label, parent_id)')
         .in('vendor_id', vendorIds),
       supabase
         .from('vendor_subscriptions')
@@ -71,12 +71,20 @@ export async function GET(req: Request) {
     ])
 
     const categoriesByVendor = new Map<string, string[]>()
-    for (const link of (categoryLinks ?? []) as unknown as { vendor_id: string; vendor_categories: { label: string } | null }[]) {
-      const label = link.vendor_categories?.label
-      if (!label) continue
+    // Chaves de filtro por fornecedor: slug, nome e id da principal — o filtro
+    // ?category= aceita qualquer um (nome mantém compatibilidade com o uso antigo).
+    const categoryKeysByVendor = new Map<string, Set<string>>()
+    type LinkRow = { vendor_id: string; vendor_categories: { slug: string; label: string; parent_id: string | null } | null }
+    for (const link of (categoryLinks ?? []) as unknown as LinkRow[]) {
+      const category = link.vendor_categories
+      if (!category) continue
       const list = categoriesByVendor.get(link.vendor_id) ?? []
-      list.push(label)
+      list.push(category.label)
       categoriesByVendor.set(link.vendor_id, list)
+      const keys = categoryKeysByVendor.get(link.vendor_id) ?? new Set<string>()
+      keys.add(category.slug.toLowerCase()).add(category.label.toLowerCase())
+      if (category.parent_id) keys.add(category.parent_id)
+      categoryKeysByVendor.set(link.vendor_id, keys)
     }
 
     // A mais recente por fornecedor — subscriptions já veio ordenado desc, primeira
@@ -101,7 +109,10 @@ export async function GET(req: Request) {
     }))
 
     if (category) {
-      rows = rows.filter((row) => row.category_labels.some((label) => label.toLowerCase() === category.toLowerCase()))
+      // Slug de principal → filtra por qualquer subcategoria dela.
+      const { data: group } = await supabase.from('vendor_categories').select('id').eq('slug', category).is('parent_id', null).maybeSingle()
+      const wanted = (group?.id as string | undefined) ?? category.toLowerCase()
+      rows = rows.filter((row) => categoryKeysByVendor.get(row.id)?.has(wanted))
     }
 
     return ok(rows)

@@ -5,6 +5,9 @@ import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo } from '@/lib/site/get-public-site-by-slug'
 import type { ExclusiveSiteTemplate } from '@/lib/site/templates'
+import SiteRichText from '@/components/site/site-rich-text'
+import StoryImage, { storyPhotoAlt } from '@/components/site/story/story-image'
+import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
 import InvitationEnvelope from './invitation-envelope'
 import styles from './premium-site.module.css'
 
@@ -28,6 +31,128 @@ function BotanicalSprig({ className }: { className?: string }) {
   </svg>
 }
 
+/* ───────────────────────── Nossa História (apresentações novas) ─────────────────────────
+ * Um componente para Editorial, Jardim e Convite — a identidade de cada um vem
+ * das classes de variante no CSS module (molduras em arco no Jardim, borda
+ * dourada no Convite, composição de revista no Editorial), como no resto do
+ * template. Só entra quando o casal escolhe uma apresentação no editor. */
+function PremiumStoryFigure({ photo, index, coupleNames, numbered }: { photo: StoryPhotoView; index: number; coupleNames: string; numbered?: boolean }) {
+  const caption = photo.displayCaption ?? (numbered ? `${String(index + 1).padStart(2, '0')} / NOSSA HISTÓRIA` : null)
+  return (
+    <figure className={styles.storyFigure}>
+      <StoryImage photo={photo} alt={storyPhotoAlt(photo, coupleNames, index)} />
+      {caption && <figcaption>{caption}</figcaption>}
+    </figure>
+  )
+}
+
+function PremiumPhotoGroup({ photos, coupleNames, offset }: { photos: StoryPhotoView[]; coupleNames: string; offset: number }) {
+  return (
+    <div className={photos.length > 1 ? styles.storyPair : styles.storySingle}>
+      {photos.map((photo, index) => <PremiumStoryFigure key={photo.id} photo={photo} index={offset + index} coupleNames={coupleNames} numbered />)}
+    </div>
+  )
+}
+
+function PremiumStoryTimeline({ moments, showPhotos, coupleNames, markdown }: {
+  moments: StoryMomentView[]; showPhotos: boolean; coupleNames: string; markdown: boolean
+}) {
+  if (moments.length === 0) return null
+  return (
+    <ol className={styles.storyTimeline}>
+      {moments.map((moment, index) => {
+        const photos = showPhotos ? moment.photos.slice(0, 2) : []
+        return (
+          <li key={moment.id} className={`${styles.storyMoment} ${photos.length === 0 ? styles.storyMomentTextOnly : ''}`}>
+            <div className={styles.storyMomentText}>
+              {moment.dateLabel && <p className={styles.eyebrow}>{moment.dateLabel}</p>}
+              {moment.title && <h3>{moment.title}</h3>}
+              {moment.description && <SiteRichText text={moment.description} markdown={markdown} className={styles.prose} />}
+            </div>
+            {photos.length > 0 && (
+              <div className={photos.length > 1 ? styles.storyMomentPhotos : undefined}>
+                {photos.map((photo, photoIndex) => <PremiumStoryFigure key={photo.id} photo={photo} index={index + photoIndex} coupleNames={coupleNames} />)}
+              </div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+interface PremiumStoryProps {
+  view:        Exclude<StoryView, { layout: 'legacy' }>
+  coupleNames: string
+  markdown:    boolean
+}
+
+/** Nossa História dos estilos Editorial/Jardim/Convite — também usada na pré-visualização do editor (dentro de .site + variante). */
+export function PremiumStory({ view, coupleNames, markdown }: PremiumStoryProps) {
+  const intro = view.text && (
+    <div className={`${styles.storyText} ${styles.storyLead}`}>
+      <SiteRichText text={view.text} markdown={markdown} className={styles.prose} />
+    </div>
+  )
+
+  if (view.layout === 'illustrated') {
+    const leadIndex = view.blocks.findIndex((block) => block.type === 'text')
+    return (
+      <div>
+        {view.blocks.map((block, index) => {
+          if (block.type === 'text') {
+            return (
+              <div key={`t-${index}`} className={`${styles.storyText} ${index === leadIndex ? styles.storyLead : ''}`}>
+                <SiteRichText text={block.text} markdown={markdown} className={styles.prose} />
+              </div>
+            )
+          }
+          return <PremiumPhotoGroup key={`p-${index}`} photos={block.photos} coupleNames={coupleNames} offset={block.offset} />
+        })}
+        <PremiumStoryTimeline moments={view.moments} showPhotos coupleNames={coupleNames} markdown={markdown} />
+      </div>
+    )
+  }
+
+  if (view.layout === 'gallery') {
+    return (
+      <div>
+        {intro}
+        {view.allPhotos.length > 0 && (
+          <div className={styles.storyGallery}>
+            {view.allPhotos.map((photo, index) => <PremiumStoryFigure key={photo.id} photo={photo} index={index} coupleNames={coupleNames} numbered />)}
+          </div>
+        )}
+        <PremiumStoryTimeline moments={view.moments} showPhotos={false} coupleNames={coupleNames} markdown={markdown} />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {intro}
+      {view.loosePhotos.length > 0 && <PremiumPhotoGroup photos={view.loosePhotos.slice(0, 2)} coupleNames={coupleNames} offset={0} />}
+      {view.loosePhotos.length > 2 && (
+        <div className={styles.storyGallery}>
+          {view.loosePhotos.slice(2).map((photo, index) => <PremiumStoryFigure key={photo.id} photo={photo} index={index + 2} coupleNames={coupleNames} />)}
+        </div>
+      )}
+      <PremiumStoryTimeline moments={view.moments} showPhotos coupleNames={coupleNames} markdown={markdown} />
+    </div>
+  )
+}
+
+/** Cabeçalho da seção — mesmo texto da apresentação original de cada variante. */
+export function PremiumStoryHeading({ variant, heading }: { variant: ExclusiveSiteTemplate; heading?: string }) {
+  return (
+    <div className={styles.storyHead}>
+      {variant === 'garden' && <BotanicalSprig className={styles.storySprig} />}
+      <p className={styles.eyebrow}>{variant === 'invitation' ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p>
+      <h2>{variant === 'invitation' ? 'Com carinho, para você.' : heading || 'De todos os encontros, o nosso.'}</h2>
+    </div>
+  )
+}
+
 export default function PremiumSite({ slug, site, variant }: { slug: string; site: PublicSiteInfo; variant: ExclusiveSiteTemplate }) {
   const { wedding, content } = site
   const date = dateLabel(wedding.wedding_date)
@@ -36,11 +161,13 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
   const place = [wedding.venue, wedding.city].filter(Boolean).join(' · ')
   const mapsUrl = place ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}` : null
   const storyPhoto = content.story_photo_url || site.galleryPhotos[0]?.url
+  const markdown = content.rich_text === true
+  const hasStory = site.story.layout === 'legacy' ? Boolean(content.our_story) : site.story.hasContent
   const page = (
     <div className={`${styles.site} ${styles[variant]}`}>
       <header className={styles.header}>
         <a className={styles.monogram} href="#inicio" aria-label="Início">{initials}</a>
-        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{content.our_story && <a href="#historia">{variant === 'invitation' ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
+        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{hasStory && <a href="#historia">{variant === 'invitation' ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
         <span className={styles.headerDate}>{date || 'Vamos celebrar'}</span>
       </header>
 
@@ -65,21 +192,26 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
 
       <div className={styles.dateBand}><span>GUARDE ESTA DATA</span><strong>{date || 'Em breve'}</strong><span>{wedding.city || 'Com as pessoas que amamos'}</span></div>
 
-      {content.our_story && <section id="historia" className={styles.story}>
+      {site.story.layout !== 'legacy' && site.story.hasContent && <section id="historia" className={styles.storyNew}>
+        <PremiumStoryHeading variant={variant} heading={content.story_heading} />
+        <PremiumStory view={site.story} coupleNames={wedding.couple_names} markdown={markdown} />
+      </section>}
+
+      {site.story.layout === 'legacy' && content.our_story && <section id="historia" className={styles.story}>
         {storyPhoto && <figure><img src={storyPhoto} alt={`Um momento especial de ${wedding.couple_names}`} loading="lazy" /><figcaption>NÓS, EM TODOS OS CAPÍTULOS.</figcaption></figure>}
-        <div><p className={styles.eyebrow}>{variant === 'invitation' ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p><h2>{variant === 'invitation' ? 'Com carinho, para você.' : content.story_heading || 'De todos os encontros, o nosso.'}</h2><p className={styles.prose}>{content.our_story}</p></div>
+        <div><p className={styles.eyebrow}>{variant === 'invitation' ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p><h2>{variant === 'invitation' ? 'Com carinho, para você.' : content.story_heading || 'De todos os encontros, o nosso.'}</h2><SiteRichText text={content.our_story} markdown={markdown} className={styles.prose} /></div>
       </section>}
 
       <section id="celebracao" className={styles.celebration}>
         <p className={styles.eyebrow}>O DIA QUE QUEREMOS VIVER COM VOCÊ</p><h2>Vamos celebrar <em>o amor.</em></h2>
         <div className={styles.events}>
-          <article><span className={styles.eventNumber}>I.</span><h3>A cerimônia</h3>{date && <p className={styles.eventDate}>{date}</p>}<p className={styles.prose}>{content.ceremony_info || 'Os detalhes da cerimônia serão compartilhados em breve.'}</p>{place && <p>{place}</p>}{mapsUrl && <a className={styles.textLink} href={mapsUrl} target="_blank" rel="noopener noreferrer">Como chegar ↗</a>}</article>
-          {content.reception_info && <article><span className={styles.eventNumber}>II.</span><h3>A celebração</h3><p className={styles.prose}>{content.reception_info}</p></article>}
-          {content.dress_code && <article><span className={styles.eventNumber}>✧</span><h3>Para vestir</h3><p className={styles.prose}>{content.dress_code}</p></article>}
+          <article><span className={styles.eventNumber}>I.</span><h3>A cerimônia</h3>{date && <p className={styles.eventDate}>{date}</p>}<SiteRichText text={content.ceremony_info || 'Os detalhes da cerimônia serão compartilhados em breve.'} markdown={markdown && Boolean(content.ceremony_info)} className={styles.prose} />{place && <p>{place}</p>}{mapsUrl && <a className={styles.textLink} href={mapsUrl} target="_blank" rel="noopener noreferrer">Como chegar ↗</a>}</article>
+          {content.reception_info && <article><span className={styles.eventNumber}>II.</span><h3>A celebração</h3><SiteRichText text={content.reception_info} markdown={markdown} className={styles.prose} /></article>}
+          {content.dress_code && <article><span className={styles.eventNumber}>✧</span><h3>Para vestir</h3><SiteRichText text={content.dress_code} markdown={markdown} className={styles.prose} /></article>}
         </div>
       </section>
 
-      {content.custom_message && <section className={styles.message}><span aria-hidden="true">“</span><blockquote>{content.custom_message}</blockquote><p>COM AMOR, {wedding.couple_names}</p></section>}
+      {content.custom_message && <section className={styles.message}><span aria-hidden="true">“</span><blockquote>{markdown ? <SiteRichText text={content.custom_message} markdown /> : content.custom_message}</blockquote><p>COM AMOR, {wedding.couple_names}</p></section>}
 
       {site.galleryPhotos.length > 0 && <section className={styles.gallerySection}>
         <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>{variant === 'invitation' ? 'Memórias de nós dois.' : content.gallery_heading || 'O amor mora nos detalhes.'}</h2>

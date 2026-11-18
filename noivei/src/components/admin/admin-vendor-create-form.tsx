@@ -3,7 +3,9 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import VendorCategoryPicker from '@/components/vendors/vendor-category-picker'
 import { AdminCreateVendorSchema } from '@/lib/api/validation/admin-vendor.schema'
+import type { CategoryTreeInput } from '@/lib/vendor/category-tree'
 import { toastSuccess } from '@/store/toast.store'
 
 const inputStyle = { width: '100%', padding: '11px 13px', border: '1.5px solid #E4D8C8', borderRadius: '10px', background: '#fff', color: '#3C2818', fontSize: '14px' }
@@ -17,8 +19,13 @@ const fields = [
   ['state', 'Estado', 'text', false],
 ] as const
 
-export default function AdminVendorCreateForm({ categories }: { categories: { id: string; label: string }[] }) {
+interface AdminVendorCreateFormProps {
+  categories: CategoryTreeInput[]
+}
+
+export default function AdminVendorCreateForm({ categories }: AdminVendorCreateFormProps) {
   const router = useRouter()
+  const hasSubcategories = categories.some((category) => category.parent_id)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<string[]>([])
@@ -63,15 +70,18 @@ export default function AdminVendorCreateForm({ categories }: { categories: { id
           <textarea id="create-vendor-description" name="description" rows={4} maxLength={2000} style={inputStyle} />
           <fieldset style={{ border: '1px solid #E4D8C8', borderRadius: '10px', margin: '18px 0', padding: '14px' }}>
             <legend>Categorias *</legend>
-            {categories.length === 0 && <p>Cadastre uma categoria ativa antes de adicionar fornecedores.</p>}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
-              {categories.map((category) => <label key={category.id} style={{ display: 'flex', gap: '6px' }}>
-                <input type="checkbox" checked={selected.includes(category.id)} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, category.id] : ids.filter((id) => id !== category.id))} />{category.label}
-              </label>)}
-            </div>
+            {!hasSubcategories && <p>Cadastre uma subcategoria ativa antes de adicionar fornecedores.</p>}
+            {hasSubcategories && (
+              <VendorCategoryPicker
+                categories={categories}
+                selectedIds={selected}
+                onToggle={(id) => setSelected((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])}
+                disabled={saving}
+              />
+            )}
           </fieldset>
           {error && <p role="alert" style={{ color: '#C0553F', marginBottom: '14px' }}>{error}</p>}
-          <button type="submit" disabled={saving || categories.length === 0} style={{ padding: '12px 20px', border: 0, borderRadius: '10px', background: '#5E8B6A', color: '#fff', fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Cadastrando…' : 'Cadastrar e aprovar fornecedor'}</button>
+          <button type="submit" disabled={saving || !hasSubcategories} style={{ padding: '12px 20px', border: 0, borderRadius: '10px', background: '#5E8B6A', color: '#fff', fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Cadastrando…' : 'Cadastrar e aprovar fornecedor'}</button>
         </fieldset>
       </form>
     </div>

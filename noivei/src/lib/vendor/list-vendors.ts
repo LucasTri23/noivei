@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { findCategoryIdsByText, resolveCategoryFilter } from '@/lib/vendor/category-tree'
 import type { VendorMarketplaceFilters } from '@/lib/vendor/marketplace-filters'
 
 // Teto de resultados por busca — o dataset esperado é pequeno por um bom tempo
@@ -11,6 +12,12 @@ export interface VendorListCategory {
   id:    string
   slug:  string
   label: string
+}
+
+/** Categoria do catálogo (principal ou subcategoria) para filtros e busca. */
+export interface VendorCatalogCategory extends VendorListCategory {
+  parent_id:  string | null
+  sort_order: number
 }
 
 export interface VendorListItem {
@@ -39,26 +46,20 @@ export interface VendorListItem {
  * full-text seria over-engineering agora — revisitar se o marketplace crescer.
  */
 export async function listVendors(
-  supabase: SupabaseClient,
-  filters:  VendorMarketplaceFilters,
+  supabase:  SupabaseClient,
+  filters:   VendorMarketplaceFilters,
+  catalog?:  VendorCatalogCategory[],
 ): Promise<VendorListItem[]> {
+  const categories = catalog ?? await listActiveVendorCategories(supabase)
   let vendorIdFilter: string[] | null = null
 
   if (filters.categoria) {
-    const { data: category } = await supabase
-      .from('vendor_categories')
-      .select('id')
-      .eq('slug', filters.categoria)
-      .maybeSingle()
+    // Aceita slug de principal (todas as subcategorias dela), de subcategoria ou
+    // alias legado — URLs antigas ?categoria=<slug> continuam funcionando.
+    const resolved = resolveCategoryFilter(categories, filters.categoria)
+    if (!resolved || resolved.categoryIds.length === 0) return []
 
-    if (!category) return []
-
-    const { data: links } = await supabase
-      .from('vendor_category_links')
-      .select('vendor_id')
-      .eq('category_id', category.id as string)
-
-    vendorIdFilter = ((links ?? []) as { vendor_id: string }[]).map((link) => link.vendor_id)
+    vendorIdFilter = await vendorIdsForCategories(supabase, resolved.categoryIds)
     if (vendorIdFilter.length === 0) return []
   }
 
@@ -80,7 +81,16 @@ export async function listVendors(
     const term = filters.busca.replace(/[,()]/g, ' ').trim()
     if (term) {
       const pattern = `%${term}%`
-      query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern},city.ilike.${pattern}`)
+      const conditions = [`business_name.ilike.${pattern}`, `description.ilike.${pattern}`, `city.ilike.${pattern}`]
+
+      // Busca por serviço: "drone" também acha quem está vinculado a "Drone".
+      const serviceCategoryIds = findCategoryIdsByText(categories, term)
+      if (serviceCategoryIds.length > 0) {
+        const serviceVendorIds = await vendorIdsForCategories(supabase, serviceCategoryIds)
+        if (serviceVendorIds.length > 0) conditions.push(`id.in.(${serviceVendorIds.join(',')})`)
+      }
+
+      query = query.or(conditions.join(','))
     }
   }
 
@@ -101,6 +111,21 @@ export async function listVendors(
     description:   vendor.description as string | null,
     categories:    categoriesByVendor.get(vendor.id as string) ?? [],
   }))
+}
+
+// Teto de vendor_ids vindos de vínculos — mantém o filtro .in()/.or() da
+// consulta seguinte dentro de um tamanho de URL seguro para o PostgREST.
+const VENDOR_ID_FILTER_LIMIT = 500
+
+async function vendorIdsForCategories(supabase: SupabaseClient, categoryIds: string[]): Promise<string[]> {
+  const { data: links } = await supabase
+    .from('vendor_category_links')
+    .select('vendor_id')
+    .in('category_id', categoryIds)
+    .limit(VENDOR_ID_FILTER_LIMIT * 4)
+
+  // Fornecedor em várias subcategorias do mesmo grupo aparece uma vez só.
+  return [...new Set(((links ?? []) as { vendor_id: string }[]).map((link) => link.vendor_id))].slice(0, VENDOR_ID_FILTER_LIMIT)
 }
 
 async function fetchCategoriesForVendors(
@@ -132,13 +157,17 @@ async function fetchCategoriesForVendors(
   return result
 }
 
-/** Todas as categorias ativas, pra montar as pílulas de filtro — leitura pública, sem gating. */
-export async function listActiveVendorCategories(supabase: SupabaseClient): Promise<VendorListCategory[]> {
+/**
+ * Catálogo ativo (principais + subcategorias) para filtros e busca — leitura
+ * pública. A RLS já esconde subcategorias de principal inativa; o filtro de
+ * active fica explícito porque um admin logado enxergaria as inativas.
+ */
+export async function listActiveVendorCategories(supabase: SupabaseClient): Promise<VendorCatalogCategory[]> {
   const { data } = await supabase
     .from('vendor_categories')
-    .select('id, slug, label')
+    .select('id, slug, label, parent_id, sort_order')
     .eq('active', true)
     .order('sort_order')
 
-  return (data ?? []) as VendorListCategory[]
+  return (data ?? []) as VendorCatalogCategory[]
 }

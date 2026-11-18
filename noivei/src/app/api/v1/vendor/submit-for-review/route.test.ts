@@ -20,7 +20,7 @@ describe('envio da solicitação', () => {
   })
   function setup(count = 1, updated = true) {
     const update = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: updated ? { id: 'vendor-1', status: 'pending_review' } : null, error: null }) })
-    vi.mocked(createSupabaseServer).mockResolvedValue({ from: vi.fn((table: string) => table === 'vendor_category_links' ? { select: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ count, error: null }) } : { update }) } as never)
+    vi.mocked(createSupabaseServer).mockResolvedValue({ from: vi.fn((table: string) => table === 'vendor_category_links' ? { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), not: vi.fn().mockResolvedValue({ count, error: null }) } : { update }) } as never)
     return update
   }
   it('não envia sem CNPJ e não dispara e-mail', async () => {

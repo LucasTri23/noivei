@@ -5,6 +5,9 @@ import { AddVendorCategorySchema } from '@/lib/api/validation/vendor.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
+// Mesmo teto da RPC fn_admin_create_vendor e do VendorCategoryPicker.
+const MAX_VENDOR_CATEGORIES = 20
+
 // Vincula uma categoria ativa ao próprio perfil de fornecedor (Passo 2 do wizard de
 // cadastro). Idempotente: repetir a mesma categoria não é erro.
 export async function POST(req: Request) {
@@ -24,16 +27,29 @@ export async function POST(req: Request) {
       .select('id')
       .eq('id', parsed.data.category_id)
       .eq('active', true)
+      .not('parent_id', 'is', null)
       .maybeSingle()
 
     if (categoryError) return err(500, 'DB_ERROR', 'Erro ao verificar categoria.')
     if (!category) return err(404, 'CATEGORY_NOT_FOUND', 'Categoria não encontrada ou inativa.')
+
+    const { count, error: countError } = await supabase
+      .from('vendor_category_links')
+      .select('category_id', { count: 'exact', head: true })
+      .eq('vendor_id', vendor.id)
+    if (countError) return err(500, 'DB_ERROR', 'Erro ao verificar categorias.')
+    if ((count ?? 0) >= MAX_VENDOR_CATEGORIES) {
+      return err(400, 'TOO_MANY_CATEGORIES', `Selecione no máximo ${MAX_VENDOR_CATEGORIES} categorias.`)
+    }
 
     const { error } = await supabase
       .from('vendor_category_links')
       .insert({ vendor_id: vendor.id, category_id: parsed.data.category_id })
 
     if (error && error.code !== '23505') {
+      // 23514 = trigger fn_vendor_category_links_check_leaf (categoria virou
+      // principal/inativa entre a checagem acima e o insert).
+      if (error.code === '23514') return err(400, 'CATEGORY_NOT_SELECTABLE', 'Selecione uma subcategoria ativa.')
       return err(500, 'DB_ERROR', 'Erro ao vincular categoria.')
     }
 

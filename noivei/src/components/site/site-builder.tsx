@@ -15,6 +15,9 @@ import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
 import { isExclusiveSiteTemplate } from '@/lib/site/templates'
+import RichTextEditor from '@/components/site/rich-text-editor'
+import StoryEditor from '@/components/site/story/story-editor'
+import { STORY_LAYOUT_LABELS, STORY_LAYOUTS_BY_TEMPLATE, type StoryLayout } from '@/lib/site/story/story-layouts'
 import type { SiteConfig, SiteTemplate } from '@/types/database'
 
 // Marcador do endpoint público do bucket "wedding-photos" — presente numa URL indica que
@@ -732,25 +735,112 @@ function CapaSection({
   )
 }
 
+// Formatação dos textos (Markdown) só liga por ação explícita do casal — sites
+// existentes continuam exibindo os textos exatamente como foram escritos.
+function RichTextToggleCard({ enabled, saving, onToggle }: { enabled: boolean; saving: boolean; onToggle: (next: boolean) => Promise<PatchResult> }) {
+  async function handleClick() {
+    const next = !enabled
+    if (!next && !window.confirm('Desativar a formatação? Os textos voltam a ser exibidos como texto simples, e marcações como **negrito** passam a aparecer literalmente.')) return
+    const result = await onToggle(next)
+    if (!result.ok) { toastError(result.message); return }
+    toastSuccess(next ? 'Formatação de texto ativada.' : 'Formatação de texto desativada.')
+  }
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', border: '1.5px solid #EBDDD0', borderRadius: '14px', padding: '12px 14px', background: 'var(--surface)' }}>
+      <div style={{ flex: '1 1 240px' }}>
+        <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg)', margin: 0 }}>Formatação de texto {enabled ? 'ativada' : 'desativada'}</p>
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '2px 0 0', lineHeight: 1.5 }}>
+          {enabled
+            ? 'Use os botões de negrito, itálico, tachado e link na história, nos momentos, na mensagem e em cerimônia, festa e traje.'
+            : 'Ative para usar negrito, itálico, tachado e links nos textos do site. Nada muda no site até você ativar.'}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={saving}
+        style={{ border: 'none', borderRadius: '10px', padding: '9px 14px', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer', background: enabled ? 'var(--wedding-color-subtle)' : 'var(--wedding-color)', color: enabled ? 'var(--wedding-color-dark)' : '#fff' }}
+      >
+        {enabled ? 'Desativar' : 'Ativar formatação'}
+      </button>
+    </div>
+  )
+}
+
+function StoryLayoutPicker({ template, value, onChange }: { template: SiteTemplate; value: StoryLayout | undefined; onChange: (value: StoryLayout | undefined) => void }) {
+  const config = STORY_LAYOUTS_BY_TEMPLATE[template]
+  const unsupported = value !== undefined && !config.supported.includes(value)
+  const options: { value: StoryLayout | undefined; label: string; description: string }[] = [
+    { value: undefined, label: 'Apresentação original', description: 'Como o site está hoje. Os momentos e as fotos da história ficam guardados e não aparecem.' },
+    ...config.supported.map((layout) => ({
+      value: layout,
+      label: STORY_LAYOUT_LABELS[layout].label + (layout === config.default ? ' (recomendado)' : ''),
+      description: STORY_LAYOUT_LABELS[layout].description,
+    })),
+  ]
+
+  return (
+    <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+      <legend style={labelStyle}>Apresentação da história</legend>
+      {unsupported && (
+        <p role="status" style={{ fontSize: '12.5px', color: 'var(--wedding-color-dark)', background: 'var(--wedding-color-subtle)', borderRadius: '10px', padding: '8px 10px', margin: '0 0 8px' }}>
+          O estilo {SITE_TEMPLATE_CONFIG[template].label} não tem {STORY_LAYOUT_LABELS[value].label.toLowerCase()}; o site usa {STORY_LAYOUT_LABELS[config.default].label.toLowerCase()}.
+          Sua escolha continua salva e volta se você trocar para um estilo compatível.
+        </p>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: '8px' }}>
+        {options.map((option) => {
+          const checked = option.value === value
+          return (
+            <label
+              key={option.value ?? 'legacy'}
+              style={{
+                display: 'flex', gap: '10px', alignItems: 'flex-start', cursor: 'pointer', padding: '10px 12px', borderRadius: '12px',
+                border: `1.5px solid ${checked ? 'var(--wedding-color)' : '#EBDDD0'}`, background: checked ? 'var(--wedding-color-subtle)' : 'var(--surface)',
+              }}
+            >
+              <input type="radio" name="story-layout" checked={checked} onChange={() => onChange(option.value)} style={{ marginTop: '3px', accentColor: 'var(--wedding-color)' }} />
+              <span>
+                <span style={{ display: 'block', fontSize: '13.5px', fontWeight: 700, color: 'var(--fg)' }}>{option.label}</span>
+                <span style={{ display: 'block', fontSize: '12px', color: 'var(--muted-fg)', lineHeight: 1.45 }}>{option.description}</span>
+              </span>
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
+  )
+}
+
 interface HistoriaSectionProps {
+  weddingId:     string
+  coupleNames:   string
   ourStory:      string
   customMessage: string
   storyPhotoUrl: string | null
+  storyLayout:   StoryLayout | undefined
+  storyHeading:  string | undefined
+  richText:      boolean
   saving:        boolean
   siteExists:    boolean
   template:      SiteTemplate
   onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
   onDeletePhoto: (url: string) => Promise<boolean>
-  onSave:        (values: { our_story: string; custom_message: string; story_photo_url: string }) => Promise<PatchResult>
+  onSave:        (values: { our_story: string; custom_message: string; story_photo_url: string; story_layout: StoryLayout | undefined }) => Promise<PatchResult>
+  onToggleRichText: (next: boolean) => Promise<PatchResult>
+  onStorageDelta:   (bytes: number) => void
   onGoToCapa:    () => void
 }
 
 function HistoriaSection({
-  ourStory, customMessage, storyPhotoUrl, saving, siteExists, template, onUploadPhoto, onDeletePhoto, onSave, onGoToCapa,
+  weddingId, coupleNames, ourStory, customMessage, storyPhotoUrl, storyLayout, storyHeading, richText, saving, siteExists, template,
+  onUploadPhoto, onDeletePhoto, onSave, onToggleRichText, onStorageDelta, onGoToCapa,
 }: HistoriaSectionProps) {
   const [storyDraft, setStoryDraft]     = useState(ourStory)
   const [messageDraft, setMessageDraft] = useState(customMessage)
   const [photoDraft, setPhotoDraft]     = useState<string | null>(storyPhotoUrl)
+  const [layoutDraft, setLayoutDraft]   = useState<StoryLayout | undefined>(storyLayout)
   const [uploading, setUploading]       = useState(false)
   const inputRef           = useRef<HTMLInputElement>(null)
   const showSpinner        = useDelayedLoading(saving)
@@ -781,7 +871,7 @@ function HistoriaSection({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const result = await onSave({
-      our_story: storyDraft.trim(), custom_message: messageDraft.trim(), story_photo_url: photoDraft ?? '',
+      our_story: storyDraft.trim(), custom_message: messageDraft.trim(), story_photo_url: photoDraft ?? '', story_layout: layoutDraft,
     })
     if (!result.ok) {
       toastError(result.message)
@@ -791,19 +881,24 @@ function HistoriaSection({
   }
 
   return (
+    <div className="flex flex-col gap-6">
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <RichTextToggleCard enabled={richText} saving={saving} onToggle={onToggleRichText} />
+
       <div>
         <label htmlFor="site-our-story" style={labelStyle}>{SITE_TEMPLATE_CONFIG[template].storyLabel}</label>
-        <textarea
+        <RichTextEditor
           id="site-our-story"
           rows={8}
           maxLength={4000}
           value={storyDraft}
-          onChange={(e) => setStoryDraft(e.target.value)}
+          onChange={setStoryDraft}
+          markdown={richText}
           placeholder={template === 'invitation' ? 'Escreva uma mensagem de convite para as pessoas que vão celebrar com vocês.' : 'Como vocês se conheceram, o pedido, curiosidades sobre o casal…'}
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
+
+      <StoryLayoutPicker template={template} value={layoutDraft} onChange={setLayoutDraft} />
 
       {/* Exibe apenas campos de foto usados pelo modelo escolhido. */}
       {SITE_TEMPLATE_CONFIG[template].storyPhoto && (
@@ -857,14 +952,14 @@ function HistoriaSection({
 
       <div>
         <label htmlFor="site-custom-message" style={labelStyle}>Mensagem para os convidados</label>
-        <textarea
+        <RichTextEditor
           id="site-custom-message"
           rows={3}
           maxLength={600}
           value={messageDraft}
-          onChange={(e) => setMessageDraft(e.target.value)}
+          onChange={setMessageDraft}
+          markdown={richText}
           placeholder="Um recado especial para quem visitar o site."
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
 
@@ -872,10 +967,28 @@ function HistoriaSection({
         {showSpinner && <Spinner color="#fff" />} Salvar história
       </button>
     </form>
+
+      <div style={{ borderTop: '1px solid #EBDDD0', paddingTop: '18px' }}>
+        <p style={{ fontSize: '12.5px', color: 'var(--muted-fg)', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Momentos e fotos são salvos na hora. O texto e a apresentação acima são salvos com o botão &ldquo;Salvar história&rdquo;.
+        </p>
+        <StoryEditor
+          weddingId={weddingId}
+          template={template}
+          coupleNames={coupleNames}
+          markdown={richText}
+          storyText={storyDraft}
+          layout={layoutDraft}
+          heading={storyHeading}
+          onStorageDelta={onStorageDelta}
+        />
+      </div>
+    </div>
   )
 }
 
 interface CerimoniaSectionProps {
+  richText:      boolean
   ceremonyInfo:  string
   receptionInfo: string
   dressCode:     string
@@ -885,7 +998,7 @@ interface CerimoniaSectionProps {
   onGoToCapa:    () => void
 }
 
-function CerimoniaSection({ ceremonyInfo, receptionInfo, dressCode, saving, siteExists, onSave, onGoToCapa }: CerimoniaSectionProps) {
+function CerimoniaSection({ richText, ceremonyInfo, receptionInfo, dressCode, saving, siteExists, onSave, onGoToCapa }: CerimoniaSectionProps) {
   const [ceremonyDraft, setCeremonyDraft]   = useState(ceremonyInfo)
   const [receptionDraft, setReceptionDraft] = useState(receptionInfo)
   const [dressCodeDraft, setDressCodeDraft] = useState(dressCode)
@@ -911,38 +1024,38 @@ function CerimoniaSection({ ceremonyInfo, receptionInfo, dressCode, saving, site
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
         <label htmlFor="site-ceremony-info" style={labelStyle}>Cerimônia</label>
-        <textarea
+        <RichTextEditor
           id="site-ceremony-info"
           rows={4}
           maxLength={2000}
           value={ceremonyDraft}
-          onChange={(e) => setCeremonyDraft(e.target.value)}
+          onChange={setCeremonyDraft}
+          markdown={richText}
           placeholder="Endereço, horário e observações da cerimônia."
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
       <div>
         <label htmlFor="site-reception-info" style={labelStyle}>Festa</label>
-        <textarea
+        <RichTextEditor
           id="site-reception-info"
           rows={4}
           maxLength={2000}
           value={receptionDraft}
-          onChange={(e) => setReceptionDraft(e.target.value)}
+          onChange={setReceptionDraft}
+          markdown={richText}
           placeholder="Endereço, horário e observações da recepção/festa."
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
       <div>
         <label htmlFor="site-dress-code" style={labelStyle}>Dress code (opcional)</label>
-        <textarea
+        <RichTextEditor
           id="site-dress-code"
           rows={2}
           maxLength={300}
           value={dressCodeDraft}
-          onChange={(e) => setDressCodeDraft(e.target.value)}
+          onChange={setDressCodeDraft}
+          markdown={richText}
           placeholder="Ex: Traje esporte fino. Evitem branco e tons de verde-militar."
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-body)' }}
         />
       </div>
 
@@ -1563,6 +1676,16 @@ export default function SiteBuilder({
       else delete nextContent[key]
     }
 
+    if ('story_layout' in patch) {
+      if (patch.story_layout) nextContent.story_layout = patch.story_layout
+      else delete nextContent.story_layout
+    }
+
+    if ('rich_text' in patch) {
+      if (patch.rich_text) nextContent.rich_text = true
+      else delete nextContent.rich_text
+    }
+
     if ('gallery_urls' in patch) {
       if (patch.gallery_urls && patch.gallery_urls.length > 0) nextContent.gallery_urls = patch.gallery_urls
       else delete nextContent.gallery_urls
@@ -1699,20 +1822,28 @@ export default function SiteBuilder({
             )}
             {active === 'historia' && (
               <HistoriaSection
+                weddingId={weddingId}
+                coupleNames={coupleNames}
                 ourStory={content.our_story ?? ''}
                 customMessage={content.custom_message ?? ''}
                 storyPhotoUrl={content.story_photo_url ?? null}
+                storyLayout={content.story_layout}
+                storyHeading={content.story_heading}
+                richText={content.rich_text === true}
                 saving={saving}
                 siteExists={siteExists}
                 template={template}
                 onUploadPhoto={uploadPhoto}
                 onDeletePhoto={deletePhoto}
                 onSave={saveContentPatch}
+                onToggleRichText={(next) => saveContentPatch({ rich_text: next })}
+                onStorageDelta={(bytes) => setUsedBytes((prev) => Math.max(0, prev + bytes))}
                 onGoToCapa={() => setActive('capa')}
               />
             )}
             {active === 'cerimonia' && (
               <CerimoniaSection
+                richText={content.rich_text === true}
                 ceremonyInfo={content.ceremony_info ?? ''}
                 receptionInfo={content.reception_info ?? ''}
                 dressCode={content.dress_code ?? ''}

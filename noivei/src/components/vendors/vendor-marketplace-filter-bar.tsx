@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
-import type { VendorListCategory } from '@/lib/vendor/list-vendors'
+import { buildCategoryTree, resolveCategoryFilter } from '@/lib/vendor/category-tree'
+import type { VendorCatalogCategory } from '@/lib/vendor/list-vendors'
 import {
   buildVendorMarketplaceHref,
   hasActiveVendorFilters,
@@ -8,7 +9,7 @@ import {
 } from '@/lib/vendor/marketplace-filters'
 
 interface VendorMarketplaceFilterBarProps {
-  categories: VendorListCategory[]
+  categories: VendorCatalogCategory[]
   filters:    VendorMarketplaceFilters
 }
 
@@ -25,6 +26,17 @@ function pillStyle(active: boolean): React.CSSProperties {
   }
 }
 
+function subPillStyle(active: boolean): React.CSSProperties {
+  return {
+    flexShrink: 0,
+    borderRadius: '999px', padding: '5px 13px',
+    fontSize: '12.5px', fontWeight: active ? 700 : 500, textDecoration: 'none', whiteSpace: 'nowrap',
+    border: `1px solid ${active ? 'var(--wedding-color)' : 'var(--border)'}`,
+    background: active ? 'var(--wedding-color-subtle)' : 'var(--surface)',
+    color: active ? 'var(--wedding-color-dark)' : 'var(--muted-fg)',
+  }
+}
+
 const fieldLabelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12.5px', color: 'var(--muted-fg)' }
 const fieldInputStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 10px', fontSize: '13.5px', color: 'var(--fg)', background: 'var(--surface)' }
 
@@ -36,14 +48,22 @@ const fieldInputStyle: React.CSSProperties = { border: '1px solid var(--border)'
 // (URL + client state). Pílulas com overflow-x-auto no mobile (não empilham,
 // rolam horizontalmente) — mesma ideia da aba de categorias do
 // file-archive-manager, adaptada pra rolagem em vez de quebra de linha.
+// Dois níveis: pílulas das categorias principais e, com uma principal (ou uma
+// subcategoria dela) ativa, uma segunda fileira com as subcategorias. Tudo
+// continua no mesmo ?categoria=<slug>, então URLs antigas seguem válidas.
 export default function VendorMarketplaceFilterBar({ categories, filters }: VendorMarketplaceFilterBarProps) {
+  const tree = buildCategoryTree(categories).filter((g) => g.children.length > 0)
+  const resolved = filters.categoria ? resolveCategoryFilter(categories, filters.categoria) : null
+  const activeGroup = resolved?.group ? tree.find((g) => g.group.id === resolved.group?.id) : undefined
+  const activeSubSlug = resolved?.subcategory?.slug
+
   return (
     <div>
       <div
         role="tablist"
         aria-label="Filtrar fornecedores por categoria"
         className="flex gap-2 overflow-x-auto"
-        style={{ paddingBottom: '6px', marginBottom: '16px', scrollbarWidth: 'thin' }}
+        style={{ paddingBottom: '6px', marginBottom: activeGroup ? '8px' : '16px', scrollbarWidth: 'thin' }}
       >
         <Link
           role="tab"
@@ -53,21 +73,50 @@ export default function VendorMarketplaceFilterBar({ categories, filters }: Vend
         >
           Todos
         </Link>
-        {categories.map((category) => {
-          const active = filters.categoria === category.slug
+        {tree.map(({ group }) => {
+          const active = activeGroup?.group.id === group.id
           return (
             <Link
-              key={category.id}
+              key={group.id}
               role="tab"
               aria-selected={active}
-              href={buildVendorMarketplaceHref(filters, { categoria: active ? undefined : category.slug })}
+              href={buildVendorMarketplaceHref(filters, { categoria: active && !activeSubSlug ? undefined : group.slug })}
               style={pillStyle(active)}
             >
-              {category.label}
+              {group.label}
             </Link>
           )
         })}
       </div>
+
+      {activeGroup && (
+        <nav
+          aria-label={`Subcategorias de ${activeGroup.group.label}`}
+          className="flex gap-2 overflow-x-auto"
+          style={{ paddingBottom: '6px', marginBottom: '16px', scrollbarWidth: 'thin' }}
+        >
+          <Link
+            aria-current={!activeSubSlug ? 'page' : undefined}
+            href={buildVendorMarketplaceHref(filters, { categoria: activeGroup.group.slug })}
+            style={subPillStyle(!activeSubSlug)}
+          >
+            Todas de {activeGroup.group.label}
+          </Link>
+          {activeGroup.children.map((sub) => {
+            const active = activeSubSlug === sub.slug
+            return (
+              <Link
+                key={sub.id}
+                aria-current={active ? 'page' : undefined}
+                href={buildVendorMarketplaceHref(filters, { categoria: active ? activeGroup.group.slug : sub.slug })}
+                style={subPillStyle(active)}
+              >
+                {sub.label}
+              </Link>
+            )
+          })}
+        </nav>
+      )}
 
       <form
         method="get"
@@ -85,7 +134,7 @@ export default function VendorMarketplaceFilterBar({ categories, filters }: Vend
             type="text"
             name="busca"
             defaultValue={filters.busca ?? ''}
-            placeholder="Nome, descrição ou cidade"
+            placeholder="Nome, serviço ou cidade"
             style={fieldInputStyle}
           />
         </label>
