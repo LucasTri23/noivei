@@ -405,6 +405,7 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
           }}
         />
         <div className="relative" style={{ zIndex: 1 }}>
+          {site.content.envelope_monogram && <p className="font-display mb-4 text-3xl italic text-[var(--wedding-color-light)]">{site.content.envelope_monogram}</p>}
           <div style={{ fontSize: '12px', letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
             Casamento de
           </div>

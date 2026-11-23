@@ -4,12 +4,16 @@ import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo } from '@/lib/site/get-public-site-by-slug'
-import type { ExclusiveSiteTemplate } from '@/lib/site/templates'
+import type { PremiumSiteTemplate } from '@/lib/site/templates'
 import SiteRichText from '@/components/site/site-rich-text'
 import StoryImage, { storyPhotoAlt } from '@/components/site/story/story-image'
 import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
 import InvitationEnvelope from './invitation-envelope'
 import styles from './premium-site.module.css'
+
+function isInvitation(variant: PremiumSiteTemplate): boolean {
+  return variant === 'invitation' || variant === 'enveloped'
+}
 
 function dateLabel(date: string | null): string | null {
   if (!date) return null
@@ -143,31 +147,38 @@ export function PremiumStory({ view, coupleNames, markdown }: PremiumStoryProps)
 }
 
 /** Cabeçalho da seção — mesmo texto da apresentação original de cada variante. */
-export function PremiumStoryHeading({ variant, heading }: { variant: ExclusiveSiteTemplate; heading?: string }) {
+export function PremiumStoryHeading({ variant, heading }: { variant: PremiumSiteTemplate; heading?: string }) {
   return (
     <div className={styles.storyHead}>
       {variant === 'garden' && <BotanicalSprig className={styles.storySprig} />}
-      <p className={styles.eyebrow}>{variant === 'invitation' ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p>
-      <h2>{variant === 'invitation' ? 'Com carinho, para você.' : heading || 'De todos os encontros, o nosso.'}</h2>
+      <p className={styles.eyebrow}>{isInvitation(variant) ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p>
+      <h2>{isInvitation(variant) ? 'Com carinho, para você.' : heading || 'De todos os encontros, o nosso.'}</h2>
     </div>
   )
 }
 
-export default function PremiumSite({ slug, site, variant }: { slug: string; site: PublicSiteInfo; variant: ExclusiveSiteTemplate }) {
+export default function PremiumSite({ slug, site, variant }: { slug: string; site: PublicSiteInfo; variant: PremiumSiteTemplate }) {
   const { wedding, content } = site
   const date = dateLabel(wedding.wedding_date)
   const title = content.cover_title || wedding.couple_names
   const initials = coupleInitials(wedding.couple_names)
+  const monogram = content.envelope_monogram?.trim() || initials
   const place = [wedding.venue, wedding.city].filter(Boolean).join(' · ')
   const mapsUrl = place ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}` : null
   const storyPhoto = content.story_photo_url || site.galleryPhotos[0]?.url
   const markdown = content.rich_text === true
   const hasStory = site.story.layout === 'legacy' ? Boolean(content.our_story) : site.story.hasContent
+  const gallery = site.galleryPhotos.length > 0 && (
+    <section className={styles.gallerySection}>
+        <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>{isInvitation(variant) ? 'Memórias de nós dois.' : content.gallery_heading || 'O amor mora nos detalhes.'}</h2>
+        <div className={styles.gallery}>{site.galleryPhotos.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={`Memória ${index + 1} de ${wedding.couple_names}`} loading="lazy" style={{ objectFit: photo.fit_contain ? 'contain' : 'cover', objectPosition: `center ${photo.position_y}%` }} />{variant !== 'photographic' && <figcaption>{String(index + 1).padStart(2, '0')} / NOSSOS MOMENTOS</figcaption>}</figure>)}</div>
+    </section>
+  )
   const page = (
-    <div className={`${styles.site} ${styles[variant]}`}>
+    <div className={`${styles.site} ${styles[variant === 'enveloped' ? 'invitation' : variant]}`}>
       <header className={styles.header}>
-        <a className={styles.monogram} href="#inicio" aria-label="Início">{initials}</a>
-        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{hasStory && <a href="#historia">{variant === 'invitation' ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
+        <a className={styles.monogram} href="#inicio" aria-label="Início">{monogram}</a>
+        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{hasStory && <a href="#historia">{isInvitation(variant) ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
         <span className={styles.headerDate}>{date || 'Vamos celebrar'}</span>
       </header>
 
@@ -175,7 +186,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
         <div className={styles.heroCopy}>
           {variant === 'garden' && <BotanicalSprig className={styles.heroBotanical} />}
           <p className={styles.eyebrow}>{variant === 'editorial' ? 'UM NOVO CAPÍTULO, JUNTOS' : variant === 'garden' ? 'O AMOR FLORESCE AQUI' : 'TEMOS A ALEGRIA DE CONVIDAR VOCÊ'}</p>
-          {variant === 'invitation' && <div className={styles.crest} aria-hidden="true">{initials}</div>}
+          {isInvitation(variant) && <div className={styles.crest} aria-hidden="true">{initials}</div>}
           <h1 id="wedding-title">{title}</h1>
           <p className={styles.heroSubtitle}>{content.hero_subtitle || 'Para a vida inteira. E para celebrar com quem faz parte dela.'}</p>
           {date && <p className={styles.weddingDate}>{date}</p>}
@@ -192,6 +203,8 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
 
       <div className={styles.dateBand}><span>GUARDE ESTA DATA</span><strong>{date || 'Em breve'}</strong><span>{wedding.city || 'Com as pessoas que amamos'}</span></div>
 
+      {variant === 'photographic' && gallery}
+
       {site.story.layout !== 'legacy' && site.story.hasContent && <section id="historia" className={styles.storyNew}>
         <PremiumStoryHeading variant={variant} heading={content.story_heading} />
         <PremiumStory view={site.story} coupleNames={wedding.couple_names} markdown={markdown} />
@@ -199,7 +212,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
 
       {site.story.layout === 'legacy' && content.our_story && <section id="historia" className={styles.story}>
         {storyPhoto && <figure><img src={storyPhoto} alt={`Um momento especial de ${wedding.couple_names}`} loading="lazy" /><figcaption>NÓS, EM TODOS OS CAPÍTULOS.</figcaption></figure>}
-        <div><p className={styles.eyebrow}>{variant === 'invitation' ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p><h2>{variant === 'invitation' ? 'Com carinho, para você.' : content.story_heading || 'De todos os encontros, o nosso.'}</h2><SiteRichText text={content.our_story} markdown={markdown} className={styles.prose} /></div>
+        <div><p className={styles.eyebrow}>{isInvitation(variant) ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p><h2>{isInvitation(variant) ? 'Com carinho, para você.' : content.story_heading || 'De todos os encontros, o nosso.'}</h2><SiteRichText text={content.our_story} markdown={markdown} className={styles.prose} /></div>
       </section>}
 
       <section id="celebracao" className={styles.celebration}>
@@ -213,10 +226,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
 
       {content.custom_message && <section className={styles.message}><span aria-hidden="true">“</span><blockquote>{markdown ? <SiteRichText text={content.custom_message} markdown /> : content.custom_message}</blockquote><p>COM AMOR, {wedding.couple_names}</p></section>}
 
-      {site.galleryPhotos.length > 0 && <section className={styles.gallerySection}>
-        <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>{variant === 'invitation' ? 'Memórias de nós dois.' : content.gallery_heading || 'O amor mora nos detalhes.'}</h2>
-        <div className={styles.gallery}>{site.galleryPhotos.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={`Memória ${index + 1} de ${wedding.couple_names}`} loading="lazy" style={{ objectFit: photo.fit_contain ? 'contain' : 'cover', objectPosition: `center ${photo.position_y}%` }} /><figcaption>{String(index + 1).padStart(2, '0')} / NOSSOS MOMENTOS</figcaption></figure>)}</div>
-      </section>}
+      {variant !== 'photographic' && gallery}
 
       {site.gifts.length > 0 && <section id="presentes" className={styles.giftsSection}>
         <GiftPaymentReturnToast /><p className={styles.eyebrow}>PARA O NOSSO NOVO CAPÍTULO</p><h2>Pequenos gestos,<br /><em>grandes lembranças.</em></h2>
@@ -234,5 +244,5 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
       <footer className={styles.footer}><span>{wedding.couple_names}</span><span>{date || 'Com amor'}</span><small>Feito com amor no Wednest</small></footer>
     </div>
   )
-  return variant === 'invitation' ? <InvitationEnvelope names={wedding.couple_names} date={date} initials={initials} caption={content.envelope_caption} openingHint={content.opening_hint}>{page}</InvitationEnvelope> : page
+  return isInvitation(variant) ? <InvitationEnvelope names={wedding.couple_names} date={date} initials={initials} caption={content.envelope_caption} openingHint={content.opening_hint} monogram={content.envelope_monogram} sideOpening={variant === 'enveloped'}>{page}</InvitationEnvelope> : page
 }

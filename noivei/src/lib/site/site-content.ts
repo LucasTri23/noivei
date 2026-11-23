@@ -9,6 +9,7 @@ export interface SiteContent {
   gallery_heading?: string
   envelope_caption?: string
   opening_hint?: string
+  envelope_monogram?: string
   cover_title?:     string
   our_story?:       string
   story_photo_url?: string
@@ -31,7 +32,7 @@ export function parseSiteContent(raw: Record<string, Json | undefined> | null | 
   if (!raw) return {}
 
   const content: SiteContent = {}
-  for (const key of ['hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint'] as const) {
+  for (const key of ['hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint', 'envelope_monogram'] as const) {
     if (typeof raw[key] === 'string') content[key] = raw[key]
   }
   if (typeof raw.cover_title === 'string') content.cover_title = raw.cover_title

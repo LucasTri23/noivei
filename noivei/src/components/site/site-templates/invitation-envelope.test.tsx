@@ -28,6 +28,11 @@ describe('convite selado', () => {
 })
 
 
+it.each([false, true])('mostra o monograma personalizado no selo (abertura lateral: %s)', (sideOpening) => {
+  render(<InvitationEnvelope names="Ana & João" date={null} initials="A & J" monogram="  AJ  " sideOpening={sideOpening}><p>Nosso convite</p></InvitationEnvelope>)
+  expect(screen.getByRole('button', { name: 'Abrir convite de casamento' })).toHaveTextContent(/^AJ$/)
+})
+
 it('mostra a dedicatória e a instrução personalizadas do casal', () => {
   render(<InvitationEnvelope names="Ana & João" date={null} initials="A & J" caption="Para nossa família" openingHint="Abra esta lembrança"><p>Nosso convite</p></InvitationEnvelope>)
   expect(screen.getByText('Para nossa família')).toBeInTheDocument()

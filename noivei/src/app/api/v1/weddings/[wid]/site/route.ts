@@ -1,6 +1,5 @@
 import { validateTemplateContent } from '@/lib/site/validate-template-content'
-import { isPlusPlan } from '@/constants/plans'
-import { isExclusiveSiteTemplate } from '@/lib/site/templates'
+import { allowsSiteMonogram, canUseSiteTemplate, resolveSiteTemplate } from '@/lib/site/templates'
 import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
@@ -8,26 +7,7 @@ import { UpdateSiteConfigSchema } from '@/lib/api/validation/site.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { SiteConfig, SiteTemplate } from '@/types/database'
-
-// O template 'portfolio' reaproveita o mesmo módulo 'album' do mural de fotos
-// (plan_module_access) — mesmo critério usado em getAlbumBySlug. Checado aqui
-// como defesa em profundidade: o site-builder.tsx já esconde a opção quando o
-// plano não libera, mas a Route Handler nunca confia só na UI.
-async function planAllowsPortfolioTemplate(
-  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
-  wid: string,
-): Promise<boolean> {
-  const planId = await resolveWeddingPlanId(supabase, wid)
-  const { data: accessRow } = await supabase
-    .from('plan_module_access')
-    .select('enabled')
-    .eq('plan_id', planId)
-    .eq('module', 'album')
-    .maybeSingle()
-
-  return (accessRow?.enabled as boolean | undefined) ?? true
-}
+import type { SiteConfig } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ wid: string }>
@@ -72,14 +52,6 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       return err(400, 'VALIDATION_ERROR', 'Dados inválidos.', parsed.error.flatten())
     }
 
-    if (isExclusiveSiteTemplate(parsed.data.template) && !isPlusPlan(await resolveWeddingPlanId(supabase, wid))) {
-      return err(403, 'TEMPLATE_NOT_AVAILABLE', 'Este estilo está disponível apenas no plano Exclusivo.')
-    }
-
-    if (parsed.data.template === 'portfolio' && !(await planAllowsPortfolioTemplate(supabase, wid))) {
-      return err(403, 'TEMPLATE_NOT_AVAILABLE', 'O modelo "portfolio" está disponível apenas no plano que libera o álbum de fotos.')
-    }
-
     const { data: existingData, error: fetchError } = await supabase
       .from('site_config')
       .select('id, template, content')
@@ -88,7 +60,19 @@ export async function PATCH(req: Request, { params }: RouteContext) {
 
     if (fetchError) return err(500, 'DB_ERROR', 'Erro ao buscar configuração do site.')
 
-    const contentError = validateTemplateContent((parsed.data.template ?? existingData?.template ?? 'classic') as SiteTemplate, parsed.data.content, existingData?.content ?? {})
+    const template = parsed.data.template
+    const monogram = parsed.data.content?.envelope_monogram
+    const monogramChanged = Boolean(monogram) && monogram !== existingData?.content?.envelope_monogram
+
+    const planId = template || parsed.data.content ? await resolveWeddingPlanId(supabase, wid) : 'free'
+    if (template && !canUseSiteTemplate(planId, template)) {
+      return err(403, 'TEMPLATE_NOT_AVAILABLE', 'Este estilo não está disponível no seu plano.')
+    }
+    if (monogramChanged && !allowsSiteMonogram(planId)) {
+      return err(403, 'MONOGRAM_NOT_AVAILABLE', 'O monograma está disponível a partir do plano Ideal.')
+    }
+
+    const contentError = validateTemplateContent(resolveSiteTemplate(template ?? existingData?.template, planId), parsed.data.content, existingData?.content ?? {})
     if (contentError) return err(400, 'INVALID_TEMPLATE_CONTENT', contentError)
 
     if (!existingData) {

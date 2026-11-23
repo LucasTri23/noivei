@@ -5,7 +5,7 @@ import { PortfolioStory } from '@/components/site/site-templates/portfolio-site'
 import { PremiumStory, PremiumStoryHeading } from '@/components/site/site-templates/premium-site'
 import premiumStyles from '@/components/site/site-templates/premium-site.module.css'
 import type { StoryView } from '@/lib/site/story/story-model'
-import { isExclusiveSiteTemplate } from '@/lib/site/templates'
+import { isPremiumSiteTemplate } from '@/lib/site/templates'
 import type { SiteTemplate } from '@/types/database'
 
 interface StoryPreviewProps {
@@ -36,9 +36,9 @@ export default function StoryPreview({ template, view, coupleNames, markdown, he
   }
 
   let body: React.ReactNode
-  if (isExclusiveSiteTemplate(template)) {
+  if (isPremiumSiteTemplate(template)) {
     body = (
-      <div className={`${premiumStyles.site} ${premiumStyles[template]}`}>
+      <div className={`${premiumStyles.site} ${premiumStyles[template === 'enveloped' ? 'invitation' : template]}`}>
         <section className={premiumStyles.storyNew}>
           <PremiumStoryHeading variant={template} heading={heading} />
           <PremiumStory view={view} coupleNames={coupleNames} markdown={markdown} />

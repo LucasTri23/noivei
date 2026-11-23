@@ -3,7 +3,8 @@ import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateGalleryPhotoSchema } from '@/lib/api/validation/gallery-photo.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
-import { checkStorageLimit } from '@/lib/billing/check-limit'
+import { checkStorageLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
+import { resolveSiteTemplate } from '@/lib/site/templates'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
 import {
   deletePhotoRecordAfterStorage,
@@ -11,7 +12,7 @@ import {
   PHOTO_DELETE_INCOMPLETE_MESSAGE,
 } from '@/lib/site/wedding-photo-storage'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { SiteTemplate, WeddingGalleryPhoto } from '@/types/database'
+import type { WeddingGalleryPhoto } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ wid: string }>
@@ -92,7 +93,9 @@ export async function POST(req: Request, { params }: RouteContext) {
       .select('template')
       .eq('wedding_id', wid)
       .maybeSingle()
-    const template = (siteConfigRow?.template as SiteTemplate | null) ?? 'classic'
+    const template = siteConfigRow?.template
+      ? resolveSiteTemplate(siteConfigRow.template, await resolveWeddingPlanId(supabase, wid))
+      : 'classic'
     const galleryLimit = GALLERY_PHOTO_LIMIT_BY_TEMPLATE[template]
 
     if (galleryLimit !== null) {

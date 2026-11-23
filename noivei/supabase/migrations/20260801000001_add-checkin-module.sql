@@ -1,7 +1,7 @@
 -- Módulo Check-in (Fase "ingresso com QR code" / controle de entrada no dia do
 -- casamento) — estende o sistema de plan_module_access criado em
 -- 20260729000001 com uma 9ª chave, 'checkin', sem editar a migration original.
---
+--  
 -- Diferente dos demais módulos pagos (mesas/site/arquivos/presentes, liberados
 -- em QUALQUER plano pago), o check-in é reservado só para o plano mais caro
 -- ativo no momento desta migration — o admin pode reconfigurar depois em
@@ -35,7 +35,7 @@ ALTER TABLE plan_module_access ADD CONSTRAINT plan_module_access_module_check CH
   'checklist', 'convidados', 'financeiro', 'mesas',
   'site', 'arquivos', 'presentes', 'padrinhos', 'checkin'
 ));
-
+1
 -- Seed dos planos JÁ EXISTENTES: liberado só para quem tem o maior price_brl
 -- entre os planos ativos hoje — "só para o plano mais caro", sem hardcodar
 -- nenhum plan_id (o catálogo de planos é dinâmico/editável pelo admin).

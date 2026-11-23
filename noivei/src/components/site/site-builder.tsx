@@ -14,7 +14,8 @@ import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
-import { isExclusiveSiteTemplate } from '@/lib/site/templates'
+import { allowsSiteMonogram, isPremiumSiteTemplate, canUseSiteTemplate } from '@/lib/site/templates'
+import type { PlanId } from '@/constants/plans'
 import RichTextEditor from '@/components/site/rich-text-editor'
 import StoryEditor from '@/components/site/story/story-editor'
 import { STORY_LAYOUT_LABELS, STORY_LAYOUTS_BY_TEMPLATE, type StoryLayout } from '@/lib/site/story/story-layouts'
@@ -85,8 +86,7 @@ interface SiteBuilderProps {
   // "portfolio" aparece SELECIONÁVEL aqui; a Route Handler PATCH /site
   // reforça a mesma regra do lado do servidor, e a renderização pública em
   // /[slug] nunca confia no valor salvo (sempre reavalia o plano atual).
-  exclusiveTemplatesEnabled: boolean
-  albumEnabled:      boolean
+  planId: PlanId
 }
 
 interface ApiErrorBody {
@@ -200,8 +200,7 @@ interface CapaSectionProps {
   slug:                string
   published:           boolean
   template:            SiteTemplate
-  exclusiveTemplatesEnabled: boolean
-  albumEnabled:        boolean
+  planId: PlanId
   coverTitle:          string
   coverPhotoUrl:       string | null
   coverPhotoPosition:  number
@@ -218,9 +217,11 @@ interface CapaSectionProps {
 
 const TEMPLATE_OPTIONS: { id: SiteTemplate; label: string; description: string }[] = [
   { id: 'classic',   label: 'Clássico',  description: 'O estilo atual: capa elegante, história em polaroids, seções tradicionais.' },
-  { id: 'portfolio', label: 'Portfólio', description: 'Visual ousado e editorial, com grade assimétrica de fotos e o mural de fotos em destaque.' },
-  { id: 'editorial', label: 'Editorial', description: 'Composição de revista, fotografia em destaque e tipografia marcante. Exclusivo.' },
-  { id: 'garden', label: 'Jardim Romântico', description: 'Molduras em arco, ramos delicados e a cor do casal em cada detalhe. Exclusivo.' },
+  { id: 'portfolio', label: 'Portfólio', description: 'Visual ousado e editorial, com grade assimétrica de fotos e fotos em destaque.' },
+  { id: 'editorial', label: 'Editorial', description: 'Composição de revista, fotografia em destaque e tipografia marcante.' },
+  { id: 'garden', label: 'Jardim Romântico', description: 'Molduras em arco, ramos delicados e a cor do casal em cada detalhe.' },
+  { id: 'enveloped', label: 'Envelopado', description: 'Envelope com selo e aba lateral, como um convite físico. Exclusivo.' },
+  { id: 'photographic', label: 'Fotográfico', description: 'Capa em tela cheia e uma galeria ampla logo no início do site.' },
   { id: 'invitation', label: 'Convite Selado', description: 'Uma capa na cor do casamento, selo dourado e abertura animada ao toque. Exclusivo.' },
 ]
 
@@ -269,13 +270,13 @@ const PREVIEW_DEMO_DATE  = '15 . 08 . 2026'
 // diagonal, como a capa de `PortfolioSite` (eyebrow + h1 grande + CTA em pílula),
 // em vez de centralizado.
 function PreviewHeroFrame({ template }: { template: SiteTemplate }) {
-  if (isExclusiveSiteTemplate(template)) {
+  if (isPremiumSiteTemplate(template) && template !== 'photographic') {
     return <div style={{ position: 'absolute', inset: 0, background: 'var(--wedding-color-subtle)', color: 'var(--wedding-color-dark)', padding: '12px', textAlign: 'center', overflow: 'hidden' }}>
-      {template === 'invitation' ? <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'var(--wedding-color-dark)', color: '#e8ca82' }}><span style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: '1px', background: '#d8b660' }} /><span style={{ zIndex: 1, borderRadius: '50%', padding: '10px', border: '3px double #d8b660', background: 'linear-gradient(135deg,#f8e7a4,#bd913d)', color: 'var(--wedding-color-dark)', fontFamily: 'var(--font-display)', fontSize: '18px' }}>A & J</span></div>
+      {(template === 'invitation' || template === 'enveloped') ? <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'var(--wedding-color-dark)', color: '#e8ca82' }}><span style={{ position: 'absolute', left: template === 'enveloped' ? '50%' : 0, right: 0, top: template === 'enveloped' ? 0 : '50%', height: template === 'enveloped' ? '100%' : '1px', background: template === 'enveloped' ? '#0003' : '#d8b660' }} /><span style={{ zIndex: 1, borderRadius: '50%', padding: '10px', border: '3px double #d8b660', background: 'linear-gradient(135deg,#f8e7a4,#bd913d)', color: 'var(--wedding-color-dark)', fontFamily: 'var(--font-display)', fontSize: '18px' }}>A & J</span></div>
       : <div style={{ height: '100%', border: template === 'garden' ? '1px solid var(--wedding-color)' : 0, borderRadius: template === 'garden' ? '50% 50% 0 0' : 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: template === 'editorial' ? 'flex-start' : 'center', padding: '6px 12px' }}><span style={{ fontSize: '6px', letterSpacing: '2px' }}>{template === 'garden' ? 'JARDIM ROMÂNTICO' : 'O NOSSO GRANDE DIA'}</span><span style={{ fontFamily: 'var(--font-display)', fontSize: '24px', lineHeight: 1.1 }}>Ana & João</span><span style={{ fontSize: '7px', marginTop: '5px' }}>15 · 08 · 2026</span></div>}
     </div>
   }
-  if (template === 'portfolio') {
+  if (template === 'portfolio' || template === 'photographic') {
     return (
       <div
         style={{
@@ -351,6 +352,13 @@ function PreviewPhotoConnector({ flip }: { flip?: boolean }) {
 // sem cantos arredondados, replicando a proporção real de `.pf-gallery-row`/
 // `PortfolioGalleryGrid` (portfólio).
 function PreviewGalleryFrame({ template }: { template: SiteTemplate }) {
+  if (template === 'photographic') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', padding: '6px' }}>
+        {Array.from({ length: 13 }, (_, index) => <div key={index} style={{ gridColumn: index % 4 === 0 ? 'span 2' : undefined, background: index % 2 ? 'var(--wedding-color-secondary-light)' : 'var(--wedding-color-light)' }} />)}
+      </div>
+    )
+  }
   if (template === 'portfolio') {
     const rowA = [0, 1, 2, 3]
     const rowB = [0, 1, 2, 3, 4]
@@ -466,26 +474,23 @@ function MiniSitePreview({ template }: { template: SiteTemplate }) {
   )
 }
 
-export function TemplatePicker({ value, albumEnabled, exclusiveTemplatesEnabled, onChange }: { value: SiteTemplate; albumEnabled: boolean; exclusiveTemplatesEnabled: boolean; onChange: (t: SiteTemplate) => void }) {
+export function TemplatePicker({ value, planId, onChange }: { value: SiteTemplate; planId: PlanId; onChange: (t: SiteTemplate) => void }) {
   return (
     <div>
       <label style={labelStyle}>Estilo do site</label>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {TEMPLATE_OPTIONS.filter((opt) => !isExclusiveSiteTemplate(opt.id) || exclusiveTemplatesEnabled).map((opt) => {
-          const locked   = opt.id === 'portfolio' && !albumEnabled
+        {TEMPLATE_OPTIONS.filter((opt) => canUseSiteTemplate(planId, opt.id)).map((opt) => {
           const selected = value === opt.id
           return (
             <button
               key={opt.id}
               type="button"
-              disabled={locked}
-              onClick={() => !locked && onChange(opt.id)}
+              onClick={() => onChange(opt.id)}
               style={{
                 textAlign: 'left', padding: '14px 16px', borderRadius: '14px',
                 border: selected ? '1.5px solid var(--wedding-color)' : '1.5px solid #EBDDD0',
                 background: selected ? 'var(--wedding-color-subtle)' : 'var(--surface)',
-                cursor: locked ? 'not-allowed' : 'pointer',
-                opacity: locked ? 0.55 : 1,
+                cursor: 'pointer',
               }}
             >
               <MiniSitePreview template={opt.id} />
@@ -494,7 +499,7 @@ export function TemplatePicker({ value, albumEnabled, exclusiveTemplatesEnabled,
                 {opt.label}
               </div>
               <div style={{ fontSize: '12.5px', color: 'var(--muted-fg)', lineHeight: 1.5 }}>
-                {locked ? 'Disponível no plano que libera o álbum de fotos.' : opt.description}
+                {opt.description}
               </div>
             </button>
           )
@@ -505,7 +510,7 @@ export function TemplatePicker({ value, albumEnabled, exclusiveTemplatesEnabled,
 }
 
 function CapaSection({
-  content, coupleNames, slug, published, template, albumEnabled, exclusiveTemplatesEnabled, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
+  content, coupleNames, slug, published, template, planId, coverTitle, coverPhotoUrl, coverPhotoPosition, coverPhotoZoom, publicUrl, saving,
   onUploadPhoto, onDeletePhoto, onSave,
 }: CapaSectionProps) {
   const [styleDraft, setStyleDraft] = useState<SiteContent>(content)
@@ -557,7 +562,10 @@ function CapaSection({
 
     const result = await onSave({
       slug: parsedSlug.data, published: publishedDraft, template: templateDraft,
-      styleContent: Object.fromEntries(SITE_TEMPLATE_CONFIG[templateDraft].fields.map(({ key }) => [key, styleDraft[key]?.trim() ?? ''])),
+      styleContent: {
+        ...Object.fromEntries(SITE_TEMPLATE_CONFIG[templateDraft].fields.map(({ key }) => [key, styleDraft[key]?.trim() ?? ''])),
+        ...(allowsSiteMonogram(planId) && { envelope_monogram: styleDraft.envelope_monogram?.trim() ?? '' }),
+      },
       coverTitle: titleDraft.trim(), coverPhotoUrl: coverDraft, coverPhotoPosition: positionDraft, coverPhotoZoom: zoomDraft,
     })
     if (!result.ok) {
@@ -569,8 +577,8 @@ function CapaSection({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <TemplatePicker value={templateDraft} albumEnabled={albumEnabled} exclusiveTemplatesEnabled={exclusiveTemplatesEnabled} onChange={setTemplateDraft} />
-      <StyleContentFields template={templateDraft} content={styleDraft} onChange={(key, value) => setStyleDraft((current) => ({ ...current, [key]: value }))} />
+      <TemplatePicker value={templateDraft} planId={planId} onChange={setTemplateDraft} />
+      <StyleContentFields monogramEnabled={allowsSiteMonogram(planId)} template={templateDraft} content={styleDraft} onChange={(key, value) => setStyleDraft((current) => ({ ...current, [key]: value }))} />
 
       <div>
         <label htmlFor="site-cover-title" style={labelStyle}>Título da capa</label>
@@ -894,7 +902,7 @@ function HistoriaSection({
           value={storyDraft}
           onChange={setStoryDraft}
           markdown={richText}
-          placeholder={template === 'invitation' ? 'Escreva uma mensagem de convite para as pessoas que vão celebrar com vocês.' : 'Como vocês se conheceram, o pedido, curiosidades sobre o casal…'}
+          placeholder={(template === 'invitation' || template === 'enveloped') ? 'Escreva uma mensagem de convite para as pessoas que vão celebrar com vocês.' : 'Como vocês se conheceram, o pedido, curiosidades sobre o casal…'}
         />
       </div>
 
@@ -1469,7 +1477,7 @@ function GaleriaSection({
 }
 
 export default function SiteBuilder({
-  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes, albumEnabled, exclusiveTemplatesEnabled,
+  weddingId, coupleNames, initialSite, storageLimitBytes, storageUsedBytes, planId,
 }: SiteBuilderProps) {
   const [active, setActive]       = useState<SectionId>('capa')
   const [siteId, setSiteId]       = useState<string | null>(initialSite?.id ?? null)
@@ -1668,7 +1676,7 @@ export default function SiteBuilder({
   async function saveContentPatch(patch: Partial<SiteContent>): Promise<PatchResult> {
     const nextContent: SiteContent = { ...content }
 
-    const textKeys = ['cover_title', 'our_story', 'story_photo_url', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code', 'hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint'] as const
+    const textKeys = ['cover_title', 'our_story', 'story_photo_url', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code', 'hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint', 'envelope_monogram'] as const
     for (const key of textKeys) {
       if (!(key in patch)) continue
       const value = patch[key]
@@ -1807,8 +1815,7 @@ export default function SiteBuilder({
                 slug={slug}
                 published={published}
                 template={template}
-                albumEnabled={albumEnabled}
-                exclusiveTemplatesEnabled={exclusiveTemplatesEnabled}
+                planId={planId}
                 coverTitle={content.cover_title ?? ''}
                 coverPhotoUrl={coverPhotoUrl}
                 coverPhotoPosition={coverPhotoPosition}

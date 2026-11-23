@@ -1,6 +1,5 @@
 import { limitTemplateGallery } from '@/lib/site/template-config'
-import { isPlusPlan } from '@/constants/plans'
-import { resolveSiteTemplate } from '@/lib/site/templates'
+import { allowsSiteMonogram, resolveSiteTemplate } from '@/lib/site/templates'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
@@ -40,13 +39,9 @@ export interface PublicSiteInfo {
   cover_photo_url:      string | null
   cover_photo_position: number
   cover_photo_zoom:     number
-  // Estilo EFETIVO a renderizar — já com o fail-safe de plano aplicado (nunca é
-  // 'portfolio' se o plano ATUAL não libera mais o módulo 'album', mesmo que o
-  // valor salvo em site_config.template seja 'portfolio'; ver comentário abaixo).
+  // Estilo permitido pelo plano atual.
   template:             SiteTemplate
-  // Se o plano atual libera o módulo 'album' — controla a seção/preview do
-  // mural de fotos em AMBOS os templates (ver /[slug]/page.tsx), não só o
-  // template em si.
+  // Acesso ao mural de fotos dos convidados.
   albumEnabled:         boolean
   gifts: {
     id:           string
@@ -86,11 +81,7 @@ export async function getPublicSiteBySlug(
 
   if (!wedding) return null
 
-  // Fail-safe de plano: NUNCA confia cegamente no template salvo. Se o casal
-  // escolheu 'portfolio' num plano que liberava 'album' e depois fez downgrade,
-  // o site público volta a renderizar 'classic' automaticamente — o valor salvo
-  // fica intacto (não sobrescrevemos site_config.template aqui), então se o
-  // plano voltar a liberar o módulo, o estilo "portfolio" volta sozinho.
+  // A configuração salva é preservada ao fazer downgrade.
   const planId = await resolveWeddingPlanId(supabase, weddingId)
   const { data: albumAccessRow } = await supabase
     .from('plan_module_access')
@@ -100,7 +91,7 @@ export async function getPublicSiteBySlug(
     .maybeSingle()
   const albumEnabled = (albumAccessRow?.enabled as boolean | undefined) ?? true
   const storedTemplate = (site.template as SiteTemplate | null) ?? 'classic'
-  const template = resolveSiteTemplate(storedTemplate, albumEnabled, isPlusPlan(planId))
+  const template = resolveSiteTemplate(storedTemplate, planId)
 
   const { data: gifts } = await supabase
     .from('gift_registry_items')
@@ -110,6 +101,7 @@ export async function getPublicSiteBySlug(
     .order('created_at', { ascending: true })
 
   const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
+  if (!allowsSiteMonogram(planId)) delete content.envelope_monogram
   const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, content.gallery_urls ?? [], template)
 
   // Momentos/fotos só são buscados quando o casal escolheu uma apresentação

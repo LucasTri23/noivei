@@ -18,12 +18,19 @@ describe('restrição de estilos na API', () => {
     const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'site-1' }, error: null }), update: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: 'site-1' }, error: null }) }
     vi.mocked(createSupabaseServer).mockResolvedValue({ from: vi.fn(() => query) } as never)
   })
-  it.each(['free', 'premium_monthly', 'premium_once'] as const)('nega todos os novos modelos no plano %s', async (plan) => {
+  it.each(['free', 'premium_monthly', 'premium_once'] as const)('nega os convites com selo no plano %s', async (plan) => {
     vi.mocked(resolveWeddingPlanId).mockResolvedValue(plan)
     for (const template of EXCLUSIVE_SITE_TEMPLATES) {
       const response = await PATCH(request(template), context)
       expect(response.status).toBe(403)
       expect((await response.json()).error.code).toBe('TEMPLATE_NOT_AVAILABLE')
+    }
+  })
+  it.each(['free', 'premium_monthly', 'premium_once'] as const)('permite os estilos do plano %s', async (plan) => {
+    vi.mocked(resolveWeddingPlanId).mockResolvedValue(plan)
+    expect((await PATCH(request('photographic'), context)).status).toBe(200)
+    for (const template of ['portfolio', 'editorial', 'garden']) {
+      expect((await PATCH(request(template), context)).status).toBe(plan === 'free' ? 403 : 200)
     }
   })
   it.each(['premium_plus_monthly', 'premium_plus_once'] as const)('permite todos os novos modelos no plano %s', async (plan) => {
@@ -36,6 +43,7 @@ describe('restrição de estilos na API', () => {
 describe('conteúdo validado pelo estilo salvo', () => {
   const photos = Array.from({ length: 9 }, (_, n) => 'https://example.com/' + n + '.jpg')
   function setup(existingContent: Record<string, unknown> = {}) {
+    vi.mocked(resolveWeddingPlanId).mockResolvedValue('premium_monthly')
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: 'owner' } } as never)
     const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'site-1', template: 'editorial', content: existingContent }, error: null }), update: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: 'site-1' }, error: null }) }
     vi.mocked(createSupabaseServer).mockResolvedValue({ from: vi.fn(() => query) } as never)
@@ -53,6 +61,11 @@ describe('conteúdo validado pelo estilo salvo', () => {
     const query = setup({ gallery_urls: photos })
     expect((await PATCH(contentRequest({ gallery_urls: photos, hero_subtitle: 'Nosso dia' }), context)).status).toBe(200)
     expect(query.update).toHaveBeenCalled()
+  })
+  it.each(['free', 'premium_monthly', 'premium_plus_once'] as const)('valida o monograma no plano %s', async (plan) => {
+    setup()
+    vi.mocked(resolveWeddingPlanId).mockResolvedValue(plan)
+    expect((await PATCH(contentRequest({ envelope_monogram: 'A & J' }), context)).status).toBe(plan === 'free' ? 403 : 200)
   })
   it('nega campos de envelope em modelos que não os oferecem', async () => {
     const query = setup()

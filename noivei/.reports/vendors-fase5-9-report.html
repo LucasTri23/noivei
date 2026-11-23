@@ -1,0 +1,739 @@
+<title>Fornecedores — Fases 5–9</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --paper: #faf7ef;
+    --surface: #ffffff;
+    --ink: #241a10;
+    --muted: #7c6c55;
+    --line: #e6d9c2;
+    --line-soft: #efe6d3;
+    --accent: #b8862f;
+    --accent-ink: #6b4f1d;
+    --accent-soft: #f2e6c9;
+    --good: #3f7a52;
+    --good-soft: #e3efe2;
+    --warn: #b5651d;
+    --warn-soft: #f6e6d4;
+    --bad: #a23b2e;
+    --bad-soft: #f6e0dc;
+    --shadow: 0 1px 2px rgba(36,26,16,0.04), 0 8px 24px rgba(36,26,16,0.05);
+    --radius: 12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1c160f;
+      --surface: #241c13;
+      --ink: #f3ead9;
+      --muted: #ad9c81;
+      --line: #3c2f1e;
+      --line-soft: #332813;
+      --accent: #d9ac4c;
+      --accent-ink: #f0d18f;
+      --accent-soft: #3a2e15;
+      --good: #7cb98c;
+      --good-soft: #23301f;
+      --warn: #e0a05c;
+      --warn-soft: #382812;
+      --bad: #e08876;
+      --bad-soft: #3a2019;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1c160f;
+    --surface: #241c13;
+    --ink: #f3ead9;
+    --muted: #ad9c81;
+    --line: #3c2f1e;
+    --line-soft: #332813;
+    --accent: #d9ac4c;
+    --accent-ink: #f0d18f;
+    --accent-soft: #3a2e15;
+    --good: #7cb98c;
+    --good-soft: #23301f;
+    --warn: #e0a05c;
+    --warn-soft: #382812;
+    --bad: #e08876;
+    --bad-soft: #3a2019;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Libre Franklin', -apple-system, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.65;
+  }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; text-wrap: balance; color: var(--ink); }
+  code, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  a { color: var(--accent-ink); }
+
+  .shell { display: flex; max-width: 1180px; margin: 0 auto; align-items: flex-start; }
+
+  /* ---------- Left nav ---------- */
+  nav.toc {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    width: 240px; flex-shrink: 0; padding: 36px 18px 36px 28px;
+    border-right: 1px solid var(--line);
+  }
+  nav.toc .brand {
+    font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600;
+    color: var(--accent-ink); margin-bottom: 3px;
+  }
+  nav.toc .brand-sub { font-size: 11.5px; color: var(--muted); margin-bottom: 22px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: navstep; }
+  nav.toc li { counter-increment: navstep; margin-bottom: 1px; }
+  nav.toc a {
+    display: flex; gap: 8px; align-items: baseline; text-decoration: none;
+    padding: 6px 8px; border-radius: 8px; font-size: 12.8px; color: var(--muted);
+  }
+  nav.toc a::before {
+    content: counter(navstep, decimal-leading-zero); font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px; color: var(--muted); opacity: .65; flex-shrink: 0;
+  }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+  main { flex: 1; min-width: 0; padding: 44px 40px 100px; max-width: 900px; }
+
+  /* ---------- Header ---------- */
+  header.top { margin-bottom: 8px; }
+  header.top .eyebrow {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent-ink); margin-bottom: 10px;
+  }
+  header.top h1 { font-size: clamp(28px, 4vw, 38px); font-weight: 500; margin: 0 0 10px; line-height: 1.15; }
+  header.top p.lede { color: var(--muted); font-size: 16px; max-width: 62ch; margin: 0 0 26px; }
+
+  /* ---------- Stat row ---------- */
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 40px; }
+  .stat { background: var(--surface); padding: 16px 14px; }
+  .stat .n { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .stat.good .n { color: var(--good); }
+  .stat.warn .n { color: var(--warn); }
+  .stat.bad .n { color: var(--bad); }
+
+  section { padding-top: 40px; scroll-margin-top: 20px; }
+  section + section { border-top: 1px solid var(--line-soft); }
+  section h2 {
+    font-size: 22px; font-weight: 500; margin: 0 0 6px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  section h2 .num { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--muted); font-weight: 400; }
+  section > .dek { color: var(--muted); font-size: 14.5px; margin: 0 0 20px; max-width: 68ch; }
+  section h3 { font-size: 16px; font-weight: 600; margin: 26px 0 10px; }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  ul, ol.plain { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+
+  /* ---------- Pills ---------- */
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 9px 3px 7px; border-radius: 999px; white-space: nowrap; }
+  .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .pill.done { background: var(--good-soft); color: var(--good); }
+  .pill.done::before { background: var(--good); }
+  .pill.partial { background: var(--warn-soft); color: var(--warn); }
+  .pill.partial::before { background: var(--warn); }
+  .pill.blocked { background: var(--bad-soft); color: var(--bad); }
+  .pill.blocked::before { background: var(--bad); }
+  .pill.info { background: var(--accent-soft); color: var(--accent-ink); }
+  .pill.info::before { background: var(--accent); }
+
+  /* ---------- Table ---------- */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.8px; }
+  thead th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--muted); font-weight: 600; padding: 10px 14px; background: var(--line-soft);
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td code { font-size: 12.3px; background: var(--line-soft); padding: 1px 6px; border-radius: 5px; }
+
+  /* ---------- Migration ledger ---------- */
+  .ledger { list-style: none; margin: 0 0 8px; padding: 0; counter-reset: mig; }
+  .ledger li {
+    counter-increment: mig; display: flex; gap: 14px; padding: 13px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .ledger li:last-child { border-bottom: none; }
+  .ledger .idx {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--accent-ink);
+    background: var(--accent-soft); border-radius: 6px; width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+  }
+  .ledger .file { font-family: 'IBM Plex Mono', monospace; font-size: 12.8px; display: block; margin-bottom: 3px; word-break: break-all; }
+  .ledger .desc { font-size: 13.6px; color: var(--muted); margin: 0; }
+  .ledger-note {
+    font-size: 13px; color: var(--accent-ink); background: var(--accent-soft);
+    border-radius: 10px; padding: 12px 16px; margin: 14px 0 20px;
+  }
+
+  /* ---------- Route/API groups ---------- */
+  .group-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 8px; }
+  .route-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .route-list li { display: flex; gap: 10px; align-items: baseline; padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
+  .route-list li:first-child { border-radius: 10px 10px 0 0; }
+  .route-list li:last-child { border-radius: 0 0 10px 10px; }
+  .route-list li + li { border-top: none; }
+  .route-list li:only-child { border-radius: 10px; }
+  .method { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 500; padding: 2px 6px; border-radius: 5px; flex-shrink: 0; }
+  .method.get { background: var(--good-soft); color: var(--good); }
+  .method.post { background: var(--accent-soft); color: var(--accent-ink); }
+  .method.patch { background: var(--warn-soft); color: var(--warn); }
+  .method.delete { background: var(--bad-soft); color: var(--bad); }
+  .route-list code { font-family: 'IBM Plex Mono', monospace; font-size: 12.6px; }
+  .route-list .tag { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+  /* ---------- Checklist ---------- */
+  .checklist { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .checklist li {
+    counter-increment: step; display: flex; gap: 12px; padding: 14px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist input[type="checkbox"] {
+    appearance: none; width: 19px; height: 19px; border: 1.5px solid var(--line); border-radius: 6px;
+    flex-shrink: 0; margin-top: 2px; cursor: pointer; position: relative; background: var(--surface);
+  }
+  .checklist input[type="checkbox"]:checked { background: var(--good); border-color: var(--good); }
+  .checklist input[type="checkbox"]:checked::after {
+    content: ''; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px;
+    border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  .checklist input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .checklist .step-num {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted);
+    min-width: 16px; flex-shrink: 0; margin-top: 2px;
+  }
+  .checklist .step-body { flex: 1; }
+  .checklist .step-body strong { display: block; font-size: 14.3px; margin-bottom: 3px; }
+  .checklist .step-body span { font-size: 13.3px; color: var(--muted); }
+  .checklist label.checked .step-body strong { text-decoration: line-through; opacity: .6; }
+
+  /* ---------- Finding cards ---------- */
+  .finding {
+    border: 1px solid var(--line); border-left: 3px solid var(--bad); border-radius: 0 10px 10px 0;
+    padding: 14px 16px; margin-bottom: 12px; background: var(--surface);
+  }
+  .finding.fixed { border-left-color: var(--good); }
+  .finding .ftitle { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; font-size: 13.8px; }
+  .finding p { margin: 0; font-size: 13.3px; color: var(--muted); }
+  .finding p + p { margin-top: 6px; }
+
+  .env-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 8px; margin-bottom: 16px; }
+  .env-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; background: var(--surface); }
+  .env-item code { font-size: 12.4px; display: block; margin-bottom: 3px; }
+  .env-item span { font-size: 12px; color: var(--muted); }
+
+  blockquote {
+    margin: 0 0 20px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; font-size: 13.5px; color: var(--muted);
+  }
+  blockquote code { background: var(--line-soft); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+
+  .terminal {
+    background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 12.6px;
+    padding: 16px 18px; border-radius: 10px; margin-bottom: 18px; line-height: 1.7; overflow-x: auto;
+  }
+  .terminal .ok { color: #7cc48f; }
+  .terminal .dim { opacity: .55; }
+
+  footer.end { padding: 40px 0 10px; color: var(--muted); font-size: 12.5px; }
+
+  @media (max-width: 860px) {
+    nav.toc { display: none; }
+    main { padding: 30px 20px 80px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Sumário">
+    <div class="brand">Wednest</div>
+    <div class="brand-sub">Fornecedores — Fases 5–9</div>
+    <ol>
+      <li><a href="#comparativo">Comparativo final</a></li>
+      <li><a href="#resumo">O que foi implementado</a></li>
+      <li><a href="#migrations">Migrations em ordem</a></li>
+      <li><a href="#sql">SQL para aplicar</a></li>
+      <li><a href="#rotas">Novas rotas</a></li>
+      <li><a href="#apis">Novas APIs</a></li>
+      <li><a href="#rls">RLS e policies</a></li>
+      <li><a href="#mp">Mercado Pago</a></li>
+      <li><a href="#cupons">Cupons</a></li>
+      <li><a href="#cancelamento">Cancelamento</a></li>
+      <li><a href="#admin">Admin</a></li>
+      <li><a href="#seguranca">Auditoria de segurança</a></li>
+      <li><a href="#qa">npm run validate</a></li>
+      <li><a href="#pendentes">Testes não executados</a></li>
+      <li><a href="#env">Variáveis de ambiente</a></li>
+      <li><a href="#dividas">Dívidas técnicas</a></li>
+      <li><a href="#roteiro">Roteiro manual</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="top">
+      <div class="eyebrow">Relatório de entrega · 31 ago 2026</div>
+      <h1>Módulo de Fornecedores — Fases 5 a 9</h1>
+      <p class="lede">Do schema que já existia até um marketplace que cobra, aprova, administra e se protege sozinho. Cinco commits, seis migrations novas, zero regressão conhecida sem correção.</p>
+    </header>
+
+    <div class="stats">
+      <div class="stat good"><div class="n">5</div><div class="l">fases concluídas (5–9)</div></div>
+      <div class="stat good"><div class="n">6</div><div class="l">migrations novas</div></div>
+      <div class="stat good"><div class="n">5</div><div class="l">commits organizados</div></div>
+      <div class="stat good"><div class="n">205</div><div class="l">testes passando</div></div>
+      <div class="stat warn"><div class="n">1</div><div class="l">regressão achada e corrigida</div></div>
+    </div>
+
+    <!-- ============ 1. COMPARATIVO ============ -->
+    <section id="comparativo">
+      <h2><span class="num">01</span> Comparativo final</h2>
+      <p class="dek">Requisito do prompt de execução vs. o que está de fato no código, com o arquivo que prova cada linha.</p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Requisito</th><th>Status</th><th>Evidência</th></tr></thead>
+          <tbody>
+            <tr><td>Checkout real (mensal + vitalício) no Mercado Pago</td><td><span class="pill done">concluído</span></td><td><code>vendor/billing/checkout/route.ts</code></td></tr>
+            <tr><td>Webhook isolado de fornecedor</td><td><span class="pill done">concluído</span></td><td><code>webhooks/mercadopago-vendor/route.ts</code></td></tr>
+            <tr><td>Cancelamento de assinatura mensal</td><td><span class="pill done">concluído</span></td><td><code>vendor/billing/cancel-subscription/route.ts</code></td></tr>
+            <tr><td>Cupons percent/fixed/free_days funcionando de ponta a ponta</td><td><span class="pill done">concluído</span></td><td><code>vendor/coupons/redeem/route.ts</code> + <code>fn_redeem_vendor_coupon</code></td></tr>
+            <tr><td>Preços administráveis sem deploy</td><td><span class="pill done">concluído</span></td><td><code>admin/fornecedores/planos</code></td></tr>
+            <tr><td>Painel do fornecedor: perfil editável pós-onboarding</td><td><span class="pill done">concluído</span></td><td><code>fornecedor/perfil/page.tsx</code></td></tr>
+            <tr><td>Painel do fornecedor: portfólio (upload/reordenar/excluir)</td><td><span class="pill done">concluído</span></td><td><code>vendor-profile-manager.tsx</code></td></tr>
+            <tr><td>Painel do fornecedor: gestão de assinatura</td><td><span class="pill done">concluído</span></td><td><code>vendor-subscription-manager.tsx</code></td></tr>
+            <tr><td>Admin: aprovar/rejeitar/suspender/reativar/pausar</td><td><span class="pill done">concluído</span></td><td><code>admin/vendors/[id]/status/route.ts</code></td></tr>
+            <tr><td>Admin: marcar/desmarcar destaque</td><td><span class="pill done">concluído</span></td><td><code>admin/vendors/[id]/feature/route.ts</code></td></tr>
+            <tr><td>Admin: <code>vendor_admin_actions</code> deixa de ser tabela morta</td><td><span class="pill done">concluído</span></td><td>toda ação grava linha de auditoria</td></tr>
+            <tr><td>Admin: planos, cupons, categorias configuráveis</td><td><span class="pill done">concluído</span></td><td><code>admin/fornecedores/{planos,cupons,categorias}</code></td></tr>
+            <tr><td>Defesa em profundidade: campos privilegiados travados no banco</td><td><span class="pill done">concluído</span></td><td>trigger em <code>vendor_profiles</code>/<code>vendor_messages</code></td></tr>
+            <tr><td>Portfólio: sanitização de nome/extensão/MIME no servidor</td><td><span class="pill done">concluído</span></td><td><code>validate-portfolio-path.ts</code></td></tr>
+            <tr><td>Portfólio: limite de itens (banco + API)</td><td><span class="pill done">concluído</span></td><td>trigger + checagem em <code>vendor/portfolio/route.ts</code></td></tr>
+            <tr><td>LGPD: expurgo cobre conta 100% fornecedor + bucket <code>vendor-portfolio</code></td><td><span class="pill done">concluído</span></td><td><code>cron/purge-accounts/route.ts</code></td></tr>
+            <tr><td>Auditoria formal de segurança com testes negativos</td><td><span class="pill done">concluído</span></td><td>ver seção <a href="#seguranca">Auditoria</a></td></tr>
+            <tr><td>Preço nunca confiado a partir do browser</td><td><span class="pill done">concluído</span></td><td>teste em <code>vendor/billing/checkout/route.test.ts</code></td></tr>
+            <tr><td>Cancelamento com carência quando há período pago conhecido</td><td><span class="pill partial">parcial</span></td><td>código pronto, mas <code>current_period_end</code> nunca é populado — ver <a href="#dividas">dívidas</a></td></tr>
+            <tr><td>Suíte E2E completa cadastro→pagamento→marketplace→chat</td><td><span class="pill partial">parcial</span></td><td>coberto por testes de unidade + RLS; sem infraestrutura de E2E no projeto</td></tr>
+            <tr><td>RLS suite rodada contra Postgres real nesta sessão</td><td><span class="pill blocked">bloqueado</span></td><td>sandbox sem Supabase local — ver <a href="#pendentes">pendentes</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 2. RESUMO ============ -->
+    <section id="resumo">
+      <h2><span class="num">02</span> O que foi implementado</h2>
+      <p class="dek">Fases 1–4 (banco, onboarding, marketplace, chat) já estavam de pé e foram tratadas como baseline — só tocadas quando um requisito de segurança ou integração exigia. Todo o resto abaixo é novo.</p>
+
+      <h3>Fase 5 — Billing completo</h3>
+      <p>Checkout real (Preference para vitalício, Preapproval para mensal), webhook isolado que sempre reconsulta o Mercado Pago antes de conceder qualquer entitlement, cupons funcionando de ponta a ponta, e cancelamento que registra histórico sem apagar nada.</p>
+
+      <h3>Fase 6 — Painel do fornecedor</h3>
+      <p>Três telas novas: <code>/fornecedor/perfil</code> (dados comerciais + portfólio com upload, mover e excluir), <code>/fornecedor/assinatura</code> (planos com preço vindo do banco, cupom, contratar, cancelar) e navegação atualizada no topo do painel.</p>
+
+      <h3>Fase 7 — Admin</h3>
+      <p>Listagem e detalhe de fornecedores com ações administrativas completas, mais três telas de configuração (planos, cupons, categorias) — nada disso existia antes; aprovação era SQL manual no Supabase Studio.</p>
+
+      <h3>Fase 8 — Segurança</h3>
+      <p>Uma regressão real foi encontrada e corrigida durante a própria auditoria (ver <a href="#seguranca">seção 12</a>) — o tipo de bug que só aparece quando se revisa cada caminho de escrita, não só os novos.</p>
+
+      <h3>Fase 9 — QA</h3>
+      <p><code>npm run validate</code> limpo, mais 26 casos de teste novos entre unidade e RLS.</p>
+    </section>
+
+    <!-- ============ 3. MIGRATIONS ============ -->
+    <section id="migrations">
+      <h2><span class="num">03</span> Migrations novas, em ordem</h2>
+      <p class="dek">Todas append-only, nenhuma migration antiga foi alterada. RLS habilitada desde a criação de qualquer tabela nova (não houve tabela nova nesta rodada — só triggers, policies e functions sobre o schema da Fase 1).</p>
+
+      <ol class="ledger">
+        <li>
+          <span class="idx">1</span>
+          <div>
+            <code class="file">20260831000001_protect-vendor-privileged-fields.sql</code>
+            <p class="desc">Trigger em <code>vendor_profiles</code> e <code>vendor_messages</code>: reverte status/featured/rejection_reason/deleted_at (e body/sender_user_id/conversation_id em mensagens) pro valor anterior sempre que quem escreve não é admin nem service role.</p>
+          </div>
+        </li>
+        <li>
+          <span class="idx">2</span>
+          <div>
+            <code class="file">20260831000002_add-vendor-portfolio-item-limit.sql</code>
+            <p class="desc">Trigger BEFORE INSERT em <code>vendor_portfolio_items</code> recusando o 31º item por fornecedor.</p>
+          </div>
+        </li>
+        <li>
+          <span class="idx">3</span>
+          <div>
+            <code class="file">20260831000003_fix-vendor-payment-checkouts-write-policies.sql</code>
+            <p class="desc">Policies de INSERT/UPDATE em <code>vendor_payment_checkouts</code>, escopadas por <code>fn_owns_vendor</code> — sem isso o checkout falharia com "row-level security policy" (mesmo bug já corrigido do lado do casal em 20260723000006).</p>
+          </div>
+        </li>
+        <li>
+          <span class="idx">4</span>
+          <div>
+            <code class="file">20260831000004_add-pending-vendor-coupon-discount-fn.sql</code>
+            <p class="desc"><code>fn_get_pending_vendor_coupon_discount</code> — espelha a function já usada do lado do casal, expõe só o desconto pendente sem abrir leitura direta de <code>vendor_coupons</code> pro fornecedor.</p>
+          </div>
+        </li>
+        <li>
+          <span class="idx">5</span>
+          <div>
+            <code class="file">20260831000005_extend-purge-for-vendor-only-accounts.sql</code>
+            <p class="desc"><code>CREATE OR REPLACE</code> em <code>fn_purge_soft_deleted_accounts</code> — passa a expurgar também contas sem nenhum casamento (100% fornecedor), que antes nunca eram selecionadas.</p>
+          </div>
+        </li>
+        <li>
+          <span class="idx">6</span>
+          <div>
+            <code class="file">20260831000006_fix-vendor-profile-trigger-self-service-transition.sql</code>
+            <p class="desc">Corrige a migration 1: libera exatamente a transição <code>draft</code>/<code>rejected</code> → <code>pending_review</code> mesmo pra quem não é admin — é a única mudança de status que o próprio fornecedor tem permissão de disparar, e a primeira versão do trigger a bloqueava por engano.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="ledger-note">A migration 6 existe porque o trigger da migration 1, na primeira versão, quebrava silenciosamente o reenvio de cadastro pra análise (<code>POST /api/v1/vendor/submit-for-review</code>). Achado revisando cada UPDATE real em <code>vendor_profiles</code> antes de fechar a auditoria — não por um teste automatizado (os testes de rota usam mock, não pegam trigger de banco).</div>
+    </section>
+
+    <!-- ============ 4. SQL ============ -->
+    <section id="sql">
+      <h2><span class="num">04</span> SQL para aplicar manualmente</h2>
+      <p class="dek">O projeto aplica migrations pelo SQL Editor do Supabase. Rode os 6 arquivos acima, nesta ordem exata, no ambiente de produção/staging.</p>
+      <div class="terminal">
+<span class="dim">-- cole o conteúdo de cada arquivo, um de cada vez, nesta ordem:</span><br>
+1. 20260831000001_protect-vendor-privileged-fields.sql<br>
+2. 20260831000002_add-vendor-portfolio-item-limit.sql<br>
+3. 20260831000003_fix-vendor-payment-checkouts-write-policies.sql<br>
+4. 20260831000004_add-pending-vendor-coupon-discount-fn.sql<br>
+5. 20260831000005_extend-purge-for-vendor-only-accounts.sql<br>
+6. 20260831000006_fix-vendor-profile-trigger-self-service-transition.sql
+      </div>
+      <blockquote>Nenhuma das seis mexe em dado existente — só criam trigger/function/policy novos ou substituem uma function por <code>CREATE OR REPLACE</code> com a mesma assinatura. Sem <code>ALTER TABLE ... DROP</code>, sem risco de perda de dado.</blockquote>
+    </section>
+
+    <!-- ============ 5. ROTAS ============ -->
+    <section id="rotas">
+      <h2><span class="num">05</span> Novas rotas (páginas)</h2>
+
+      <div class="group-label">Painel do fornecedor</div>
+      <ul class="route-list">
+        <li><code>/fornecedor/perfil</code><span class="tag">edição comercial + portfólio</span></li>
+        <li><code>/fornecedor/assinatura</code><span class="tag">planos, cupom, contratar, cancelar</span></li>
+      </ul>
+
+      <div class="group-label">Admin</div>
+      <ul class="route-list">
+        <li><code>/admin/fornecedores</code><span class="tag">lista + filtros</span></li>
+        <li><code>/admin/fornecedores/[id]</code><span class="tag">detalhe + ações</span></li>
+        <li><code>/admin/fornecedores/planos</code><span class="tag">preço sem deploy</span></li>
+        <li><code>/admin/fornecedores/cupons</code><span class="tag">criar/ativar/desativar/remover</span></li>
+        <li><code>/admin/fornecedores/categorias</code><span class="tag">criar/ativar/desativar</span></li>
+      </ul>
+    </section>
+
+    <!-- ============ 6. APIS ============ -->
+    <section id="apis">
+      <h2><span class="num">06</span> Novas APIs</h2>
+
+      <div class="group-label">Billing do fornecedor</div>
+      <ul class="route-list">
+        <li><span class="method post">POST</span><code>/api/v1/vendor/billing/checkout</code></li>
+        <li><span class="method post">POST</span><code>/api/v1/vendor/billing/cancel-subscription</code></li>
+        <li><span class="method post">POST</span><code>/api/v1/vendor/coupons/redeem</code></li>
+        <li><span class="method post">POST</span><code>/api/v1/webhooks/mercadopago-vendor</code><span class="tag">público, sem sessão</span></li>
+      </ul>
+
+      <div class="group-label">Portfólio (modificadas)</div>
+      <ul class="route-list">
+        <li><span class="method post">POST</span><code>/api/v1/vendor/portfolio</code><span class="tag">+ limite + validação de nome</span></li>
+        <li><span class="method patch">PATCH</span><code>/api/v1/vendor/portfolio/[id]</code><span class="tag">novo — reordenar/legenda</span></li>
+      </ul>
+
+      <div class="group-label">Admin — fornecedores</div>
+      <ul class="route-list">
+        <li><span class="method get">GET</span><code>/api/v1/admin/vendors</code></li>
+        <li><span class="method get">GET</span><code>/api/v1/admin/vendors/[id]</code></li>
+        <li><span class="method post">POST</span><code>/api/v1/admin/vendors/[id]/status</code></li>
+        <li><span class="method post">POST</span><code>/api/v1/admin/vendors/[id]/feature</code></li>
+      </ul>
+
+      <div class="group-label">Admin — configuração</div>
+      <ul class="route-list">
+        <li><span class="method get">GET</span><span class="method post">POST</span><code>/api/v1/admin/vendor-plans</code></li>
+        <li><span class="method patch">PATCH</span><code>/api/v1/admin/vendor-plans/[id]</code></li>
+        <li><span class="method get">GET</span><span class="method post">POST</span><code>/api/v1/admin/vendor-coupons</code></li>
+        <li><span class="method patch">PATCH</span><span class="method delete">DELETE</span><code>/api/v1/admin/vendor-coupons/[id]</code></li>
+        <li><span class="method get">GET</span><span class="method post">POST</span><code>/api/v1/admin/vendor-categories</code></li>
+        <li><span class="method patch">PATCH</span><code>/api/v1/admin/vendor-categories/[id]</code></li>
+      </ul>
+
+      <div class="group-label">Alteradas (não-vendor)</div>
+      <ul class="route-list">
+        <li><span class="method delete">DELETE</span><code>/api/v1/account/delete</code><span class="tag">soft-delete de vendor_profiles também</span></li>
+        <li><span class="method get">GET</span><code>/api/cron/purge-accounts</code><span class="tag">limpa bucket vendor-portfolio</span></li>
+      </ul>
+    </section>
+
+    <!-- ============ 7. RLS ============ -->
+    <section id="rls">
+      <h2><span class="num">07</span> RLS, triggers e functions</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>Tipo</th><th>O que faz</th></tr></thead>
+          <tbody>
+            <tr><td><code>fn_protect_vendor_profile_privileged_fields</code></td><td>trigger fn</td><td>trava status/featured/rejection_reason/deleted_at/user_id fora de admin/service_role, exceto a transição de auto-envio</td></tr>
+            <tr><td><code>fn_protect_vendor_message_immutable_fields</code></td><td>trigger fn</td><td>trava tudo em vendor_messages exceto deleted_at (soft delete)</td></tr>
+            <tr><td><code>fn_enforce_vendor_portfolio_item_limit</code></td><td>trigger fn</td><td>recusa o item 31 do portfólio</td></tr>
+            <tr><td><code>fn_get_pending_vendor_coupon_discount</code></td><td>function</td><td>expõe desconto pendente sem abrir leitura de vendor_coupons</td></tr>
+            <tr><td><code>fn_purge_soft_deleted_accounts</code></td><td>function (alterada)</td><td>agora expurga também contas 100% fornecedor</td></tr>
+            <tr><td>"vendor can insert own payment checkouts"</td><td>policy</td><td>INSERT em vendor_payment_checkouts, escopado por fn_owns_vendor</td></tr>
+            <tr><td>"vendor can update own payment checkouts"</td><td>policy</td><td>UPDATE em vendor_payment_checkouts, mesma checagem</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>vendor_subscriptions</code> continua sem NENHUMA policy de escrita para <code>authenticated</code> — toda ativação passa por service role (webhook) ou pela RPC <code>fn_redeem_vendor_coupon</code>, nunca pelo client direto.</p>
+    </section>
+
+    <!-- ============ 8. MERCADO PAGO ============ -->
+    <section id="mp">
+      <h2><span class="num">08</span> Como o Mercado Pago funciona aqui</h2>
+      <p><strong>Mensal (R$ 20,00):</strong> o fornecedor escolhe o plano em <code>/fornecedor/assinatura</code> → o servidor busca o preço em <code>vendor_plans</code> (nunca aceita valor do browser) → cria uma <em>Preapproval</em> → redireciona pro checkout → o webhook confirma <code>authorized</code> e ativa a assinatura.</p>
+      <p><strong>Vitalício (R$ 500,00):</strong> mesmo fluxo, mas cria uma <em>Preference</em> (Checkout Pro) de pagamento único. Assinatura vira <code>active</code> com <code>expires_at = NULL</code> para sempre — mesma convenção já usada no plano único do casal, nunca uma data futura fake.</p>
+      <p><strong>Segurança do webhook:</strong> nunca confia no corpo da notificação nem exige assinatura sempre (o IPN legado do Mercado Pago não assina) — sempre rebusca o pagamento/preapproval direto na API deles antes de ativar qualquer coisa. Idempotente via chave <code>vendor:{tipo}:{id}:{status}</code>, namespaced pra nunca colidir com o webhook do casal mesmo que os dois dividam a mesma tabela de eventos.</p>
+    </section>
+
+    <!-- ============ 9. CUPONS ============ -->
+    <section id="cupons">
+      <h2><span class="num">09</span> Como os cupons funcionam</h2>
+      <p><code>percent</code> e <code>fixed</code> reduzem o valor cobrado no próximo checkout — resgatados via <code>fn_redeem_vendor_coupon</code> (lock <code>FOR UPDATE</code> contra corrida, único resgate por fornecedor via constraint), só "gastos" de verdade quando o webhook confirma o pagamento; um checkout abandonado deixa o cupom livre de novo.</p>
+      <p><code>free_days</code> concede a assinatura direto, sem gateway nenhum — funciona mesmo sem nenhum pagamento passar pelo Mercado Pago.</p>
+      <p>Totalmente isolado dos cupons do casal: tabela própria, RPC própria, nunca há como um cupom de fornecedor valer pra um plano de casamento ou vice-versa.</p>
+    </section>
+
+    <!-- ============ 10. CANCELAMENTO ============ -->
+    <section id="cancelamento">
+      <h2><span class="num">10</span> Como o cancelamento funciona</h2>
+      <p>Só para o plano mensal — vitalício nunca mostra a opção (foi pago uma vez, não tem o que cancelar). O fornecedor confirma em <code>/fornecedor/assinatura</code>, o servidor chama <code>cancelPreapproval</code> no Mercado Pago e marca a assinatura no banco. Histórico nunca é apagado.</p>
+      <p>Se houver um <code>current_period_end</code> conhecido e ainda não vencido, o acesso pago continua até lá (<code>cancel_at_period_end = true</code>, status segue <code>active</code>). Isso está pronto no código, mas — dívida técnica real — nem o webhook do casal nem o do fornecedor populam essa coluna hoje, então na prática todo cancelamento é imediato. Ver <a href="#dividas">seção 16</a>.</p>
+    </section>
+
+    <!-- ============ 11. ADMIN ============ -->
+    <section id="admin">
+      <h2><span class="num">11</span> O que o admin pode configurar sem deploy</h2>
+      <ul>
+        <li>Aprovar, rejeitar (com motivo), suspender (com motivo), reativar e pausar qualquer fornecedor — cada ação vira uma linha em <code>vendor_admin_actions</code>.</li>
+        <li>Marcar/desmarcar destaque.</li>
+        <li>Editar nome, preço e status ativo dos dois planos de fornecedor (<code>vendor_monthly</code>/<code>vendor_lifetime</code>) — alterar o preço nunca reescreve o valor de checkouts já cobrados, que ficam gravados em <code>amount_cents</code> no momento da compra.</li>
+        <li>Criar, ativar/desativar e remover cupons de fornecedor (percent, fixed, dias grátis, limite de usos, validade).</li>
+        <li>Criar, editar e ativar/desativar categorias de fornecedor.</li>
+      </ul>
+    </section>
+
+    <!-- ============ 12. SEGURANÇA ============ -->
+    <section id="seguranca">
+      <h2><span class="num">12</span> Resultado da auditoria de segurança</h2>
+      <p class="dek">Revisão adversarial de cada caminho de escrita novo, testando identidade, IDOR, chat, storage, billing e admin — não considerando "tem RLS" prova suficiente em nenhum caso.</p>
+
+      <div class="finding fixed">
+        <div class="ftitle">🔧 Corrigido — regressão no trigger de proteção</div>
+        <p><strong>Teste:</strong> revisar todo caller real de UPDATE em <code>vendor_profiles</code> com o client autenticado normal (não admin, não service role).</p>
+        <p><strong>Achado:</strong> a primeira versão do trigger de defesa em profundidade travava <em>qualquer</em> mudança de status — inclusive a única transição legítima que o próprio fornecedor pode disparar (<code>draft</code>/<code>rejected</code> → <code>pending_review</code>). O reenvio de cadastro pra análise quebrava silenciosamente.</p>
+        <p><strong>Correção:</strong> migration 6 libera exatamente essa transição, mantendo tudo o mais travado. Teste de RLS novo cobre o caso.</p>
+      </div>
+
+      <h3>Testado e confirmado seguro</h3>
+      <ul>
+        <li><strong>Identidade</strong> — fornecedor não consegue virar <code>active</code>/<code>featured</code> nem apagar o motivo de rejeição via UPDATE direto no Supabase (trigger reverte pro valor anterior).</li>
+        <li><strong>IDOR em billing</strong> — um fornecedor não cria nem atualiza checkout em nome de outro (<code>fn_owns_vendor</code> escopando as duas policies novas).</li>
+        <li><strong>Mass assignment no checkout</strong> — preço/valor injetado no corpo da requisição é ignorado; o servidor sempre lê de <code>vendor_plans</code>.</li>
+        <li><strong>Webhook falso</strong> — nunca ativa nada sem antes rebuscar o pagamento/preapproval direto na API do Mercado Pago.</li>
+        <li><strong>Webhook repetido/idempotência</strong> — segunda entrega do mesmo evento (inclusive pending→approved do mesmo id) é ignorada por constraint UNIQUE.</li>
+        <li><strong>Isolamento wedding/vendor no webhook</strong> — impossível estruturalmente: tabelas, geradores de referência e chave de idempotência são todos diferentes; testado explicitamente.</li>
+        <li><strong>Admin API</strong> — todas as rotas novas usam <code>requireAdmin()</code>, retornando 404 (não 403) pra não revelar a existência do painel; coberto por teste de unidade.</li>
+        <li><strong>Mensagens</strong> — mesmo o remetente não reescreve <code>body</code>/<code>sender_user_id</code> via UPDATE direto; só <code>deleted_at</code> passa.</li>
+        <li><strong>Storage/portfólio</strong> — nome de arquivo revalidado no servidor (charset seguro + extensão batendo o MIME real reportado pelo Storage, não o que o client alegou); limite de 30 itens no banco, não só escondendo o botão.</li>
+        <li><strong>Fornecedor suspenso</strong> — some do marketplace e do perfil público imediatamente (<code>fn_vendor_is_publicly_visible</code> exige <code>status = 'active'</code>, checado antes de qualquer signed URL).</li>
+      </ul>
+
+      <h3>Risco residual (aceito, documentado)</h3>
+      <p>As policies de UPDATE de linha inteira em <code>vendor_profiles</code>/<code>vendor_messages</code> continuam existindo — a defesa real virou o trigger, não a ausência da policy. Se um PR futuro adicionar uma nova coluna sensível a qualquer uma das duas tabelas, ela entra <em>editável por padrão</em> a menos que alguém lembre de incluí-la no trigger. Vale um lint/checklist de revisão nessas duas tabelas especificamente.</p>
+    </section>
+
+    <!-- ============ 13. QA ============ -->
+    <section id="qa">
+      <h2><span class="num">13</span> Resultado de <code>npm run validate</code></h2>
+      <div class="terminal">
+$ npm run validate<br><br>
+&gt; type-check<br>
+&gt; tsc --noEmit <span class="ok">✓ 0 erros</span><br><br>
+&gt; lint<br>
+&gt; eslint src --max-warnings 0 <span class="ok">✓ 0 erros, 0 avisos</span><br><br>
+&gt; test<br>
+&gt; vitest run<br>
+Test Files  40 passed | 6 skipped (46)<br>
+     Tests  <span class="ok">205 passed</span> | 37 skipped (242)
+      </div>
+      <p>Os 6 arquivos/37 casos pulados são a suíte de RLS (<code>src/tests/rls/*</code>) — pulam automaticamente (não falham) quando não há um Supabase local rodando, mesmo padrão já usado desde antes desta rodada de trabalho.</p>
+    </section>
+
+    <!-- ============ 14. PENDENTES ============ -->
+    <section id="pendentes">
+      <h2><span class="num">14</span> Testes que não puderam ser executados</h2>
+      <ul>
+        <li><strong>Suíte de RLS contra Postgres real</strong> (6 arquivos, 37 casos, incluindo os novos que provam o trigger de proteção e o isolamento de billing) — exige <code>supabase start</code> + chaves reais, indisponível neste ambiente. Recomendo rodar <code>npm test</code> com o Supabase local ativo antes de aplicar as migrations em produção.</li>
+        <li><strong>Sandbox real do Mercado Pago</strong> — checkout e webhook foram testados com a fronteira externa mockada, exatamente como autorizado; nenhuma chamada real foi feita à API deles.</li>
+        <li><strong>E2E de navegador</strong> — o projeto não tem Playwright/Cypress hoje; criar essa infraestrutura do zero ficou fora do escopo desta rodada. A cobertura ponta-a-ponta vem de testes de unidade (rota por rota) + RLS (autorização real).</li>
+      </ul>
+    </section>
+
+    <!-- ============ 15. ENV ============ -->
+    <section id="env">
+      <h2><span class="num">15</span> Variáveis de ambiente</h2>
+      <p><strong>Nenhuma variável nova foi necessária.</strong> Todo o billing de fornecedor reutiliza as credenciais já configuradas para o billing do casal:</p>
+      <div class="env-grid">
+        <div class="env-item"><code>MERCADOPAGO_ACCESS_TOKEN</code><span>token de venda da própria Wednest</span></div>
+        <div class="env-item"><code>MERCADOPAGO_WEBHOOK_SECRET</code><span>validação de assinatura (defesa extra)</span></div>
+        <div class="env-item"><code>NEXT_PUBLIC_APP_URL</code><span>monta notification_url/back_urls</span></div>
+        <div class="env-item"><code>SUPABASE_SERVICE_ROLE_KEY</code><span>webhook + cron de expurgo</span></div>
+        <div class="env-item"><code>CRON_SECRET</code><span>protege /api/cron/purge-accounts</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 16. DÍVIDAS ============ -->
+    <section id="dividas">
+      <h2><span class="num">16</span> Dívidas técnicas restantes</h2>
+      <ul>
+        <li><strong><code>current_period_end</code> nunca é populado</strong> — nem pelo webhook do casal, nem pelo do fornecedor. O ramo de cancelamento-com-carência está pronto e testável, mas cai sempre em cancelamento imediato até essa coluna ganhar um valor real vindo do Mercado Pago.</li>
+        <li><strong>Taxonomia duplicada</strong> — <code>vendor_categories</code> ainda não é a fonte única de verdade do questionário de onboarding do casal (<code>FORNECEDORES_OPTS</code>). Dívida documentada desde a Fase 1, mantida por decisão explícita (fora de escopo, risco de regressão maior que o ganho).</li>
+        <li><strong>Reordenação de portfólio é por botões</strong> (mover pra trás/frente), não arrastar-e-soltar — mais simples, cobre o requisito, mas é menos fluida.</li>
+        <li><strong>Sem notificação por e-mail/push</strong> quando o admin aprova/rejeita/suspende um fornecedor, ou quando chega mensagem nova no chat.</li>
+        <li><strong>Sem CRM nem avaliações</strong> — por instrução explícita, arquitetura deixada preparada mas nada construído.</li>
+        <li><strong>Categorias sem DELETE</strong> — só <code>active = false</code>, de propósito (<code>vendor_category_links.category_id</code> é <code>ON DELETE RESTRICT</code>).</li>
+      </ul>
+    </section>
+
+    <!-- ============ 17. ROTEIRO ============ -->
+    <section id="roteiro">
+      <h2><span class="num">17</span> Roteiro de teste manual</h2>
+      <p class="dek">Os checkboxes ficam salvos só no seu navegador — sirva de checklist ao validar em staging/produção.</p>
+
+      <ol class="checklist" id="checklist">
+        <li>
+          <span class="step-num">1</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="1">
+            <strong>Cadastro de fornecedor</strong>
+            <span>Crie uma conta nova → vá em <code>/fornecedor/cadastro</code> → complete os 4 passos (empresa, categoria, portfólio, revisão) → confirme que <code>/fornecedor</code> mostra "Em análise".</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="2">
+            <strong>Pagamento</strong>
+            <span>Em <code>/fornecedor/assinatura</code>, clique "Contratar" no plano mensal → complete o checkout do Mercado Pago (sandbox) → confirme que a assinatura aparece como "Ativa" após o webhook processar (pode levar alguns segundos).</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="3">
+            <strong>Aprovação pelo admin</strong>
+            <span>Como admin, acesse <code>/admin/fornecedores</code> → filtre por "Em análise" → abra o fornecedor → clique "Aprovar" → confirme o status virar "active" e a ação aparecer no histórico.</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="4">
+            <strong>Fornecedor aparecendo no marketplace</strong>
+            <span>Como um casal, acesse <code>/fornecedores</code> → busque pela empresa cadastrada → confirme que aparece (só some se faltar assinatura ativa OU aprovação).</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">5</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="5">
+            <strong>Noivo iniciando conversa</strong>
+            <span>No perfil público do fornecedor (<code>/profissionais/[slug]</code>), clique em "Conversar" → mande uma mensagem → confirme que aparece em <code>/fornecedores/conversas</code>.</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">6</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="6">
+            <strong>Fornecedor respondendo em Realtime</strong>
+            <span>Com as duas abas abertas (casal e fornecedor logados), responda em <code>/fornecedor/conversas</code> → confirme que a mensagem aparece na aba do casal sem recarregar a página, e sem duplicar.</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">7</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="7">
+            <strong>Aplicação de cupom</strong>
+            <span>Como admin, crie um cupom em <code>/admin/fornecedores/cupons</code> (ex: 10% no plano mensal) → como fornecedor, aplique o código em <code>/fornecedor/assinatura</code> antes de contratar → confirme o valor cobrado no Mercado Pago vir com desconto.</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">8</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="8">
+            <strong>Cancelamento</strong>
+            <span>Com assinatura mensal ativa, clique "Cancelar assinatura" em <code>/fornecedor/assinatura</code> → confirme o status mudar e o fornecedor sumir do marketplace.</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">9</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="9">
+            <strong>Suspensão pelo admin</strong>
+            <span>Com um fornecedor ativo, vá em <code>/admin/fornecedores/[id]</code> → "Suspender" (informe o motivo) → confirme que ele some do marketplace imediatamente e que o motivo fica salvo.</span>
+          </label>
+        </li>
+        <li>
+          <span class="step-num">10</span>
+          <label class="step-body">
+            <input type="checkbox" data-step="10">
+            <strong>Conta híbrida</strong>
+            <span>Use uma conta que já tem casamento cadastrado → complete também o cadastro de fornecedor com a MESMA conta → confirme que as duas áreas (casal e fornecedor) continuam funcionando sem conflito, incluindo receber e enviar mensagens dos dois lados.</span>
+          </label>
+        </li>
+      </ol>
+    </section>
+
+    <footer class="end">
+      Wednest · relatório gerado ao final da implementação das Fases 5–9 do marketplace de fornecedores.
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    try {
+      var boxes = document.querySelectorAll('#checklist input[type="checkbox"]');
+      var KEY = 'wednest-vendors-checklist-v1';
+      var saved = {};
+      try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+
+      boxes.forEach(function (box) {
+        var step = box.getAttribute('data-step');
+        if (saved[step]) {
+          box.checked = true;
+          box.closest('label').classList.add('checked');
+        }
+        box.addEventListener('change', function () {
+          saved[step] = box.checked;
+          box.closest('label').classList.toggle('checked', box.checked);
+          try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+        });
+      });
+    } catch (e) {}
+  })();
+</script>

@@ -1,4 +1,3 @@
-import { isPlusPlan } from '@/constants/plans'
 import { resolveSiteTemplate } from '@/lib/site/templates'
 import PaywallGate from '@/components/billing/paywall-gate'
 import ModuleAccessGate from '@/components/billing/module-access-gate'
@@ -41,27 +40,14 @@ async function SiteContent() {
     resolveWeddingPlanId(supabase, weddingId),
   ])
 
-  // Mesma lógica/fail-open do PaywallGate (linha ausente em plan_module_access =
-  // liberado) — decide só se o template "portfolio" aparece selecionável no
-  // seletor de estilo; o fail-safe de verdade (nunca confiar no valor salvo)
-  // mora na leitura pública (ver get-public-site-by-slug.ts).
-  const { data: albumAccessRow } = await supabase
-    .from('plan_module_access')
-    .select('enabled')
-    .eq('plan_id', planId)
-    .eq('module', 'album')
-    .maybeSingle()
-  const albumEnabled = albumAccessRow?.enabled ?? true
-
   return (
     <SiteBuilder
       weddingId={weddingId}
       coupleNames={wedding.couple_names as string}
-      initialSite={site ? { ...(site as SiteConfig), template: resolveSiteTemplate(site.template, albumEnabled, isPlusPlan(planId)) } : null}
-      exclusiveTemplatesEnabled={isPlusPlan(planId)}
+      initialSite={site ? { ...(site as SiteConfig), template: resolveSiteTemplate(site.template, planId) } : null}
+      planId={planId}
       storageLimitBytes={limitCheck.limit}
       storageUsedBytes={limitCheck.current}
-      albumEnabled={albumEnabled}
     />
   )
 }

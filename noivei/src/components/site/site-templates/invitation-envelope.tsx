@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import styles from './premium-site.module.css'
 
-export default function InvitationEnvelope({ names, date, initials, children, caption, openingHint }: {
-  caption?: string; openingHint?: string; names: string; date: string | null; initials: string; children: React.ReactNode
+export default function InvitationEnvelope({ names, date, initials, children, caption, openingHint, monogram, sideOpening = false }: {
+  monogram?: string; sideOpening?: boolean; caption?: string; openingHint?: string; names: string; date: string | null; initials: string; children: React.ReactNode
 }) {
+  const sealText = monogram?.trim() || initials
   const [opened, setOpened] = useState(false)
   const [finished, setFinished] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -32,13 +33,13 @@ export default function InvitationEnvelope({ names, date, initials, children, ca
           if (event.target === event.currentTarget && opened) setFinished(true)
         }} aria-hidden={opened || undefined}>
           <div className={styles.gateIntro}><span>UM CONVITE ESPECIAL</span><p>{names}</p></div>
-          <div className={styles.envelope}>
+          <div className={sideOpening ? `${styles.envelope} ${styles.sideEnvelope}` : styles.envelope}>
             <div className={styles.envelopeLiner} aria-hidden="true"><span>{initials}</span><p>{date || 'O nosso grande dia'}</p></div>
             <div className={`${styles.flap} ${styles.flapLeft}`} aria-hidden="true" />
-            <div className={`${styles.flap} ${styles.flapRight}`} aria-hidden="true" />
+            {!sideOpening && <div className={`${styles.flap} ${styles.flapRight}`} aria-hidden="true" />}
             <div className={styles.goldCord} aria-hidden="true" />
             <button type="button" className={styles.seal} onClick={open} disabled={opened} aria-label="Abrir convite de casamento" aria-controls="invitation-content" aria-expanded={opened}>
-              <span className={styles.sealInner}>{initials}</span>
+              <span className={styles.sealInner} data-long={sealText.length > 5 || undefined}>{sealText}</span>
             </button>
             <span className={styles.envelopeCaption} aria-hidden="true">{caption || 'COM CARINHO, PARA VOCÊ'}</span>
           </div>

@@ -1,35 +1,40 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { cache } from 'react'
 
 import PremiumSite from '@/components/site/site-templates/premium-site'
-import { isExclusiveSiteTemplate } from '@/lib/site/templates'
+import { isPremiumSiteTemplate } from '@/lib/site/templates'
 import ClassicSite from '@/components/site/site-templates/classic-site'
 import PortfolioSite from '@/components/site/site-templates/portfolio-site'
 import { getPublicSiteBySlug } from '@/lib/site/get-public-site-by-slug'
 import { createSupabaseService } from '@/lib/supabase/service'
 import { deriveWeddingColorScale, deriveBrandDarkGradient } from '@/lib/theme/wedding-color'
 
-// Sites de casal ainda não entraram no roadmap de SEO/indexação do produto
-export const metadata: Metadata = {
-  title:  'Site do casal',
-  robots: { index: false, follow: false },
-}
-
 interface PublicSitePageProps {
   params: Promise<{ slug: string }>
 }
 
+const loadPublishedSite = cache(async (slug: string) => {
+  try {
+    return await getPublicSiteBySlug(createSupabaseService(), slug)
+  } catch {
+    return null
+  }
+})
+
+export async function generateMetadata({ params }: PublicSitePageProps): Promise<Metadata> {
+  const { slug } = await params
+  const site = await loadPublishedSite(slug)
+
+  return {
+    title: site?.wedding.couple_names.trim() || 'Site do casal',
+    robots: { index: false, follow: false },
+  }
+}
+
 export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const { slug } = await params
-
-  let site: Awaited<ReturnType<typeof getPublicSiteBySlug>> = null
-  try {
-    const supabase = createSupabaseService()
-    site = await getPublicSiteBySlug(supabase, slug)
-  } catch {
-    // Ambiente sem service role configurado — trata como site indisponível
-    site = null
-  }
+  const site = await loadPublishedSite(slug)
 
   if (!site) notFound()
 
@@ -38,9 +43,6 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   // em QUALQUER template (classic ou portfolio) — nunca uma paleta fixa.
   const colorScale          = deriveWeddingColorScale(site.wedding.wedding_color)
   const colorScaleSecondary = deriveWeddingColorScale(site.wedding.wedding_color_secondary)
-  // Site do casal é recurso Premium (ver PaywallGate em (app)/site) — só chega a existir
-  // publicado para um plano pago, então a cor (e o gradiente escuro derivado dela) já
-  // pode ser aplicada sem checagem extra de plano aqui, igual ao restante desta página.
   const brandDarkGradient = deriveBrandDarkGradient(site.wedding.wedding_color_secondary)
   const weddingColorVars = {
     '--wedding-color':                  colorScale.color,
@@ -57,11 +59,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
 
   return (
     <div style={weddingColorVars}>
-      {/* `site.template` já vem com o fail-safe de plano resolvido em
-          get-public-site-by-slug.ts — nunca é 'portfolio' se o plano ATUAL não
-          libera mais o módulo 'album', mesmo que o valor salvo esteja
-          'portfolio' (downgrade de plano depois de escolher o template). */}
-      {isExclusiveSiteTemplate(site.template)
+      {isPremiumSiteTemplate(site.template)
         ? <PremiumSite slug={slug} site={site} variant={site.template} />
         : site.template === 'portfolio'
         ? <PortfolioSite slug={slug} site={site} />

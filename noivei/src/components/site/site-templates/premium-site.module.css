@@ -254,3 +254,57 @@
   .storyMomentText, .storyMoment:nth-child(even) .storyMomentText { order: 0; text-align: left; grid-column: auto; }
   .storyMomentTextOnly .storyMomentText, .storyMomentTextOnly:nth-child(even) .storyMomentText { grid-column: auto; }
 }
+
+.sideEnvelope { height: min(360px, 54vw); }
+.sideEnvelope .flapLeft {
+  width: 100%;
+  clip-path: polygon(0 0, 100% 0, 78% 50%, 100% 100%, 0 100%);
+  border-right: 0;
+}
+.sideEnvelope::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--wedding-color-dark);
+  border: 1px solid #bda16a;
+  border-radius: 3px;
+}
+.sideEnvelope .goldCord { display: none; }
+.sideEnvelope .seal { left: 78%; }
+.gateOpening .sideEnvelope .flapLeft { transform: rotateY(-155deg); }
+.sealInner[data-long] {
+  padding: 4px;
+  font-size: 14px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.photographic .hero {
+  position: relative;
+  display: grid;
+  place-items: end start;
+  min-height: 100svh;
+  grid-template-columns: minmax(0, 1fr);
+  isolation: isolate;
+}
+.photographic .heroImage { position: absolute; inset: 0; height: 100%; z-index: -2; }
+.photographic .heroImage img { width: 100%; height: 100%; object-fit: cover; }
+.photographic .hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(0deg, #171311ed, #17131112 85%);
+}
+.photographic .heroCopy { color: #fff; align-self: end; padding: clamp(24px, 7vw, 100px); }
+.photographic .heroCopy :is(h1, .eyebrow, .heroSubtitle, .weddingDate, .place) { color: inherit; }
+.photographic .imageCaption { display: none; }
+.photographic .gallery { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(8px, 1.5vw, 22px); }
+.photographic .gallery figure:nth-child(n) { margin: 0; }
+.photographic .gallery figure:is(:nth-child(6n + 1), :nth-child(6n + 6)):not(:last-child) { grid-column: span 2; }
+.photographic .gallery figure img { display: block; aspect-ratio: 4 / 3; }
+.photographic .gallery figure:is(:nth-child(6n + 1), :nth-child(6n + 6)):not(:last-child) img { aspect-ratio: 8 / 3; }
+@media (max-width: 700px) {
+  .photographic .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .photographic .gallery figure:is(:nth-child(6n + 1), :nth-child(6n + 6)):not(:last-child) img { aspect-ratio: 16 / 10; }
+}

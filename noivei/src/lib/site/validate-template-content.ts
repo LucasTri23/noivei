@@ -5,6 +5,8 @@ import { SITE_TEMPLATE_CONFIG } from './template-config'
 /** Campos ocultos e fotos excedentes antigos ficam preservados ao trocar de estilo. */
 export function validateTemplateContent(template: SiteTemplate, content: Record<string, unknown> | undefined, existing: Record<string, unknown> = {}): string | null {
   if (!content) return null
+  const monogram = content.envelope_monogram
+  if (monogram !== undefined && monogram !== existing.envelope_monogram && (typeof monogram !== 'string' || monogram.length > 12)) return 'Revise o monograma do casal.'
   const config = SITE_TEMPLATE_CONFIG[template]
   const styleFields = new Map(Object.values(SITE_TEMPLATE_CONFIG).flatMap((item) => item.fields).map((field) => [field.key, field]))
   for (const [key, field] of styleFields) {

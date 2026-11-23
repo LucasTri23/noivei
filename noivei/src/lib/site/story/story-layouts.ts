@@ -24,6 +24,8 @@ export const STORY_LAYOUTS_BY_TEMPLATE: Record<SiteTemplate, TemplateStoryLayout
   portfolio:  { supported: ['illustrated', 'timeline', 'gallery'], default: 'gallery' },
   editorial:  { supported: ['illustrated', 'timeline', 'gallery'], default: 'illustrated' },
   garden:     { supported: ['illustrated', 'timeline', 'gallery'], default: 'illustrated' },
+  photographic: { supported: ['illustrated', 'timeline', 'gallery'], default: 'gallery' },
+  enveloped: { supported: ['illustrated', 'gallery'], default: 'illustrated' },
   invitation: { supported: ['illustrated', 'gallery'],             default: 'illustrated' },
 }
 

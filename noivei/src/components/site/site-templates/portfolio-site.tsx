@@ -459,9 +459,6 @@ function ScheduleTimeline({ nodes, markdown }: { nodes: ScheduleNode[]; markdown
  * grandes com eyebrow+divisor+título serifado, e a galeria organizada num ciclo de
  * linhas de tamanho fixo (ver PortfolioGalleryGrid). Cores sempre derivadas da paleta
  * do casal (--wedding-color*, injetadas em /[slug]/page.tsx) — nunca uma cor fixa.
- * Gated ao mesmo plano que libera o mural de fotos (ver get-public-site-by-slug.ts):
- * nunca renderiza aqui se o plano ATUAL não tiver 'album' habilitado, mesmo que
- * site_config.template esteja salvo como 'portfolio'.
  */
 export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   const weddingDate      = formatWeddingDate(site.wedding.wedding_date)
@@ -581,7 +578,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
               className="font-display"
               style={{ fontSize: '16px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >
-              {coverTitle}
+              {site.content.envelope_monogram || coverTitle}
             </span>
           </a>
 
