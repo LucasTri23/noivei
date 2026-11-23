@@ -1,24 +1,27 @@
 import type { Metadata, Viewport } from 'next'
-import { Cormorant_Garamond, Hanken_Grotesk } from 'next/font/google'
+import localFont from 'next/font/local'
 import QueryProvider from '@/components/query-provider'
 import ThemeProvider from '@/components/theme-provider'
 import ToastContainer from '@/components/ui/toast'
 import TopProgressBar from '@/components/ui/top-progress-bar'
 import './globals.css'
 
-const cormorant = Cormorant_Garamond({
-  subsets:  ['latin'],
+const cormorant = localFont({
+  src: [
+    { path: './fonts/cormorant-garamond.woff2', weight: '400 700', style: 'normal' },
+    { path: './fonts/cormorant-garamond-italic.woff2', weight: '400 700', style: 'italic' },
+  ],
   variable: '--font-display',
-  display:  'swap',
-  weight:   ['400', '500', '600', '700'],
-  style:    ['normal', 'italic'],
+  display: 'swap',
+  fallback: ['Georgia', 'serif'],
+  adjustFontFallback: 'Times New Roman',
 })
 
-const hanken = Hanken_Grotesk({
-  subsets:  ['latin'],
+const hanken = localFont({
+  src: './fonts/hanken-grotesk.woff2',
+  weight: '400 700',
   variable: '--font-body',
-  display:  'swap',
-  weight:   ['400', '500', '600', '700'],
+  display: 'swap',
 })
 
 export const metadata: Metadata = {

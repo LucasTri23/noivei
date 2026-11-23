@@ -1,5 +1,5 @@
 @import "tailwindcss";
-/* Fontes carregadas via next/font/google no layout.tsx — não importar aqui */
+/* Fontes locais carregadas no layout.tsx. */
 
 /* ── DESIGN TOKENS ─────────────────────────────────────────────── */
 @theme inline {
