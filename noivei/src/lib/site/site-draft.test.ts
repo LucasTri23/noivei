@@ -49,3 +49,29 @@ describe('rascunho do site', () => {
     expect([...referencedPhotoUrls(draft)].sort()).toEqual(['https://a/1.jpg', 'https://a/capa.jpg', 'https://a/h.jpg'])
   })
 })
+
+describe('rascunho com personalização', () => {
+  const monogramUrl = 'https://proj.supabase.co/storage/v1/object/public/wedding-photos/w1/monograma.webp'
+
+  it('deve proteger a imagem do monograma da limpeza de fotos não usadas', () => {
+    expect(referencedPhotoUrls({ ...base, content: { monogram_image_url: monogramUrl } }).has(monogramUrl)).toBe(true)
+  })
+
+  it('deve descartar perguntas totalmente vazias e apontar a aba quando falta a resposta', () => {
+    const empty = buildSitePatch({ ...base, content: { ...base.content, faq: [{ question: ' ', answer: '' }] } }, base, 'free')
+    expect(empty).toEqual({ ok: true, body: null })
+    const partial = buildSitePatch({ ...base, content: { ...base.content, faq: [{ question: 'Tem estacionamento?', answer: '' }] } }, base, 'free')
+    expect(partial).toMatchObject({ ok: false, section: 'informacoes' })
+  })
+
+  it('não deve enviar recursos pagos no Gratuito e deve enviar os livres', () => {
+    const draft = { ...base, content: { ...base.content, font_pair: 'elegante' as const, palette: { accent: '#7A2E3B', tone: 'dark' as const }, sections: { hidden: ['mural' as const] } } }
+    const result = buildSitePatch(draft, base, 'free')
+    expect(result).toEqual({ ok: true, body: { content: { ...base.content, palette: { accent: '#7A2E3B' }, sections: { hidden: ['mural'] } } } })
+  })
+
+  it('deve marcar as abas novas como alteradas', () => {
+    const draft = { ...base, content: { ...base.content, font_pair: 'elegante' as const, sections: { order: ['faq' as const] }, lodging: [{ name: 'Hotel' }] } }
+    expect([...dirtySections(draft, base)].sort()).toEqual(['aparencia', 'informacoes', 'secoes'])
+  })
+})

@@ -1,4 +1,5 @@
 import type { SiteTemplate } from '@/types/database'
+import { validateCustomization } from './customization'
 import { isStoryLayout } from './story/story-layouts'
 import { SITE_TEMPLATE_CONFIG } from './template-config'
 
@@ -22,6 +23,8 @@ export function validateTemplateContent(template: SiteTemplate, content: Record<
   for (const key of ['hide_rsvp', 'hide_gifts'] as const) {
     if (content[key] !== undefined && typeof content[key] !== 'boolean') return 'Configuração de visibilidade das seções inválida.'
   }
+  const customizationError = validateCustomization(content)
+  if (customizationError) return customizationError
   const photos = content.gallery_urls
   if (photos === undefined) return null
   if (!Array.isArray(photos) || photos.some((url) => typeof url !== 'string' || !URL.canParse(url) || !/^https?:/.test(url))) return 'Informe URLs válidas para as fotos da galeria.'

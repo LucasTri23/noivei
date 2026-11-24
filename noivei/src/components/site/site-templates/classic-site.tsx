@@ -1,9 +1,13 @@
+import { Fragment } from 'react'
 import GiftPaymentButton from '@/components/gifts/gift-payment-button'
 import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast'
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo, PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
+import { FaqAccordion, LodgingCards } from '@/components/site/site-info-sections'
+import SiteMonogram from '@/components/site/site-monogram'
 import SiteRichText from '@/components/site/site-rich-text'
+import { visibleSectionOrder, type SiteSectionId } from '@/lib/site/customization'
 import { storyPhotoAlt } from '@/components/site/story/story-image'
 import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
 
@@ -344,7 +348,11 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
   // todas as fotos da galeria voltam para a seção de galeria.
   const legacyStory      = site.story.layout === 'legacy'
   const markdown         = site.content.rich_text === true
-  const consumedPhotos   = legacyStory ? storyPhotos.length : 0
+  const order            = visibleSectionOrder('classic', site.content)
+  const faq              = site.content.faq ?? []
+  const lodging          = site.content.lodging ?? []
+  // História oculta pelo casal: as fotos que ela usaria voltam para a galeria.
+  const consumedPhotos   = legacyStory && order.includes('historia') ? storyPhotos.length : 0
   const remainingPhotos  = galleryPhotos.slice(consumedPhotos)
 
   // Posição vertical ajustável pelo casal no editor (0=topo, 50=centro, 100=base) —
@@ -355,6 +363,293 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
   // automático" (calculado em runtime a partir do aspect ratio real da imagem) com um
   // "+N% de zoom" explícito.
   const coverPhotoScale = coverPhotoZoomScale(site.cover_photo_zoom)
+
+  const sections: Partial<Record<SiteSectionId, React.ReactNode>> = {
+    historia: <>
+          {/* Nossa história — texto único e contínuo no centro, fotos independentes nas
+              laterais. O layout de 3 colunas só entra a partir de `xl` (1280px): as
+              colunas de foto (255px cada) + o texto (360-520px) + os dois gaps de 80px
+              somam ~1030px de largura mínima — ativar já em `md`/`lg` deixaria menos
+              espaço do que isso disponível (o container tem no máximo 1180px, e ainda
+              perde padding lateral), estourando a borda. No mobile/tablet, o texto
+              aparece inteiro primeiro e as fotos vêm depois, numa grade de 2 colunas. */}
+          {site.story.layout !== 'legacy' && site.story.hasContent && (
+            <section id="historia" style={{ marginBottom: '64px' }}>
+              <SectionTitle>Nossa história</SectionTitle>
+              <ClassicStory view={site.story} coupleNames={site.wedding.couple_names} markdown={markdown} />
+            </section>
+          )}
+
+          {legacyStory && site.content.our_story && (
+            <section id="historia" style={{ marginBottom: '64px' }}>
+              <SectionTitle>Nossa história</SectionTitle>
+
+              <div className="hidden xl:grid xl:grid-cols-[255px_minmax(360px,520px)_255px] xl:gap-x-20 xl:items-start xl:justify-center">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '34px' }}>
+                  {leftStoryPhotos.map((photo, index) => (
+                    <StorySidePhoto key={`${photo.url}-left-${index}`} photo={photo} index={index * 2} side="left" />
+                  ))}
+                </div>
+
+                <div
+                  style={{
+                    position: 'relative', zIndex: 2, textAlign: 'center',
+                    padding: '20px 24px 28px', borderRadius: '24px',
+                    background: 'color-mix(in srgb, var(--bg) 96%, transparent)',
+                  }}
+                >
+                  <SiteRichText
+                    text={site.content.our_story}
+                    markdown={markdown}
+                    style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 2, whiteSpace: 'pre-line', margin: 0 }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '150px' }}>
+                  {rightStoryPhotos.map((photo, index) => (
+                    <StorySidePhoto key={`${photo.url}-right-${index}`} photo={photo} index={index * 2 + 1} side="right" />
+                  ))}
+                </div>
+              </div>
+
+              {/* No celular/tablet, o texto continua inteiro e as fotos aparecem abaixo em duas colunas. */}
+              <div className="xl:hidden">
+                <SiteRichText
+                  text={site.content.our_story}
+                  markdown={markdown}
+                  style={{
+                    maxWidth: '560px', margin: '0 auto', textAlign: 'center',
+                    fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line',
+                  }}
+                />
+
+                {storyPhotos.length > 0 && (
+                  <div className="grid grid-cols-2 gap-6" style={{ marginTop: '38px' }}>
+                    {storyPhotos.map((photo, index) => (
+                      <PolaroidPhoto key={`${photo.url}-mobile-${index}`} photo={photo} index={index} alt={`Foto ${index + 1} do casal`} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+    </>,
+    cerimonia: <>
+          {/* Cerimônia & Festa — sempre abaixo da história */}
+          {(site.content.ceremony_info || site.content.reception_info) && (
+            <section style={{ marginBottom: '56px', textAlign: 'center' }}>
+              {site.content.ceremony_info && (
+                <div style={{ maxWidth: '560px', margin: '0 auto 30px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
+                    Cerimônia
+                  </div>
+                  <SiteRichText text={site.content.ceremony_info} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }} />
+                </div>
+              )}
+
+              {site.content.reception_info && (
+                <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
+                    Festa
+                  </div>
+                  <SiteRichText text={site.content.reception_info} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }} />
+                </div>
+              )}
+
+              {mapsUrl && (
+                <div style={{ textAlign: 'center', marginTop: '30px' }}>
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '7px',
+                      fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color-secondary-dark)', textDecoration: 'none',
+                      border: '1.5px solid var(--wedding-color-secondary)', borderRadius: '99px', padding: '9px 18px',
+                      background: 'var(--wedding-color-secondary-subtle)',
+                    }}
+                  >
+                    <MapPinIcon />
+                    Como chegar
+                  </a>
+                </div>
+              )}
+            </section>
+          )}
+
+          {site.content.dress_code && (
+            <section style={{ marginBottom: '56px', textAlign: 'center' }}>
+              <div
+                style={{
+                  maxWidth: '560px', margin: '0 auto', padding: '16px 20px', borderRadius: '14px',
+                  background: 'var(--wedding-color-secondary-subtle)',
+                }}
+              >
+                <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '8px' }}>
+                  Dress code
+                </div>
+                <SiteRichText text={site.content.dress_code} markdown={markdown} style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }} />
+              </div>
+            </section>
+          )}
+    </>,
+    hospedagem: lodging.length > 0 && (
+      <section id="hospedagem" style={{ marginBottom: '56px' }}>
+        <SectionTitle>Hospedagem e como chegar</SectionTitle>
+        <LodgingCards items={lodging} markdown={markdown} look="classic" />
+      </section>
+    ),
+    mensagem: <>
+          {site.content.custom_message && (
+            <section style={{ marginBottom: '56px', textAlign: 'center' }}>
+              <SiteRichText
+                text={`\u201C${site.content.custom_message}\u201D`}
+                markdown={markdown}
+                className="font-display"
+                style={{ fontStyle: 'italic', fontSize: '20px', color: 'var(--wedding-color-dark)', lineHeight: 1.6, margin: 0 }}
+              />
+            </section>
+          )}
+    </>,
+    presentes: <>
+          {/* Lista de presentes */}
+          {site.gifts.length > 0 && (
+            <section style={{ marginBottom: '56px' }}>
+              <GiftPaymentReturnToast />
+              <SectionTitle>Lista de presentes</SectionTitle>
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))' }}>
+                {site.gifts.map((gift) => (
+                  <div
+                    key={gift.id}
+                    className="overflow-hidden rounded-2xl bg-[var(--surface)]"
+                    style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', opacity: gift.is_purchased ? 0.6 : 1 }}
+                  >
+                    {gift.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
+                      <img src={gift.image_url} alt={gift.name} style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
+                    )}
+                    <div style={{ padding: '14px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{gift.name}</div>
+                      {gift.price_cents != null && (
+                        <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>
+                          {currencyFmt.format(gift.price_cents / 100)}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '11.5px', fontWeight: 700, padding: '3px 10px', borderRadius: '99px',
+                            background: gift.is_purchased ? '#E9EFE6' : 'var(--wedding-color-subtle)',
+                            color: gift.is_purchased ? '#5E8B6A' : '#9A7A60',
+                          }}
+                        >
+                          {gift.is_purchased ? 'Já foi dado' : 'Disponível'}
+                        </span>
+                        {!gift.is_purchased && gift.gift_type === 'link' && gift.store_url && (
+                          <a
+                            href={gift.store_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '12px', fontWeight: 600, color: 'var(--wedding-color)', textDecoration: 'none' }}
+                          >
+                            Ver na loja
+                          </a>
+                        )}
+                        {!gift.is_purchased && gift.gift_type === 'app_payment' && (
+                          <GiftPaymentButton giftId={gift.id} giftName={gift.name} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+    </>,
+    galeria: <>
+          {/* Galeria — só o que sobrou depois de espalhar fotos pela história */}
+          {remainingPhotos.length > 0 && (
+            <section style={{ marginBottom: '56px' }}>
+              <SectionTitle>Galeria</SectionTitle>
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px,1fr))' }}>
+                {remainingPhotos.map((photo, index) => (
+                  // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
+                  <img
+                    key={`${photo.url}-${index}`}
+                    src={photo.url}
+                    alt={`Foto ${consumedPhotos + index + 1} do casal`}
+                    className="rounded-2xl"
+                    style={{
+                      width: '100%', height: '160px',
+                      objectFit:      photo.fit_contain ? 'contain' : 'cover',
+                      objectPosition: `center ${photo.position_y}%`,
+                      background:     photo.fit_contain ? 'var(--surface)' : undefined,
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+    </>,
+    mural: <>
+          {/* Mural de fotos ao vivo — prévia pequena + link pro mural completo
+              (/mural/[slug]). Aparece sempre que o plano libera o módulo 'album',
+              mesmo sem nenhuma foto ainda (estado vazio explica que ele abre no
+              dia do casamento) — mostrar incondicionalmente é intencional. */}
+          {site.albumEnabled && (
+            <section style={{ marginBottom: '56px' }}>
+              <SectionTitle>Mural de fotos</SectionTitle>
+              <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', textAlign: 'center', margin: '-8px 0 20px' }}>
+                As fotos que os convidados forem enviando durante o casamento aparecem aqui, ao vivo.
+              </p>
+              <div className="overflow-hidden rounded-2xl" style={{ border: '1px solid #EBDDD0' }}>
+                <LivePhotoGallery
+                  slug={slug}
+                  limit={8}
+                  columnsClassName="columns-2 sm:columns-4"
+                  emptyTitle="O mural ainda está vazio"
+                  emptyMessage="Volte no dia do casamento (ou no dia seguinte) — os convidados poderão enviar fotos ao vivo pelo QR code."
+                />
+              </div>
+              <div style={{ textAlign: 'center', marginTop: '18px' }}>
+                <a
+                  href={`/mural/${slug}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color-dark)', textDecoration: 'none',
+                  }}
+                >
+                  Ver mural completo <ArrowRightIcon />
+                </a>
+              </div>
+            </section>
+          )}
+    </>,
+    faq: faq.length > 0 && (
+      <section id="duvidas" style={{ marginBottom: '56px' }}>
+        <SectionTitle>Perguntas frequentes</SectionTitle>
+        <FaqAccordion items={faq} markdown={markdown} look="classic" />
+      </section>
+    ),
+    rsvp: <>
+          {/* RSVP — o casal pode ocultar no editor */}
+          {!site.content.hide_rsvp && (
+          <section
+            id="rsvp"
+            className="rounded-2xl text-center"
+            style={{ background: 'var(--wedding-color-subtle)', padding: '32px 24px', border: '1px dashed #D8C6A6' }}
+          >
+            <h2 className="font-display" style={{ fontWeight: 500, fontSize: '24px', color: 'var(--fg)', margin: '0 0 8px' }}>
+              Confirmação de presença
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--muted-fg)', margin: '0 auto', lineHeight: 1.6, maxWidth: '440px' }}>
+              Cada convidado recebe um link pessoal para confirmar presença. Se você não recebeu o seu,
+              fale diretamente com o casal.
+            </p>
+          </section>
+          )}
+    </>,
+  }
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -405,7 +700,15 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
           }}
         />
         <div className="relative" style={{ zIndex: 1 }}>
-          {site.content.envelope_monogram && <p className="font-display mb-4 text-3xl italic text-[var(--wedding-color-light)]">{site.content.envelope_monogram}</p>}
+          {(site.content.envelope_monogram || site.content.monogram_image_url) && (
+            <p className="font-display mb-4 text-3xl italic text-[var(--wedding-color-light)]">
+              <SiteMonogram
+                imageUrl={site.content.monogram_image_url}
+                text={site.content.envelope_monogram || site.wedding.couple_names}
+                imgStyle={{ display: 'inline-block', height: '72px', width: 'auto', maxWidth: '200px', objectFit: 'contain' }}
+              />
+            </p>
+          )}
           <div style={{ fontSize: '12px', letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--wedding-color-light)' }}>
             Casamento de
           </div>
@@ -427,270 +730,7 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
       <div style={{ height: '5px', background: 'linear-gradient(90deg, var(--wedding-color), var(--wedding-color-secondary))' }} />
 
       <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '56px 24px 80px' }}>
-        {/* Nossa história — texto único e contínuo no centro, fotos independentes nas
-            laterais. O layout de 3 colunas só entra a partir de `xl` (1280px): as
-            colunas de foto (255px cada) + o texto (360-520px) + os dois gaps de 80px
-            somam ~1030px de largura mínima — ativar já em `md`/`lg` deixaria menos
-            espaço do que isso disponível (o container tem no máximo 1180px, e ainda
-            perde padding lateral), estourando a borda. No mobile/tablet, o texto
-            aparece inteiro primeiro e as fotos vêm depois, numa grade de 2 colunas. */}
-        {site.story.layout !== 'legacy' && site.story.hasContent && (
-          <section id="historia" style={{ marginBottom: '64px' }}>
-            <SectionTitle>Nossa história</SectionTitle>
-            <ClassicStory view={site.story} coupleNames={site.wedding.couple_names} markdown={markdown} />
-          </section>
-        )}
-
-        {legacyStory && site.content.our_story && (
-          <section style={{ marginBottom: '64px' }}>
-            <SectionTitle>Nossa história</SectionTitle>
-
-            <div className="hidden xl:grid xl:grid-cols-[255px_minmax(360px,520px)_255px] xl:gap-x-20 xl:items-start xl:justify-center">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '34px' }}>
-                {leftStoryPhotos.map((photo, index) => (
-                  <StorySidePhoto key={`${photo.url}-left-${index}`} photo={photo} index={index * 2} side="left" />
-                ))}
-              </div>
-
-              <div
-                style={{
-                  position: 'relative', zIndex: 2, textAlign: 'center',
-                  padding: '20px 24px 28px', borderRadius: '24px',
-                  background: 'color-mix(in srgb, var(--bg) 96%, transparent)',
-                }}
-              >
-                <SiteRichText
-                  text={site.content.our_story}
-                  markdown={markdown}
-                  style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 2, whiteSpace: 'pre-line', margin: 0 }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '180px', paddingTop: '150px' }}>
-                {rightStoryPhotos.map((photo, index) => (
-                  <StorySidePhoto key={`${photo.url}-right-${index}`} photo={photo} index={index * 2 + 1} side="right" />
-                ))}
-              </div>
-            </div>
-
-            {/* No celular/tablet, o texto continua inteiro e as fotos aparecem abaixo em duas colunas. */}
-            <div className="xl:hidden">
-              <SiteRichText
-                text={site.content.our_story}
-                markdown={markdown}
-                style={{
-                  maxWidth: '560px', margin: '0 auto', textAlign: 'center',
-                  fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line',
-                }}
-              />
-
-              {storyPhotos.length > 0 && (
-                <div className="grid grid-cols-2 gap-6" style={{ marginTop: '38px' }}>
-                  {storyPhotos.map((photo, index) => (
-                    <PolaroidPhoto key={`${photo.url}-mobile-${index}`} photo={photo} index={index} alt={`Foto ${index + 1} do casal`} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Cerimônia & Festa — sempre abaixo da história */}
-        {(site.content.ceremony_info || site.content.reception_info) && (
-          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
-            {site.content.ceremony_info && (
-              <div style={{ maxWidth: '560px', margin: '0 auto 30px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
-                  Cerimônia
-                </div>
-                <SiteRichText text={site.content.ceremony_info} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }} />
-              </div>
-            )}
-
-            {site.content.reception_info && (
-              <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '10px' }}>
-                  Festa
-                </div>
-                <SiteRichText text={site.content.reception_info} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0 }} />
-              </div>
-            )}
-
-            {mapsUrl && (
-              <div style={{ textAlign: 'center', marginTop: '30px' }}>
-                <a
-                  href={mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '7px',
-                    fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color-secondary-dark)', textDecoration: 'none',
-                    border: '1.5px solid var(--wedding-color-secondary)', borderRadius: '99px', padding: '9px 18px',
-                    background: 'var(--wedding-color-secondary-subtle)',
-                  }}
-                >
-                  <MapPinIcon />
-                  Como chegar
-                </a>
-              </div>
-            )}
-          </section>
-        )}
-
-        {site.content.dress_code && (
-          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
-            <div
-              style={{
-                maxWidth: '560px', margin: '0 auto', padding: '16px 20px', borderRadius: '14px',
-                background: 'var(--wedding-color-secondary-subtle)',
-              }}
-            >
-              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '8px' }}>
-                Dress code
-              </div>
-              <SiteRichText text={site.content.dress_code} markdown={markdown} style={{ fontSize: '14.5px', color: 'var(--fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }} />
-            </div>
-          </section>
-        )}
-
-        {site.content.custom_message && (
-          <section style={{ marginBottom: '56px', textAlign: 'center' }}>
-            <SiteRichText
-              text={`\u201C${site.content.custom_message}\u201D`}
-              markdown={markdown}
-              className="font-display"
-              style={{ fontStyle: 'italic', fontSize: '20px', color: 'var(--wedding-color-dark)', lineHeight: 1.6, margin: 0 }}
-            />
-          </section>
-        )}
-
-        {/* Lista de presentes */}
-        {site.gifts.length > 0 && (
-          <section style={{ marginBottom: '56px' }}>
-            <GiftPaymentReturnToast />
-            <SectionTitle>Lista de presentes</SectionTitle>
-            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))' }}>
-              {site.gifts.map((gift) => (
-                <div
-                  key={gift.id}
-                  className="overflow-hidden rounded-2xl bg-[var(--surface)]"
-                  style={{ boxShadow: '0 8px 22px rgba(60,40,24,0.06)', opacity: gift.is_purchased ? 0.6 : 1 }}
-                >
-                  {gift.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
-                    <img src={gift.image_url} alt={gift.name} style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
-                  )}
-                  <div style={{ padding: '14px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg)' }}>{gift.name}</div>
-                    {gift.price_cents != null && (
-                      <div style={{ fontSize: '13px', color: 'var(--muted-fg)', marginTop: '2px' }}>
-                        {currencyFmt.format(gift.price_cents / 100)}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', gap: '8px' }}>
-                      <span
-                        style={{
-                          fontSize: '11.5px', fontWeight: 700, padding: '3px 10px', borderRadius: '99px',
-                          background: gift.is_purchased ? '#E9EFE6' : 'var(--wedding-color-subtle)',
-                          color: gift.is_purchased ? '#5E8B6A' : '#9A7A60',
-                        }}
-                      >
-                        {gift.is_purchased ? 'Já foi dado' : 'Disponível'}
-                      </span>
-                      {!gift.is_purchased && gift.gift_type === 'link' && gift.store_url && (
-                        <a
-                          href={gift.store_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ fontSize: '12px', fontWeight: 600, color: 'var(--wedding-color)', textDecoration: 'none' }}
-                        >
-                          Ver na loja
-                        </a>
-                      )}
-                      {!gift.is_purchased && gift.gift_type === 'app_payment' && (
-                        <GiftPaymentButton giftId={gift.id} giftName={gift.name} />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Galeria — só o que sobrou depois de espalhar fotos pela história */}
-        {remainingPhotos.length > 0 && (
-          <section style={{ marginBottom: '56px' }}>
-            <SectionTitle>Galeria</SectionTitle>
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px,1fr))' }}>
-              {remainingPhotos.map((photo, index) => (
-                // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
-                <img
-                  key={`${photo.url}-${index}`}
-                  src={photo.url}
-                  alt={`Foto ${consumedPhotos + index + 1} do casal`}
-                  className="rounded-2xl"
-                  style={{
-                    width: '100%', height: '160px',
-                    objectFit:      photo.fit_contain ? 'contain' : 'cover',
-                    objectPosition: `center ${photo.position_y}%`,
-                    background:     photo.fit_contain ? 'var(--surface)' : undefined,
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Mural de fotos ao vivo — prévia pequena + link pro mural completo
-            (/mural/[slug]). Aparece sempre que o plano libera o módulo 'album',
-            mesmo sem nenhuma foto ainda (estado vazio explica que ele abre no
-            dia do casamento) — mostrar incondicionalmente é intencional. */}
-        {site.albumEnabled && (
-          <section style={{ marginBottom: '56px' }}>
-            <SectionTitle>Mural de fotos</SectionTitle>
-            <p style={{ fontSize: '13.5px', color: 'var(--muted-fg)', textAlign: 'center', margin: '-8px 0 20px' }}>
-              As fotos que os convidados forem enviando durante o casamento aparecem aqui, ao vivo.
-            </p>
-            <div className="overflow-hidden rounded-2xl" style={{ border: '1px solid #EBDDD0' }}>
-              <LivePhotoGallery
-                slug={slug}
-                limit={8}
-                columnsClassName="columns-2 sm:columns-4"
-                emptyTitle="O mural ainda está vazio"
-                emptyMessage="Volte no dia do casamento (ou no dia seguinte) — os convidados poderão enviar fotos ao vivo pelo QR code."
-              />
-            </div>
-            <div style={{ textAlign: 'center', marginTop: '18px' }}>
-              <a
-                href={`/mural/${slug}`}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '7px',
-                  fontSize: '13px', fontWeight: 700, color: 'var(--wedding-color-dark)', textDecoration: 'none',
-                }}
-              >
-                Ver mural completo <ArrowRightIcon />
-              </a>
-            </div>
-          </section>
-        )}
-
-        {/* RSVP — o casal pode ocultar no editor */}
-        {!site.content.hide_rsvp && (
-        <section
-          id="rsvp"
-          className="rounded-2xl text-center"
-          style={{ background: 'var(--wedding-color-subtle)', padding: '32px 24px', border: '1px dashed #D8C6A6' }}
-        >
-          <h2 className="font-display" style={{ fontWeight: 500, fontSize: '24px', color: 'var(--fg)', margin: '0 0 8px' }}>
-            Confirmação de presença
-          </h2>
-          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', margin: '0 auto', lineHeight: 1.6, maxWidth: '440px' }}>
-            Cada convidado recebe um link pessoal para confirmar presença. Se você não recebeu o seu,
-            fale diretamente com o casal.
-          </p>
-        </section>
-        )}
+        {order.map((id) => <Fragment key={id}>{sections[id]}</Fragment>)}
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '40px', textAlign: 'center' }}>
           Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest

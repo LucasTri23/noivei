@@ -308,3 +308,134 @@
   .photographic .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .photographic .gallery figure:is(:nth-child(6n + 1), :nth-child(6n + 6)):not(:last-child) img { aspect-ratio: 16 / 10; }
 }
+
+/* ───────── Personalização (só regras novas; nada acima muda) ───────── */
+
+/* Fundo escolhido pelo casal. [data-site-tone] fica no wrapper do site público. */
+:global([data-site-tone]) .site { --paper: var(--site-tone-bg); }
+:global([data-site-tone='dark']) .site {
+  --ink: var(--site-tone-fg); --muted-ink: var(--site-tone-muted-fg);
+  --accent-dark: var(--site-tone-accent-ink); --tint: var(--site-tone-tint);
+}
+/* No escuro --accent-dark vira um tom claro: fundos preenchidos com ele passam a ter texto escuro. */
+:global([data-site-tone='dark']) .button { color: var(--paper) !important; }
+:global([data-site-tone='dark']) .invitation .button { color: var(--accent-dark) !important; }
+:global([data-site-tone='dark']) .dateBand { color: var(--paper); }
+:global([data-site-tone='dark']) .garden .dateBand { color: var(--accent-dark); }
+:global([data-site-tone='dark']) .invitation .message { color: var(--paper); }
+:global([data-site-tone='dark']) .invitation .message p { color: var(--paper); opacity: .8; }
+
+/* Acabamento do selo (Convite Selado / Envelopado). Dourado = regra original acima. */
+.seal[data-finish='silver'] { border-color: #8d949c; background: radial-gradient(ellipse at 35% 25%, #ffffff, #dfe3e8 35%, #a9b0b8 68%, #e7eaee 88%, #7d858e); }
+.seal[data-finish='silver'] .sealInner { border-color: #7f8790; }
+.seal[data-finish='wax'] { border-color: #6e1414; color: #f6dcd2; background: radial-gradient(ellipse at 35% 25%, #d8594f, #a92a24 40%, #7d1715 72%, #9c2420 88%, #5a0f0e); }
+.seal[data-finish='wax'] .sealInner { border-color: #5e1010; text-shadow: 0 1px 1px #0006; }
+.seal[data-finish='wedding'] { border-color: var(--wedding-color-dark); color: #fff; background: radial-gradient(ellipse at 35% 25%, var(--wedding-color-light), var(--wedding-color) 45%, var(--wedding-color-dark) 85%); }
+.seal[data-finish='wedding'] .sealInner { border-color: color-mix(in srgb, var(--wedding-color-dark) 70%, #000); text-shadow: 0 1px 1px #0005; }
+
+/* Monograma em imagem */
+.sealImage { width: 84%; height: 84%; object-fit: contain; border-radius: 50%; pointer-events: none; }
+.monogram img { display: block; height: 44px; width: auto; max-width: 160px; object-fit: contain; }
+
+/* Perguntas frequentes e hospedagem */
+.faqSection, .lodgingSection { max-width: 1100px; margin: auto; padding: 95px 6vw; text-align: center; }
+.faqList { max-width: 820px; margin: 40px auto 0; text-align: left; border-top: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+.faqItem { border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+.faqItem summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: baseline; gap: 20px; padding: 24px 0; font: 24px/1.3 var(--font-display), Georgia, serif; color: var(--ink); }
+.faqItem summary::-webkit-details-marker { display: none; }
+.faqItem summary::after { content: '+'; flex-shrink: 0; color: var(--accent-dark); font: 22px/1 var(--font-body), sans-serif; transition: transform .2s; }
+.faqItem[open] summary::after { transform: rotate(45deg); }
+.faqItem summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.faqItem .prose { margin: 0; padding: 0 0 26px; }
+.lodgingGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 24px; margin-top: 40px; text-align: left; }
+.lodgingCard { border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); background: var(--paper); padding: 30px; min-width: 0; }
+.lodgingCard h3 { font-size: 28px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.lodgingMeta { font-size: 13px; line-height: 1.8; color: var(--muted-ink); margin: 0 0 6px; overflow-wrap: anywhere; }
+.lodgingCode { display: inline-block; margin-top: 10px; padding: 6px 12px; border: 1px dashed var(--accent); color: var(--accent-dark); font-size: 12px; letter-spacing: .08em; overflow-wrap: anywhere; }
+.lodgingLinks { display: flex; flex-wrap: wrap; gap: 0 22px; }
+.garden .lodgingCard { border-radius: 26px; }
+.invitation .lodgingCard, .invitation .faqList, .invitation .faqItem { border-color: #bda16a; }
+.photographic .lodgingCard { border: 0; background: var(--tint); }
+@media (max-width: 600px) {
+  .faqSection, .lodgingSection { padding: 65px 24px; }
+  .faqItem summary { font-size: 20px; padding: 20px 0; }
+  .lodgingCard { padding: 22px; }
+  .monogram img { height: 36px; }
+}
+
+/* ───────── Envelopado: convite que se desdobra de lado (só .folded/.fold*) ───────── */
+.folded {
+  --fold-w: min(660px, calc(100vw - 120px));
+  --fold-ease: cubic-bezier(.3, .7, .2, 1);
+  height: 100svh; display: flex; flex-direction: column; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 15%, color-mix(in srgb, var(--wedding-color) 58%, #262320), var(--wedding-color-dark));
+}
+.foldStage { position: relative; flex: 1; min-height: 0; perspective: 2400px; overflow: hidden; }
+.foldTrack {
+  position: absolute; top: clamp(12px, 3svh, 28px); bottom: 6px; left: 50%; display: flex;
+  transform: translateX(calc((var(--fold-index) + .5) * var(--fold-w) * -1));
+  transform-style: preserve-3d; transition: transform 1s var(--fold-ease);
+}
+/* Cada painel gira na dobra da esquerda — a que o prende ao painel anterior. */
+.foldPanel {
+  position: relative; flex: 0 0 var(--fold-w); height: 100%; transform-origin: left center;
+  background: var(--paper); color: var(--ink);
+  background-image: linear-gradient(90deg, #0000001c, transparent 22px);
+  box-shadow: 0 30px 60px #0005, inset 1px 0 0 #ffffff55;
+  transition: transform 1s var(--fold-ease), opacity .55s ease, filter .6s ease;
+}
+.foldPanel:first-child { background-image: none; }
+.foldPanel[data-state='folded'] { transform: rotateY(-102deg); opacity: 0; pointer-events: none; }
+.foldPanel[data-state='before'] { filter: brightness(.86) saturate(.9); }
+.foldScroller { height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; outline: none; }
+.foldBack { position: absolute; inset: 0; z-index: 2; border: 0; padding: 0; background: transparent; cursor: pointer; }
+.foldBack:focus-visible { outline: 3px solid #ffe6a3; outline-offset: -6px; }
+.foldControls { display: flex; align-items: center; justify-content: center; gap: 18px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); color: #f3e6c6; }
+.foldButton { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; border: 1px solid #e8ca82; background: #0002; color: inherit; font: 26px/1 var(--font-display), Georgia, serif; cursor: pointer; transition: background .2s, opacity .2s; }
+.foldButton:hover:not(:disabled) { background: #fff2; }
+.foldButton:disabled { opacity: .3; cursor: default; }
+.foldButton:focus-visible { outline: 2px solid #ffe6a3; outline-offset: 3px; }
+.foldStatus { min-width: 170px; text-align: center; }
+.foldStatus p { margin: 0 0 6px; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; }
+.foldDots { display: inline-flex; gap: 6px; }
+.foldDots span { width: 6px; height: 6px; border-radius: 50%; background: #f3e6c655; transition: background .3s, transform .3s; }
+.foldDots span[data-active] { background: #e8ca82; transform: scale(1.3); }
+
+/* Conteúdo das seções redimensionado para caber numa dobra (não numa página inteira). */
+.foldPanel .header { padding: 18px 26px; flex-wrap: wrap; gap: 10px 18px; }
+.foldPanel .header nav { flex-wrap: wrap; gap: 8px 16px; font-size: 9px; }
+.foldPanel .headerDate { display: none; }
+.foldPanel .hero { grid-template-columns: 1fr; min-height: 0; max-width: none; margin: 0; padding: 0 0 26px; gap: 0; }
+.foldPanel .heroCopy { padding: 34px 28px 22px; }
+.foldPanel .hero h1 { font-size: clamp(42px, 6vw, 66px); margin: 18px 0 14px; }
+.foldPanel .heroImage { height: clamp(260px, 42svh, 380px); min-height: 0; margin: 0 28px; }
+.foldPanel .dateBand { flex-direction: column; gap: 8px; text-align: center; padding: 22px; }
+.foldPanel .dateBand > span { max-width: 100%; }
+.foldPanel h2 { font-size: clamp(30px, 4vw, 44px); margin: 10px 0 24px; }
+.foldPanel :is(.storyNew, .story, .celebration, .message, .gallerySection, .giftsSection, .albumSection, .rsvp, .faqSection, .lodgingSection) { max-width: none; margin: 0; padding: 46px 28px; }
+.foldPanel .story { grid-template-columns: 1fr; gap: 24px; }
+.foldPanel .story figure img { height: 300px; }
+.foldPanel .events { margin-top: 18px; }
+.foldPanel .events article { flex-basis: 100%; max-width: none; border-left: 0; border-top: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding: 20px 0; }
+.foldPanel .events article:first-child { border-top: 0; }
+.foldPanel .message blockquote { font-size: clamp(22px, 3vw, 30px); }
+.foldPanel .gallery { grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+.foldPanel .gallery figure:nth-child(n) { margin-top: 0; }
+.foldPanel .storyHead { margin-bottom: 28px; }
+.foldPanel :is(.storyPair, .storySingle) { margin: 28px auto; }
+.foldPanel .storyGallery { columns: 2; column-gap: 14px; }
+.foldPanel .storyTimeline::before, .foldPanel .storyMoment::before { left: 6px; }
+.foldPanel .storyMoment, .foldPanel .storyMomentTextOnly { grid-template-columns: 1fr; gap: 16px; padding-left: 32px; margin-bottom: 44px; }
+.foldPanel :is(.storyMomentText, .storyMoment:nth-child(even) .storyMomentText) { order: 0; text-align: left; grid-column: auto; }
+.foldPanel .footer { padding: 22px 28px; }
+@media (max-width: 600px) {
+  .folded { --fold-w: calc(100vw - 44px); }
+  .foldControls { gap: 12px; }
+  .foldStatus { min-width: 130px; }
+  .foldPanel .heroCopy { padding: 26px 20px 18px; }
+  .foldPanel :is(.storyNew, .story, .celebration, .message, .gallerySection, .giftsSection, .albumSection, .rsvp, .faqSection, .lodgingSection) { padding: 36px 20px; }
+  .foldPanel .heroImage { margin: 0 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .foldTrack, .foldPanel { transition: none !important; }
+}

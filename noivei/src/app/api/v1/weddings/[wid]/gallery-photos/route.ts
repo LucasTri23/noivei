@@ -4,6 +4,7 @@ import { ok, err, handleApiError } from '@/lib/api/response'
 import { CreateGalleryPhotoSchema } from '@/lib/api/validation/gallery-photo.schema'
 import { requireAuth } from '@/lib/auth/require-auth'
 import { checkStorageLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
+import { MONOGRAM_IMAGE_LIMITS, siteFeatureAccess } from '@/lib/site/customization'
 import { resolveSiteTemplate } from '@/lib/site/templates'
 import { GALLERY_PHOTO_LIMIT_BY_TEMPLATE } from '@/lib/site/template-limits'
 import {
@@ -42,8 +43,9 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .from('wedding_gallery_photos')
       .select('*')
       .eq('wedding_id', wid)
-      // Fotos da história têm rota própria e não fazem parte da galeria.
-      .eq('purpose', 'gallery')
+      // Fotos da história têm rota própria. 'brand' (monograma) entra para o editor
+      // saber o tamanho de cada arquivo na barra de armazenamento.
+      .in('purpose', ['gallery', 'brand'])
       .order('created_at', { ascending: false })
       // Defesa em profundidade: a cota de armazenamento (compartilhada com Central de
       // arquivos) já limita o volume real; este teto só evita devolver a tabela inteira.
@@ -93,10 +95,13 @@ export async function POST(req: Request, { params }: RouteContext) {
       .select('template')
       .eq('wedding_id', wid)
       .maybeSingle()
-    const template = siteConfigRow?.template
-      ? resolveSiteTemplate(siteConfigRow.template, await resolveWeddingPlanId(supabase, wid))
-      : 'classic'
-    const galleryLimit = GALLERY_PHOTO_LIMIT_BY_TEMPLATE[template]
+    const planId = await resolveWeddingPlanId(supabase, wid)
+    const template = siteConfigRow?.template ? resolveSiteTemplate(siteConfigRow.template, planId) : 'classic'
+    const isBrand = parsed.data.purpose === 'brand'
+    if (isBrand && !siteFeatureAccess(planId).monogram) {
+      return err(403, 'MONOGRAM_NOT_AVAILABLE', 'O monograma está disponível a partir do plano Ideal.')
+    }
+    const galleryLimit = isBrand ? null : GALLERY_PHOTO_LIMIT_BY_TEMPLATE[template]
 
     if (galleryLimit !== null) {
       // Só fotos de galeria contam no teto do estilo — fotos da história
@@ -128,6 +133,13 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     const actualSizeBytes = storedObject.sizeBytes ?? parsed.data.size_bytes
 
+    // Monograma: só imagem rasterizada (SVG no bucket público executaria script ao
+    // ser aberto direto pela URL) e arquivo pequeno — o editor já reduz para 600px.
+    if (isBrand && (!['image/png', 'image/webp', 'image/jpeg'].includes(storedObject.mimeType ?? '') || actualSizeBytes > MONOGRAM_IMAGE_LIMITS.maxFileBytes)) {
+      await supabase.storage.from('wedding-photos').remove([parsed.data.storage_path])
+      return err(400, 'INVALID_MONOGRAM_IMAGE', 'Envie o monograma em PNG, JPG ou WEBP, com até 2 MB.')
+    }
+
     // Mesma cota da Central de arquivos (checkStorageLimit soma wedding_files +
     // wedding_gallery_photos) — não é um pool de armazenamento separado.
     const limitCheck = await checkStorageLimit(supabase, wid, actualSizeBytes)
@@ -140,7 +152,7 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     const { data, error } = await supabase
       .from('wedding_gallery_photos')
-      .insert({ ...parsed.data, size_bytes: actualSizeBytes, wedding_id: wid, uploaded_by: user.id })
+      .insert({ ...parsed.data, purpose: isBrand ? 'brand' : 'gallery', size_bytes: actualSizeBytes, wedding_id: wid, uploaded_by: user.id })
       .select()
       .single()
 
@@ -178,7 +190,7 @@ export async function DELETE(req: Request, { params }: RouteContext) {
       .eq('storage_path', storagePath)
       .eq('wedding_id', wid)
       // Fotos da história são removidas pela rota própria (/story/photos/[id]).
-      .eq('purpose', 'gallery')
+      .in('purpose', ['gallery', 'brand'])
       .maybeSingle()
 
     if (fetchError) return err(500, 'DB_ERROR', 'Erro ao buscar foto.')
@@ -196,7 +208,7 @@ export async function DELETE(req: Request, { params }: RouteContext) {
       .delete()
       .eq('storage_path', storagePath)
       .eq('wedding_id', wid)
-      .eq('purpose', 'gallery')
+      .in('purpose', ['gallery', 'brand'])
       .select('id')
       .maybeSingle())
 

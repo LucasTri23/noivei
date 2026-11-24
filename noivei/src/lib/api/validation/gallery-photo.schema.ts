@@ -6,6 +6,8 @@ export const CreateGalleryPhotoSchema = z.object({
   storage_path: z.string().trim().min(1, 'Caminho de armazenamento é obrigatório.').max(1024),
   size_bytes:   z.number().int().positive(),
   mime_type:    z.string().trim().max(255).nullable().optional(),
+  // 'brand' = imagem do monograma (fora da galeria e do teto de fotos do estilo).
+  purpose:      z.enum(['gallery', 'brand']).optional(),
 })
 
 export type CreateGalleryPhotoInput = z.infer<typeof CreateGalleryPhotoSchema>

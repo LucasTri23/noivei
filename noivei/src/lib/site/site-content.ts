@@ -1,9 +1,10 @@
+import { parseCustomization, type SiteCustomization } from '@/lib/site/customization'
 import { isStoryLayout, type StoryLayout } from '@/lib/site/story/story-layouts'
 import type { Json } from '@/types/database'
 
 // Shape tipado do JSON livre salvo em `site_config.content`. Usado tanto pelo
 // editor autenticado (/site) quanto pela renderização pública (/[slug]).
-export interface SiteContent {
+export interface SiteContent extends SiteCustomization {
   hero_subtitle?: string
   story_heading?: string
   gallery_heading?: string
@@ -54,5 +55,5 @@ export function parseSiteContent(raw: Record<string, Json | undefined> | null | 
     content.gallery_urls = raw.gallery_urls.filter((url): url is string => typeof url === 'string')
   }
 
-  return content
+  return { ...content, ...parseCustomization(raw) }
 }

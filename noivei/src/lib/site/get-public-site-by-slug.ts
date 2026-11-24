@@ -1,5 +1,6 @@
 import { limitTemplateGallery } from '@/lib/site/template-config'
-import { allowsSiteMonogram, resolveSiteTemplate } from '@/lib/site/templates'
+import { isWeddingPhotoUrl, stripLockedCustomization } from '@/lib/site/customization'
+import { resolveSiteTemplate } from '@/lib/site/templates'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { resolveWeddingPlanId } from '@/lib/billing/check-limit'
@@ -98,8 +99,9 @@ export async function getPublicSiteBySlug(
   const storedTemplate = (site.template as SiteTemplate | null) ?? 'classic'
   const template = resolveSiteTemplate(storedTemplate, planId)
 
-  const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
-  if (!allowsSiteMonogram(planId)) delete content.envelope_monogram
+  const content = stripLockedCustomization(parseSiteContent(site.content as Record<string, Json | undefined> | null), planId)
+  // Defesa extra: o monograma em imagem só é exibido se for um arquivo do próprio casamento.
+  if (content.monogram_image_url && !isWeddingPhotoUrl(content.monogram_image_url, weddingId)) delete content.monogram_image_url
 
   // Lista oculta pelo casal no editor: nem busca os itens (os templates já escondem a
   // seção quando a lista está vazia).

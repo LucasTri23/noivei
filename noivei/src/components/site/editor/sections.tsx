@@ -20,7 +20,9 @@ import Spinner from '@/components/ui/spinner'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 import type { GalleryPhotoMeta, GalleryPhotoRecord } from '@/lib/site/editor-photo-api'
 import { isUploadedPhotoUrl } from '@/lib/site/editor-photo-api'
+import { optimizeMonogramImage } from '@/lib/site/optimize-monogram'
 import { normalizeContent, type SiteDraft } from '@/lib/site/site-draft'
+import { ImageOptimizationError } from '@/lib/site/story/optimize-image'
 import type { SiteContent } from '@/lib/site/site-content'
 import { SITE_TEMPLATE_CONFIG } from '@/lib/site/template-config'
 import { allowsSiteMonogram } from '@/lib/site/templates'
@@ -81,17 +83,32 @@ interface CapaSectionProps {
   coupleNames:  string
   origin:       string
   onChange:     DraftUpdater
-  onUploadPhoto: (file: File) => Promise<GalleryPhotoRecord | null>
+  onUploadPhoto: (file: File, purpose?: 'gallery' | 'brand') => Promise<GalleryPhotoRecord | null>
 }
 
 export function CapaSection({ draft, saved, planId, weddingId, coupleNames, origin, onChange, onUploadPhoto }: CapaSectionProps) {
   const [uploading, setUploading] = useState(false)
+  const [uploadingMonogram, setUploadingMonogram] = useState(false)
   const config = SITE_TEMPLATE_CONFIG[draft.template]
   const a = normalizeContent(draft.content)
   const b = normalizeContent(saved.content)
-  const styleKeys = ['hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint', 'envelope_monogram'] as const
+  const styleKeys = ['hero_subtitle', 'story_heading', 'gallery_heading', 'envelope_caption', 'opening_hint', 'envelope_monogram', 'monogram_image_url'] as const
 
   const styleDirty = draft.template !== saved.template || styleKeys.some((key) => a[key] !== b[key])
+
+  async function handlePickMonogram(file: File) {
+    if (uploadingMonogram) return
+    setUploadingMonogram(true)
+    try {
+      const optimized = await optimizeMonogramImage(file)
+      const uploaded = await onUploadPhoto(optimized, 'brand')
+      if (uploaded) contentPatch(onChange, { monogram_image_url: uploaded.public_url })
+    } catch (error) {
+      toastError(error instanceof ImageOptimizationError ? error.message : 'Não foi possível enviar a imagem do monograma.')
+    } finally {
+      setUploadingMonogram(false)
+    }
+  }
   const coverDirty = a.cover_title !== b.cover_title || draft.coverPhotoUrl !== saved.coverPhotoUrl
     || draft.coverPhotoPosition !== saved.coverPhotoPosition || draft.coverPhotoZoom !== saved.coverPhotoZoom
   const addressDirty = draft.slug.trim() !== saved.slug || draft.published !== saved.published
@@ -127,6 +144,12 @@ export function CapaSection({ draft, saved, planId, weddingId, coupleNames, orig
           template={draft.template}
           content={draft.content}
           onChange={(key, value) => contentPatch(onChange, { [key]: value })}
+          monogramImage={{
+            uploading: uploadingMonogram,
+            onPick:    (file) => void handlePickMonogram(file),
+            // O arquivo só sai do armazenamento depois de salvar (collectUnusedPhotos).
+            onRemove:  () => contentPatch(onChange, { monogram_image_url: undefined }),
+          }}
         />
       </EditorGroup>
 

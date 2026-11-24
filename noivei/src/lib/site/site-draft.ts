@@ -1,5 +1,9 @@
 import { SiteSlugSchema } from '@/lib/api/validation/site.schema'
 import { parseSiteContent, type SiteContent } from '@/lib/site/site-content'
+import {
+  siteFeatureAccess, validateCustomization,
+  type SiteFaqItem, type SiteLodgingItem, type SitePalette, type SiteSectionsConfig,
+} from '@/lib/site/customization'
 import { SITE_TEMPLATE_CONFIG, type StyleField } from '@/lib/site/template-config'
 import { allowsSiteMonogram } from '@/lib/site/templates'
 import type { PlanId } from '@/constants/plans'
@@ -20,7 +24,7 @@ export interface SiteDraft {
   content:            SiteContent
 }
 
-export type EditorSectionId = 'capa' | 'historia' | 'cerimonia' | 'rsvp' | 'presentes' | 'galeria'
+export type EditorSectionId = 'capa' | 'aparencia' | 'secoes' | 'historia' | 'cerimonia' | 'informacoes' | 'rsvp' | 'presentes' | 'galeria'
 
 export const TEXT_CONTENT_KEYS = [
   'cover_title', 'our_story', 'story_photo_url', 'ceremony_info', 'reception_info', 'custom_message', 'dress_code',
@@ -53,11 +57,65 @@ export function normalizeContent(content: SiteContent): SiteContent {
   if (content.rich_text) next.rich_text = true
   if (content.hide_rsvp) next.hide_rsvp = true
   if (content.hide_gifts) next.hide_gifts = true
+  if (content.font_pair) next.font_pair = content.font_pair
+  const palette = normalizePalette(content.palette)
+  if (palette) next.palette = palette
+  const sections = normalizeSections(content.sections)
+  if (sections) next.sections = sections
+  const faq = normalizeFaq(content.faq)
+  if (faq) next.faq = faq
+  const lodging = normalizeLodging(content.lodging)
+  if (lodging) next.lodging = lodging
+  if (content.monogram_image_url) next.monogram_image_url = content.monogram_image_url
   return next
 }
 
+function normalizePalette(palette: SitePalette | undefined): SitePalette | undefined {
+  if (!palette) return undefined
+  const next: SitePalette = {}
+  if (palette.accent) next.accent = palette.accent.toUpperCase()
+  if (palette.tone) next.tone = palette.tone
+  if (palette.seal) next.seal = palette.seal
+  return Object.keys(next).length > 0 ? next : undefined
+}
+
+function normalizeSections(sections: SiteSectionsConfig | undefined): SiteSectionsConfig | undefined {
+  if (!sections) return undefined
+  const next: SiteSectionsConfig = {}
+  if (sections.order && sections.order.length > 0) next.order = [...new Set(sections.order)]
+  if (sections.hidden && sections.hidden.length > 0) next.hidden = [...new Set(sections.hidden)]
+  return next.order || next.hidden ? next : undefined
+}
+
+// Itens totalmente vazios (o casal clicou em "adicionar" e não preencheu) somem;
+// itens pela metade ficam para a validação apontar o que falta.
+function normalizeFaq(faq: SiteFaqItem[] | undefined): SiteFaqItem[] | undefined {
+  const items = (faq ?? [])
+    .map((item) => ({ question: item.question.trim(), answer: item.answer.trim() }))
+    .filter((item) => item.question || item.answer)
+  return items.length > 0 ? items : undefined
+}
+
+const LODGING_OPTIONAL_KEYS = ['address', 'map_url', 'phone', 'notes', 'discount_code'] as const
+
+function normalizeLodging(lodging: SiteLodgingItem[] | undefined): SiteLodgingItem[] | undefined {
+  const items: SiteLodgingItem[] = []
+  for (const item of lodging ?? []) {
+    const next: SiteLodgingItem = { name: item.name.trim() }
+    for (const key of LODGING_OPTIONAL_KEYS) {
+      const value = item[key]?.trim()
+      if (value) next[key] = value
+    }
+    if (next.name || Object.keys(next).length > 1) items.push(next)
+  }
+  return items.length > 0 ? items : undefined
+}
+
 const SECTION_CONTENT_KEYS: Record<EditorSectionId, (keyof SiteContent)[]> = {
-  capa:      ['cover_title', ...STYLE_FIELD_KEYS],
+  capa:        ['cover_title', 'monogram_image_url', ...STYLE_FIELD_KEYS],
+  aparencia:   ['font_pair', 'palette'],
+  secoes:      ['sections'],
+  informacoes: ['faq', 'lodging'],
   historia:  ['our_story', 'custom_message', 'story_photo_url', 'story_layout', 'rich_text'],
   cerimonia: ['ceremony_info', 'reception_info', 'dress_code'],
   rsvp:      ['hide_rsvp'],
@@ -88,6 +146,7 @@ export function referencedPhotoUrls(draft: SiteDraft): Set<string> {
   const urls = new Set<string>(draft.content.gallery_urls ?? [])
   if (draft.coverPhotoUrl) urls.add(draft.coverPhotoUrl)
   if (draft.content.story_photo_url) urls.add(draft.content.story_photo_url)
+  if (draft.content.monogram_image_url) urls.add(draft.content.monogram_image_url)
   return urls
 }
 
@@ -134,6 +193,33 @@ export function buildSitePatch(draft: SiteDraft, saved: SiteDraft, planId: PlanI
     else delete content[key]
   }
 
+  // Recursos que o plano não libera voltam ao valor salvo (o editor já os desabilita;
+  // isto só evita mandar à API algo que ela recusaria).
+  const access = siteFeatureAccess(planId)
+  const keepSaved = <K extends keyof SiteContent>(key: K) => {
+    if (savedContent[key] !== undefined) content[key] = savedContent[key]
+    else delete content[key]
+  }
+  if (!access.monogram) keepSaved('monogram_image_url')
+  if (!access.fontPairs) keepSaved('font_pair')
+  if (!access.lodging) keepSaved('lodging')
+  if (content.palette && (!access.tone || !access.seal)) {
+    const palette: SitePalette = { ...content.palette }
+    if (!access.tone) { if (savedContent.palette?.tone) palette.tone = savedContent.palette.tone; else delete palette.tone }
+    if (!access.seal) { if (savedContent.palette?.seal) palette.seal = savedContent.palette.seal; else delete palette.seal }
+    content.palette = normalizePalette(palette)
+    if (!content.palette) delete content.palette
+  }
+
+  const appearanceError = validateCustomization({ font_pair: content.font_pair, palette: content.palette })
+  if (appearanceError && !sameValue([content.font_pair, content.palette], [savedContent.font_pair, savedContent.palette])) {
+    return { ok: false, section: 'aparencia', message: appearanceError }
+  }
+  const infoError = validateCustomization({ faq: content.faq, lodging: content.lodging })
+  if (infoError && !sameValue([content.faq, content.lodging], [savedContent.faq, savedContent.lodging])) {
+    return { ok: false, section: 'informacoes', message: infoError }
+  }
+
   const galleryChanged = !sameValue(content.gallery_urls, savedContent.gallery_urls)
   const galleryLimit = SITE_TEMPLATE_CONFIG[draft.template].galleryLimit
   if (galleryChanged && galleryLimit !== null && (content.gallery_urls?.length ?? 0) > galleryLimit) {
@@ -153,7 +239,10 @@ export function buildSitePatch(draft: SiteDraft, saved: SiteDraft, planId: PlanI
 export function sectionIsFilled(section: EditorSectionId, draft: SiteDraft, giftCount: number): boolean {
   const content = draft.content
   switch (section) {
-    case 'capa':      return Boolean(draft.coverPhotoUrl)
+    case 'capa':        return Boolean(draft.coverPhotoUrl)
+    case 'aparencia':   return Boolean(content.font_pair || content.palette)
+    case 'secoes':      return Boolean(content.sections)
+    case 'informacoes': return Boolean(content.faq?.length || content.lodging?.length)
     case 'historia':  return Boolean(content.our_story?.trim())
     case 'cerimonia': return Boolean(content.ceremony_info?.trim() || content.reception_info?.trim())
     case 'rsvp':      return !content.hide_rsvp

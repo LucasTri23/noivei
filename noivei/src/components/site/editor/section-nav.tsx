@@ -1,13 +1,16 @@
 'use client'
 
-import { CameraIcon, CheckIcon, GiftIcon, HeartIcon, ImageIcon, MailCheckIcon, MapPinIcon } from '@/components/site/editor/icons'
+import { CameraIcon, CheckIcon, GiftIcon, HeartIcon, HelpIcon, ImageIcon, LayersIcon, MailCheckIcon, MapPinIcon, PaletteIcon } from '@/components/site/editor/icons'
 import { labelStyle, inputStyle } from '@/components/site/editor/styles'
 import type { EditorSectionId } from '@/lib/site/site-draft'
 
 export const EDITOR_SECTIONS: { id: EditorSectionId; label: string; icon: React.ReactNode }[] = [
-  { id: 'capa',      label: 'Capa',              icon: <ImageIcon /> },
-  { id: 'historia',  label: 'Nossa história',    icon: <HeartIcon /> },
-  { id: 'cerimonia', label: 'Cerimônia & festa', icon: <MapPinIcon /> },
+  { id: 'capa',        label: 'Capa',                 icon: <ImageIcon /> },
+  { id: 'aparencia',   label: 'Aparência',            icon: <PaletteIcon /> },
+  { id: 'secoes',      label: 'Seções',               icon: <LayersIcon /> },
+  { id: 'historia',    label: 'Nossa história',       icon: <HeartIcon /> },
+  { id: 'cerimonia',   label: 'Cerimônia & festa',    icon: <MapPinIcon /> },
+  { id: 'informacoes', label: 'Dúvidas & hospedagem', icon: <HelpIcon /> },
   { id: 'rsvp',      label: 'Confirmar presença', icon: <MailCheckIcon /> },
   { id: 'presentes', label: 'Lista de presentes', icon: <GiftIcon /> },
   { id: 'galeria',   label: 'Galeria',           icon: <CameraIcon /> },

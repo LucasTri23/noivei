@@ -249,3 +249,8 @@ input:-webkit-autofill:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-full); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted-fg); }
+
+/* Perguntas frequentes do site do casal (Clássico e Portfólio) */
+.site-faq-item summary::-webkit-details-marker { display: none; }
+.site-faq-item[open] .site-faq-icon { transform: rotate(45deg); }
+.site-faq-item summary:focus-visible { outline: 2px solid var(--wedding-color); outline-offset: 4px; border-radius: 6px; }

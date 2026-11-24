@@ -73,3 +73,72 @@ describe('conteúdo validado pelo estilo salvo', () => {
     expect(query.update).not.toHaveBeenCalled()
   })
 })
+
+describe('personalização do site na API', () => {
+  const WID = 'wedding-1'
+  const ownUrl = `https://proj.supabase.co/storage/v1/object/public/wedding-photos/${WID}/monograma.webp`
+
+  function setup(plan: 'free' | 'premium_monthly', existingContent: Record<string, unknown> = {}, brandRow: unknown = { id: 'brand-1' }) {
+    vi.mocked(resolveWeddingPlanId).mockResolvedValue(plan)
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: 'owner' } } as never)
+    const siteQuery = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'site-1', template: 'classic', content: existingContent }, error: null }), update: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: 'site-1' }, error: null }) }
+    const photoQuery = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: brandRow, error: null }) }
+    vi.mocked(createSupabaseServer).mockResolvedValue({ from: vi.fn((table: string) => (table === 'wedding_gallery_photos' ? photoQuery : siteQuery)) } as never)
+    return { siteQuery, photoQuery }
+  }
+  const patch = (content: Record<string, unknown>) => PATCH(new Request('https://example.com/api/site', { method: 'PATCH', body: JSON.stringify({ content }) }), { params: Promise.resolve({ wid: WID }) })
+
+  it.each([
+    [{ font_pair: 'elegante' }],
+    [{ palette: { tone: 'dark' } }],
+    [{ palette: { seal: 'wax' } }],
+    [{ lodging: [{ name: 'Hotel' }] }],
+    [{ monogram_image_url: ownUrl }],
+  ])('deve bloquear recurso pago no Gratuito: %j', async (content) => {
+    const { siteQuery } = setup('free')
+    const res = await patch(content)
+    expect(res.status).toBe(403)
+    expect(siteQuery.update).not.toHaveBeenCalled()
+  })
+
+  it('deve liberar cor de destaque, seções e perguntas no Gratuito', async () => {
+    setup('free')
+    expect((await patch({
+      palette: { accent: '#7A2E3B' }, sections: { order: ['faq'], hidden: ['mural'] }, faq: [{ question: 'Tem estacionamento?', answer: 'Sim.' }],
+    })).status).toBe(200)
+  })
+
+  it('deve deixar o Gratuito salvar textos mantendo recursos pagos já salvos antes do downgrade', async () => {
+    const saved = { font_pair: 'elegante', lodging: [{ name: 'Hotel' }] }
+    setup('free', saved)
+    expect((await patch({ ...saved, our_story: 'Texto novo' })).status).toBe(200)
+  })
+
+  it('deve aceitar imagem de monograma enviada por este casamento como brand', async () => {
+    const { photoQuery } = setup('premium_monthly')
+    expect((await patch({ monogram_image_url: ownUrl })).status).toBe(200)
+    expect(photoQuery.eq).toHaveBeenCalledWith('purpose', 'brand')
+    expect(photoQuery.eq).toHaveBeenCalledWith('storage_path', `${WID}/monograma.webp`)
+  })
+
+  it.each([
+    'https://evil.test/monograma.png',
+    'https://proj.supabase.co/storage/v1/object/public/wedding-photos/outro-casamento/monograma.webp',
+  ])('deve recusar imagem de monograma que não é deste casamento: %s', async (url) => {
+    const { siteQuery, photoQuery } = setup('premium_monthly')
+    expect((await patch({ monogram_image_url: url })).status).toBe(400)
+    expect(photoQuery.maybeSingle).not.toHaveBeenCalled()
+    expect(siteQuery.update).not.toHaveBeenCalled()
+  })
+
+  it('deve recusar imagem do próprio casamento que não foi registrada como monograma', async () => {
+    setup('premium_monthly', {}, null)
+    expect((await patch({ monogram_image_url: ownUrl })).status).toBe(400)
+  })
+
+  it('deve recusar link de mapa perigoso e mais de 8 perguntas', async () => {
+    setup('premium_monthly')
+    expect((await patch({ lodging: [{ name: 'Hotel', map_url: 'javascript:alert(1)' }] })).status).toBe(400)
+    expect((await patch({ faq: Array.from({ length: 9 }, () => ({ question: 'P', answer: 'R' })) })).status).toBe(400)
+  })
+})

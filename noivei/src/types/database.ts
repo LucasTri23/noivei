@@ -313,7 +313,7 @@ export interface WeddingGalleryPhoto {
   created_at:   string
 }
 
-export type WeddingGalleryPhotoPurpose = 'gallery' | 'story'
+export type WeddingGalleryPhotoPurpose = 'gallery' | 'story' | 'brand'
 
 export type StoryDatePrecision = 'day' | 'month' | 'year'
 

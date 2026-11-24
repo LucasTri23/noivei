@@ -56,7 +56,7 @@ export async function listSitePhotos(weddingId: string): Promise<GalleryPhotoRec
  * na cota de armazenamento do plano). A foto só passa a aparecer no site quando o
  * rascunho que a usa for salvo.
  */
-export async function uploadSitePhoto(weddingId: string, file: File): Promise<GalleryPhotoRecord | null> {
+export async function uploadSitePhoto(weddingId: string, file: File, purpose: 'gallery' | 'brand' = 'gallery'): Promise<GalleryPhotoRecord | null> {
   const path = `${weddingId}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
   const supabase = createSupabaseBrowser()
 
@@ -69,7 +69,7 @@ export async function uploadSitePhoto(weddingId: string, file: File): Promise<Ga
   const res = await fetch(`/api/v1/weddings/${weddingId}/gallery-photos`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ storage_path: path, size_bytes: file.size, mime_type: file.type || null }),
+    body:    JSON.stringify({ storage_path: path, size_bytes: file.size, mime_type: file.type || null, ...(purpose === 'brand' ? { purpose } : {}) }),
   })
 
   if (!res.ok) {

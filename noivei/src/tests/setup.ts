@@ -15,3 +15,9 @@ vi.mock('next/navigation', () => ({
   usePathname:   vi.fn(() => '/'),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }))
+
+// next/font só funciona com o compilador do Next — no Vitest devolve só os nomes
+// (a variável CSS vira a classe, o bastante para conferir qual fonte foi aplicada).
+vi.mock('next/font/local', () => ({
+  default: (options: { variable?: string }) => ({ className: 'font', variable: `font${options.variable ?? ''}`, style: {} }),
+}))

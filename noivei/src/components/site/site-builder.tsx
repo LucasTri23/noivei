@@ -10,6 +10,7 @@ import {
   CapaSection, CerimoniaSection, GaleriaSection, HistoriaSection, PresentesSection, RsvpSection,
   type DraftUpdater, type GiftStats, type RsvpStats,
 } from '@/components/site/editor/sections'
+import { AparenciaSection, InformacoesSection, SecoesSection } from '@/components/site/editor/customization-sections'
 import SetupWizard from '@/components/site/editor/setup-wizard'
 import ShareDialog from '@/components/site/editor/share-dialog'
 import { primaryButtonStyle, secondaryButtonStyle } from '@/components/site/editor/styles'
@@ -42,7 +43,10 @@ interface SiteBuilderProps {
 }
 
 const SECTION_HINTS: Record<EditorSectionId, string> = {
-  capa:      'Estilo, foto de capa, endereço e publicação.',
+  capa:        'Estilo, monograma, foto de capa, endereço e publicação.',
+  aparencia:   'Fontes, cor de destaque, fundo e acabamento do selo.',
+  secoes:      'Escolha a ordem das seções e quais aparecem no site.',
+  informacoes: 'Perguntas frequentes e sugestões de hospedagem para os convidados.',
   historia:  'A história de vocês, momentos especiais e um recado aos convidados.',
   cerimonia: 'Horários e detalhes da cerimônia e da festa.',
   rsvp:      'Como os convidados confirmam presença.',
@@ -108,8 +112,8 @@ export default function SiteBuilder({
 
   useUnsavedChangesGuard(hasChanges)
 
-  async function handleUpload(file: File): Promise<GalleryPhotoRecord | null> {
-    const uploaded = await uploadSitePhoto(weddingId, file)
+  async function handleUpload(file: File, purpose: 'gallery' | 'brand' = 'gallery'): Promise<GalleryPhotoRecord | null> {
+    const uploaded = await uploadSitePhoto(weddingId, file, purpose)
     if (!uploaded) return null
     sessionUploads.current.add(uploaded.public_url)
     const meta = { id: uploaded.id, position_y: uploaded.position_y, fit_contain: uploaded.fit_contain }
@@ -331,7 +335,10 @@ export default function SiteBuilder({
                   storyRef={storyRef}
                 />
               )}
+              {section.id === 'aparencia' && <AparenciaSection draft={draft} planId={planId} onChange={updateDraft} />}
+              {section.id === 'secoes' && <SecoesSection draft={draft} onChange={updateDraft} />}
               {section.id === 'cerimonia' && <CerimoniaSection draft={draft} onChange={updateDraft} />}
+              {section.id === 'informacoes' && <InformacoesSection draft={draft} planId={planId} onChange={updateDraft} />}
               {section.id === 'rsvp' && <RsvpSection draft={draft} onChange={updateDraft} stats={rsvpStats} />}
               {section.id === 'presentes' && <PresentesSection draft={draft} onChange={updateDraft} stats={giftStats} />}
               {section.id === 'galeria' && (

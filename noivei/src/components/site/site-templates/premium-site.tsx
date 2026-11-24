@@ -1,13 +1,17 @@
 /* eslint-disable @next/next/no-img-element -- Fotos do casal vêm de URLs de upload ou externas. */
 import GiftPaymentButton from '@/components/gifts/gift-payment-button'
 import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast'
+import { Fragment } from 'react'
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
+import SiteMonogram from '@/components/site/site-monogram'
+import { mapsSearchUrl, phoneHref, SITE_SECTION_LABELS, visibleSectionOrder, type SiteSectionId } from '@/lib/site/customization'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo } from '@/lib/site/get-public-site-by-slug'
 import type { PremiumSiteTemplate } from '@/lib/site/templates'
 import SiteRichText from '@/components/site/site-rich-text'
 import StoryImage, { storyPhotoAlt } from '@/components/site/story/story-image'
 import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
+import FoldedInvitation, { type FoldPanel } from './folded-invitation'
 import InvitationEnvelope from './invitation-envelope'
 import styles from './premium-site.module.css'
 
@@ -157,6 +161,9 @@ export function PremiumStoryHeading({ variant, heading }: { variant: PremiumSite
   )
 }
 
+// Ordem do menu antes da personalização — mantida enquanto o casal não reordena as seções.
+const LEGACY_NAV_ORDER: SiteSectionId[] = ['cerimonia', 'historia', 'hospedagem', 'presentes', 'faq', 'rsvp']
+
 export default function PremiumSite({ slug, site, variant }: { slug: string; site: PublicSiteInfo; variant: PremiumSiteTemplate }) {
   const { wedding, content } = site
   const date = dateLabel(wedding.wedding_date)
@@ -167,44 +174,20 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
   const mapsUrl = place ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}` : null
   const storyPhoto = content.story_photo_url || site.galleryPhotos[0]?.url
   const markdown = content.rich_text === true
-  const hasStory = site.story.layout === 'legacy' ? Boolean(content.our_story) : site.story.hasContent
-  const gallery = site.galleryPhotos.length > 0 && (
-    <section className={styles.gallerySection}>
-        <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>{isInvitation(variant) ? 'Memórias de nós dois.' : content.gallery_heading || 'O amor mora nos detalhes.'}</h2>
-        <div className={styles.gallery}>{site.galleryPhotos.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={`Memória ${index + 1} de ${wedding.couple_names}`} loading="lazy" style={{ objectFit: photo.fit_contain ? 'contain' : 'cover', objectPosition: `center ${photo.position_y}%` }} />{variant !== 'photographic' && <figcaption>{String(index + 1).padStart(2, '0')} / NOSSOS MOMENTOS</figcaption>}</figure>)}</div>
-    </section>
-  )
-  const page = (
-    <div className={`${styles.site} ${styles[variant === 'enveloped' ? 'invitation' : variant]}`}>
-      <header className={styles.header}>
-        <a className={styles.monogram} href="#inicio" aria-label="Início">{monogram}</a>
-        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{hasStory && <a href="#historia">{isInvitation(variant) ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}{!content.hide_rsvp && <a href="#rsvp">Sua presença</a>}</nav>
-        <span className={styles.headerDate}>{date || 'Vamos celebrar'}</span>
-      </header>
+  const order = visibleSectionOrder(variant, content)
+  const shown = (id: SiteSectionId) => order.includes(id)
+  const hasStory = shown('historia') && (site.story.layout === 'legacy' ? Boolean(content.our_story) : site.story.hasContent)
+  const faq = content.faq ?? []
+  const lodging = content.lodging ?? []
 
-      <section id="inicio" className={styles.hero} aria-labelledby="wedding-title">
-        <div className={styles.heroCopy}>
-          {variant === 'garden' && <BotanicalSprig className={styles.heroBotanical} />}
-          <p className={styles.eyebrow}>{variant === 'editorial' ? 'UM NOVO CAPÍTULO, JUNTOS' : variant === 'garden' ? 'O AMOR FLORESCE AQUI' : 'TEMOS A ALEGRIA DE CONVIDAR VOCÊ'}</p>
-          {isInvitation(variant) && <div className={styles.crest} aria-hidden="true">{initials}</div>}
-          <h1 id="wedding-title">{title}</h1>
-          <p className={styles.heroSubtitle}>{content.hero_subtitle || 'Para a vida inteira. E para celebrar com quem faz parte dela.'}</p>
-          {date && <p className={styles.weddingDate}>{date}</p>}
-          {place && <p className={styles.place}>{place}</p>}
-          <a className={styles.button} href="#celebracao">Conheça o nosso grande dia <span aria-hidden="true">↗</span></a>
-        </div>
-        <div className={styles.heroImage}>
-          {site.cover_photo_url ? <img src={site.cover_photo_url} alt={`Retrato de ${wedding.couple_names}`} fetchPriority="high" style={{ objectPosition: `center ${site.cover_photo_position}%`, transform: `scale(${coverPhotoZoomScale(site.cover_photo_zoom)})`, transformOrigin: `center ${site.cover_photo_position}%` }} />
-            : <div className={styles.photoPlaceholder}><BotanicalSprig /><span>{initials}</span><p>O NOSSO SIM</p></div>}
-          <span className={styles.imageCaption}>A NOSSA HISTÓRIA CONTINUA AQUI</span>
-        </div>
-        {variant === 'garden' && <BotanicalSprig className={styles.heroBotanicalRight} />}
+  const sections: Partial<Record<SiteSectionId, React.ReactNode>> = {
+    galeria: site.galleryPhotos.length > 0 && (
+      <section className={styles.gallerySection}>
+          <p className={styles.eyebrow}>MEMÓRIAS QUE NOS TROUXERAM ATÉ AQUI</p><h2>{isInvitation(variant) ? 'Memórias de nós dois.' : content.gallery_heading || 'O amor mora nos detalhes.'}</h2>
+          <div className={styles.gallery}>{site.galleryPhotos.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={`Memória ${index + 1} de ${wedding.couple_names}`} loading="lazy" style={{ objectFit: photo.fit_contain ? 'contain' : 'cover', objectPosition: `center ${photo.position_y}%` }} />{variant !== 'photographic' && <figcaption>{String(index + 1).padStart(2, '0')} / NOSSOS MOMENTOS</figcaption>}</figure>)}</div>
       </section>
-
-      <div className={styles.dateBand}><span>GUARDE ESTA DATA</span><strong>{date || 'Em breve'}</strong><span>{wedding.city || 'Com as pessoas que amamos'}</span></div>
-
-      {variant === 'photographic' && gallery}
-
+    ),
+    historia: <>
       {site.story.layout !== 'legacy' && site.story.hasContent && <section id="historia" className={styles.storyNew}>
         <PremiumStoryHeading variant={variant} heading={content.story_heading} />
         <PremiumStory view={site.story} coupleNames={wedding.couple_names} markdown={markdown} />
@@ -214,7 +197,8 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
         {storyPhoto && <figure><img src={storyPhoto} alt={`Um momento especial de ${wedding.couple_names}`} loading="lazy" /><figcaption>NÓS, EM TODOS OS CAPÍTULOS.</figcaption></figure>}
         <div><p className={styles.eyebrow}>{isInvitation(variant) ? 'UMA MENSAGEM ESPECIAL' : '01 / A NOSSA HISTÓRIA'}</p><h2>{isInvitation(variant) ? 'Com carinho, para você.' : content.story_heading || 'De todos os encontros, o nosso.'}</h2><SiteRichText text={content.our_story} markdown={markdown} className={styles.prose} /></div>
       </section>}
-
+    </>,
+    cerimonia: (
       <section id="celebracao" className={styles.celebration}>
         <p className={styles.eyebrow}>O DIA QUE QUEREMOS VIVER COM VOCÊ</p><h2>Vamos celebrar <em>o amor.</em></h2>
         <div className={styles.events}>
@@ -223,26 +207,119 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
           {content.dress_code && <article><span className={styles.eventNumber}>✧</span><h3>Para vestir</h3><SiteRichText text={content.dress_code} markdown={markdown} className={styles.prose} /></article>}
         </div>
       </section>
+    ),
+    hospedagem: lodging.length > 0 && (
+      <section id="hospedagem" className={styles.lodgingSection}>
+        <p className={styles.eyebrow}>PARA QUEM VEM DE LONGE</p><h2>Hospedagem e <em>como chegar.</em></h2>
+        <div className={styles.lodgingGrid}>{lodging.map((item, index) => {
+          const itemMap = item.map_url ?? (item.address ? mapsSearchUrl(item.address) : null)
+          return <article key={`${index}-${item.name}`} className={styles.lodgingCard}>
+            <h3>{item.name}</h3>
+            {item.address && <p className={styles.lodgingMeta}>{item.address}</p>}
+            {item.notes && <SiteRichText text={item.notes} markdown={markdown} className={styles.prose} />}
+            {item.discount_code && <span className={styles.lodgingCode}>CÓDIGO: {item.discount_code}</span>}
+            {(itemMap || item.phone) && <div className={styles.lodgingLinks}>
+              {itemMap && <a className={styles.textLink} href={itemMap} target="_blank" rel="noopener noreferrer nofollow">Ver no mapa ↗</a>}
+              {item.phone && <a className={styles.textLink} href={phoneHref(item.phone)}>{item.phone}</a>}
+            </div>}
+          </article>
+        })}</div>
+      </section>
+    ),
+    mensagem: content.custom_message && <section className={styles.message}><span aria-hidden="true">“</span><blockquote>{markdown ? <SiteRichText text={content.custom_message} markdown /> : content.custom_message}</blockquote><p>COM AMOR, {wedding.couple_names}</p></section>,
+    presentes: site.gifts.length > 0 && <section id="presentes" className={styles.giftsSection}>
+      <GiftPaymentReturnToast /><p className={styles.eyebrow}>PARA O NOSSO NOVO CAPÍTULO</p><h2>Pequenos gestos,<br /><em>grandes lembranças.</em></h2>
+      <p className={styles.sectionIntro}>Sua presença é o nosso maior presente. Se quiser nos presentear, preparamos esta lista com carinho.</p>
+      <div className={styles.gifts}>{site.gifts.map((gift) => <article key={gift.id} className={styles.gift}>
+        {gift.image_url && <img src={gift.image_url} alt={gift.name} loading="lazy" />}
+        <div><h3>{gift.name}</h3>{gift.description && <p>{gift.description}</p>}{gift.price_cents != null && <p className={styles.giftPrice}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(gift.price_cents / 100)}</p>}
+        {gift.is_purchased ? <span className={styles.giftStatus}>Já foi dado ♥</span> : gift.gift_type === 'app_payment' ? <GiftPaymentButton giftId={gift.id} giftName={gift.name} /> : gift.store_url ? <a className={styles.textLink} href={gift.store_url} target="_blank" rel="noopener noreferrer">Ver na loja ↗</a> : <span>Disponível</span>}</div>
+      </article>)}</div>
+    </section>,
+    mural: site.albumEnabled && <section className={styles.albumSection}><p className={styles.eyebrow}>PELO OLHAR DE QUEM AMAMOS</p><h2>O nosso mural <em>de memórias.</em></h2><p className={styles.sectionIntro}>As fotos compartilhadas pelos convidados durante o casamento aparecem aqui.</p><LivePhotoGallery slug={slug} limit={8} columnsClassName="columns-2 sm:columns-4" emptyTitle="As próximas memórias ainda estão por vir" emptyMessage="No dia do casamento, envie suas fotos pelo QR code do álbum." /><a className={styles.textLink} href={`/mural/${slug}`}>Ver o mural completo ↗</a></section>,
+    faq: faq.length > 0 && (
+      <section id="duvidas" className={styles.faqSection}>
+        <p className={styles.eyebrow}>PARA VOCÊ NÃO FICAR COM DÚVIDA</p><h2>Perguntas <em>frequentes.</em></h2>
+        <div className={styles.faqList}>{faq.map((item, index) => <details key={`${index}-${item.question}`} className={styles.faqItem}>
+          <summary>{item.question}</summary>
+          <SiteRichText text={item.answer} markdown={markdown} className={styles.prose} />
+        </details>)}</div>
+      </section>
+    ),
+    rsvp: <section id="rsvp" className={styles.rsvp}><p className={styles.eyebrow}>VOCÊ FAZ PARTE DESTA HISTÓRIA</p><h2>O nosso sim fica mais bonito<br /><em>com você por perto.</em></h2><p>Cada convidado recebe um link pessoal para confirmar presença. Use o link do seu convite; se ainda não recebeu, fale diretamente com o casal.</p><span className={styles.rsvpMonogram} aria-hidden="true">{initials}</span></section>,
+  }
 
-      {content.custom_message && <section className={styles.message}><span aria-hidden="true">“</span><blockquote>{markdown ? <SiteRichText text={content.custom_message} markdown /> : content.custom_message}</blockquote><p>COM AMOR, {wedding.couple_names}</p></section>}
+  const navLinks: Partial<Record<SiteSectionId, React.ReactNode>> = {
+    cerimonia:  <a href="#celebracao">O grande dia</a>,
+    historia:   hasStory && <a href="#historia">{isInvitation(variant) ? 'Nosso convite' : 'Nossa história'}</a>,
+    hospedagem: lodging.length > 0 && <a href="#hospedagem">Hospedagem</a>,
+    presentes:  site.gifts.length > 0 && <a href="#presentes">Presentes</a>,
+    faq:        faq.length > 0 && <a href="#duvidas">Dúvidas</a>,
+    rsvp:       <a href="#rsvp">Sua presença</a>,
+  }
+  const navOrder = (content.sections?.order ? order : LEGACY_NAV_ORDER.filter(shown)).filter((id) => navLinks[id])
 
-      {variant !== 'photographic' && gallery}
+  const header = (
+    <header className={styles.header}>
+      <a className={styles.monogram} href="#inicio" aria-label="Início"><SiteMonogram imageUrl={content.monogram_image_url} text={monogram} /></a>
+      <nav aria-label="Seções do site">{navOrder.map((id) => <Fragment key={id}>{navLinks[id]}</Fragment>)}</nav>
+      <span className={styles.headerDate}>{date || 'Vamos celebrar'}</span>
+    </header>
+  )
 
-      {site.gifts.length > 0 && <section id="presentes" className={styles.giftsSection}>
-        <GiftPaymentReturnToast /><p className={styles.eyebrow}>PARA O NOSSO NOVO CAPÍTULO</p><h2>Pequenos gestos,<br /><em>grandes lembranças.</em></h2>
-        <p className={styles.sectionIntro}>Sua presença é o nosso maior presente. Se quiser nos presentear, preparamos esta lista com carinho.</p>
-        <div className={styles.gifts}>{site.gifts.map((gift) => <article key={gift.id} className={styles.gift}>
-          {gift.image_url && <img src={gift.image_url} alt={gift.name} loading="lazy" />}
-          <div><h3>{gift.name}</h3>{gift.description && <p>{gift.description}</p>}{gift.price_cents != null && <p className={styles.giftPrice}>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(gift.price_cents / 100)}</p>}
-          {gift.is_purchased ? <span className={styles.giftStatus}>Já foi dado ♥</span> : gift.gift_type === 'app_payment' ? <GiftPaymentButton giftId={gift.id} giftName={gift.name} /> : gift.store_url ? <a className={styles.textLink} href={gift.store_url} target="_blank" rel="noopener noreferrer">Ver na loja ↗</a> : <span>Disponível</span>}</div>
-        </article>)}</div>
-      </section>}
+  const hero = (
+    <section id="inicio" className={styles.hero} aria-labelledby="wedding-title">
+      <div className={styles.heroCopy}>
+        {variant === 'garden' && <BotanicalSprig className={styles.heroBotanical} />}
+        <p className={styles.eyebrow}>{variant === 'editorial' ? 'UM NOVO CAPÍTULO, JUNTOS' : variant === 'garden' ? 'O AMOR FLORESCE AQUI' : 'TEMOS A ALEGRIA DE CONVIDAR VOCÊ'}</p>
+        {isInvitation(variant) && <div className={styles.crest} aria-hidden="true">{initials}</div>}
+        <h1 id="wedding-title">{title}</h1>
+        <p className={styles.heroSubtitle}>{content.hero_subtitle || 'Para a vida inteira. E para celebrar com quem faz parte dela.'}</p>
+        {date && <p className={styles.weddingDate}>{date}</p>}
+        {place && <p className={styles.place}>{place}</p>}
+        {shown('cerimonia') && <a className={styles.button} href="#celebracao">Conheça o nosso grande dia <span aria-hidden="true">↗</span></a>}
+      </div>
+      <div className={styles.heroImage}>
+        {site.cover_photo_url ? <img src={site.cover_photo_url} alt={`Retrato de ${wedding.couple_names}`} fetchPriority="high" style={{ objectPosition: `center ${site.cover_photo_position}%`, transform: `scale(${coverPhotoZoomScale(site.cover_photo_zoom)})`, transformOrigin: `center ${site.cover_photo_position}%` }} />
+          : <div className={styles.photoPlaceholder}><BotanicalSprig /><span>{initials}</span><p>O NOSSO SIM</p></div>}
+        <span className={styles.imageCaption}>A NOSSA HISTÓRIA CONTINUA AQUI</span>
+      </div>
+      {variant === 'garden' && <BotanicalSprig className={styles.heroBotanicalRight} />}
+    </section>
+  )
 
-      {site.albumEnabled && <section className={styles.albumSection}><p className={styles.eyebrow}>PELO OLHAR DE QUEM AMAMOS</p><h2>O nosso mural <em>de memórias.</em></h2><p className={styles.sectionIntro}>As fotos compartilhadas pelos convidados durante o casamento aparecem aqui.</p><LivePhotoGallery slug={slug} limit={8} columnsClassName="columns-2 sm:columns-4" emptyTitle="As próximas memórias ainda estão por vir" emptyMessage="No dia do casamento, envie suas fotos pelo QR code do álbum." /><a className={styles.textLink} href={`/mural/${slug}`}>Ver o mural completo ↗</a></section>}
+  const dateBand = <div className={styles.dateBand}><span>GUARDE ESTA DATA</span><strong>{date || 'Em breve'}</strong><span>{wedding.city || 'Com as pessoas que amamos'}</span></div>
+  const footer = <footer className={styles.footer}><span>{wedding.couple_names}</span><span>{date || 'Com amor'}</span><small>Feito com amor no Wednest</small></footer>
+  const siteClassName = `${styles.site} ${styles[variant === 'enveloped' ? 'invitation' : variant]}`
 
-      {!content.hide_rsvp && <section id="rsvp" className={styles.rsvp}><p className={styles.eyebrow}>VOCÊ FAZ PARTE DESTA HISTÓRIA</p><h2>O nosso sim fica mais bonito<br /><em>com você por perto.</em></h2><p>Cada convidado recebe um link pessoal para confirmar presença. Use o link do seu convite; se ainda não recebeu, fale diretamente com o casal.</p><span className={styles.rsvpMonogram} aria-hidden="true">{initials}</span></section>}
-      <footer className={styles.footer}><span>{wedding.couple_names}</span><span>{date || 'Com amor'}</span><small>Feito com amor no Wednest</small></footer>
+  const envelope = (children: React.ReactNode) => (
+    <InvitationEnvelope names={wedding.couple_names} date={date} initials={initials} caption={content.envelope_caption} openingHint={content.opening_hint} monogram={content.envelope_monogram} monogramImageUrl={content.monogram_image_url} sealFinish={content.palette?.seal} sideOpening={variant === 'enveloped'}>{children}</InvitationEnvelope>
+  )
+
+  // Envelopado: depois do envelope, o convite se desdobra de lado — uma dobra por
+  // seção (na ordem escolhida pelo casal), em vez de uma página rolando para baixo.
+  if (variant === 'enveloped') {
+    const panels: FoldPanel[] = [
+      { id: 'inicio', label: 'Convite', content: <>{header}{hero}{dateBand}</> },
+      ...order
+        .filter((id) => (id === 'historia' ? hasStory : Boolean(sections[id])))
+        .map((id) => ({ id, label: SITE_SECTION_LABELS[id], content: sections[id] })),
+    ]
+    const last = panels[panels.length - 1]
+    if (last) last.content = <>{last.content}{footer}</>
+    return envelope(<FoldedInvitation className={`${siteClassName} ${styles.folded}`} panels={panels} />)
+  }
+
+  const page = (
+    <div className={siteClassName}>
+      {header}
+      {hero}
+      {dateBand}
+
+      {order.map((id) => <Fragment key={id}>{sections[id]}</Fragment>)}
+
+      {footer}
     </div>
   )
-  return isInvitation(variant) ? <InvitationEnvelope names={wedding.couple_names} date={date} initials={initials} caption={content.envelope_caption} openingHint={content.opening_hint} monogram={content.envelope_monogram} sideOpening={variant === 'enveloped'}>{page}</InvitationEnvelope> : page
+  return isInvitation(variant) ? envelope(page) : page
 }

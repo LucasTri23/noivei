@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import SiteMonogram from '@/components/site/site-monogram'
+import type { SealFinish } from '@/lib/site/customization'
 import styles from './premium-site.module.css'
 
-export default function InvitationEnvelope({ names, date, initials, children, caption, openingHint, monogram, sideOpening = false }: {
-  monogram?: string; sideOpening?: boolean; caption?: string; openingHint?: string; names: string; date: string | null; initials: string; children: React.ReactNode
+export default function InvitationEnvelope({ names, date, initials, children, caption, openingHint, monogram, monogramImageUrl, sealFinish, sideOpening = false }: {
+  monogram?: string; monogramImageUrl?: string; sealFinish?: SealFinish; sideOpening?: boolean; caption?: string; openingHint?: string; names: string; date: string | null; initials: string; children: React.ReactNode
 }) {
   const sealText = monogram?.trim() || initials
   const [opened, setOpened] = useState(false)
@@ -38,8 +40,10 @@ export default function InvitationEnvelope({ names, date, initials, children, ca
             <div className={`${styles.flap} ${styles.flapLeft}`} aria-hidden="true" />
             {!sideOpening && <div className={`${styles.flap} ${styles.flapRight}`} aria-hidden="true" />}
             <div className={styles.goldCord} aria-hidden="true" />
-            <button type="button" className={styles.seal} onClick={open} disabled={opened} aria-label="Abrir convite de casamento" aria-controls="invitation-content" aria-expanded={opened}>
-              <span className={styles.sealInner} data-long={sealText.length > 5 || undefined}>{sealText}</span>
+            <button type="button" className={styles.seal} data-finish={sealFinish && sealFinish !== 'gold' ? sealFinish : undefined} onClick={open} disabled={opened} aria-label="Abrir convite de casamento" aria-controls="invitation-content" aria-expanded={opened}>
+              <span className={styles.sealInner} data-long={(!monogramImageUrl && sealText.length > 5) || undefined}>
+                <SiteMonogram imageUrl={monogramImageUrl} text={sealText} imgClassName={styles.sealImage} />
+              </span>
             </button>
             <span className={styles.envelopeCaption} aria-hidden="true">{caption || 'COM CARINHO, PARA VOCÊ'}</span>
           </div>

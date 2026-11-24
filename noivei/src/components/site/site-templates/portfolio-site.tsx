@@ -1,9 +1,13 @@
+import { Fragment } from 'react'
 import GiftPaymentButton from '@/components/gifts/gift-payment-button'
 import GiftPaymentReturnToast from '@/components/gifts/gift-payment-return-toast'
 import LivePhotoGallery from '@/components/album/live-photo-gallery'
 import { coverPhotoZoomScale } from '@/lib/site/cover-photo-zoom'
 import type { PublicSiteInfo, PublicGalleryPhoto } from '@/lib/site/get-public-site-by-slug'
+import { FaqAccordion, LodgingCards } from '@/components/site/site-info-sections'
+import SiteMonogram from '@/components/site/site-monogram'
 import SiteRichText from '@/components/site/site-rich-text'
+import { isSectionHidden, visibleSectionOrder, type SiteSectionId } from '@/lib/site/customization'
 import StoryImage, { storyPhotoAlt, storyPhotoAspect } from '@/components/site/story/story-image'
 import type { StoryMomentView, StoryPhotoView, StoryView } from '@/lib/site/story/story-model'
 import PortfolioCountdown from './portfolio-countdown'
@@ -466,14 +470,20 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   const coverTitle       = site.content.cover_title || site.wedding.couple_names
   const mapsUrl          = buildMapsUrl(site.wedding.venue, site.wedding.city)
   const galleryPhotos    = site.galleryPhotos
-  const hasCeremony      = Boolean(site.content.ceremony_info || site.content.reception_info)
+  const order            = visibleSectionOrder('portfolio', site.content)
+  const shown            = (id: SiteSectionId) => order.includes(id)
+  const faq              = site.content.faq ?? []
+  const lodging          = site.content.lodging ?? []
+  const hasCeremony      = shown('cerimonia') && Boolean(site.content.ceremony_info || site.content.reception_info)
   const hasVenue         = Boolean(site.wedding.venue || site.wedding.city)
-  const hasGallery       = galleryPhotos.length > 0
-  const hasGifts         = site.gifts.length > 0
+  const hasGallery       = shown('galeria') && galleryPhotos.length > 0
+  const hasGifts         = shown('presentes') && site.gifts.length > 0
   const legacyStory      = site.story.layout === 'legacy'
   const markdown         = site.content.rich_text === true
-  const hasStory         = site.story.layout === 'legacy' ? Boolean(site.content.our_story) : site.story.hasContent
-  const hasRsvp          = !site.content.hide_rsvp
+  const hasStory         = shown('historia') && (site.story.layout === 'legacy' ? Boolean(site.content.our_story) : site.story.hasContent)
+  const hasRsvp          = shown('rsvp')
+  const hasLodging       = shown('hospedagem') && lodging.length > 0
+  const hasFaq           = shown('faq') && faq.length > 0
 
   // Foto de destaque da seção "Nossa história" — usa `content.story_photo_url` quando o
   // casal escolheu explicitamente uma foto pra essa seção (ver HistoriaSection no editor).
@@ -494,32 +504,24 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   // Só entram na navegação (barra do topo, grade de acesso rápido) as seções que o
   // casal de fato preencheu — "Início" sempre existe; "Confirmação de presença" só sai
   // quando o casal oculta a seção no editor.
-  const navItems: { href: string; label: string }[] = [
-    { href: '#hero', label: 'Início' },
-    ...(hasStory ? [{ href: '#historia', label: 'Sobre os noivos' }] : []),
-    ...(hasCeremony ? [{ href: '#cerimonia', label: 'Cerimônia e Festa' }] : []),
-    ...(hasGallery ? [{ href: '#galeria', label: 'Álbum de Fotos' }] : []),
-    ...(hasGifts ? [{ href: '#presentes', label: 'Lista de Presentes' }] : []),
-    ...(hasRsvp ? [{ href: '#rsvp', label: 'Confirmação de Presença' }] : []),
-  ]
-
-  const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
-    ...(hasStory
-      ? [{ href: '#historia', icon: <HeartLineIcon />, title: 'Sobre os noivos', desc: 'Conheça um pouco da nossa história.' }]
-      : []),
-    ...(hasCeremony
-      ? [{ href: '#cerimonia', icon: <MapPinIcon />, title: 'Cerimônia e Festa', desc: 'Endereço, horários e o que você precisa saber.' }]
-      : []),
-    ...(hasGallery
-      ? [{ href: '#galeria', icon: <CameraLineIcon />, title: 'Álbum de Fotos', desc: 'Os registros mais especiais dessa história.' }]
-      : []),
-    ...(hasGifts
-      ? [{ href: '#presentes', icon: <GiftLineIcon />, title: 'Lista de Presentes', desc: 'Ajude a construir esse novo capítulo.' }]
-      : []),
-    ...(hasRsvp
-      ? [{ href: '#rsvp', icon: <MailLineIcon />, title: 'Confirmação de Presença', desc: 'Confirme sua presença pelo seu link pessoal.' }]
-      : []),
-  ]
+  // Menu e grade de acesso rápido: só seções preenchidas e visíveis. Enquanto o casal
+  // não reordena as seções, a ordem é a original do estilo.
+  const navEntries: Partial<Record<SiteSectionId, { href: string; label: string; icon: React.ReactNode; desc: string }>> = {
+    ...(hasStory ? { historia: { href: '#historia', label: 'Sobre os noivos', icon: <HeartLineIcon />, desc: 'Conheça um pouco da nossa história.' } } : {}),
+    ...(hasCeremony ? { cerimonia: { href: '#cerimonia', label: 'Cerimônia e Festa', icon: <MapPinIcon />, desc: 'Endereço, horários e o que você precisa saber.' } } : {}),
+    ...(hasLodging ? { hospedagem: { href: '#hospedagem', label: 'Hospedagem', icon: <MapPinIcon />, desc: 'Onde ficar e como chegar.' } } : {}),
+    ...(hasGallery ? { galeria: { href: '#galeria', label: 'Álbum de Fotos', icon: <CameraLineIcon />, desc: 'Os registros mais especiais dessa história.' } } : {}),
+    ...(hasGifts ? { presentes: { href: '#presentes', label: 'Lista de Presentes', icon: <GiftLineIcon />, desc: 'Ajude a construir esse novo capítulo.' } } : {}),
+    ...(hasFaq ? { faq: { href: '#duvidas', label: 'Dúvidas', icon: <InfoLineIcon />, desc: 'Respostas para as perguntas mais comuns.' } } : {}),
+    ...(hasRsvp ? { rsvp: { href: '#rsvp', label: 'Confirmação de Presença', icon: <MailLineIcon />, desc: 'Confirme sua presença pelo seu link pessoal.' } } : {}),
+  }
+  const LEGACY_NAV_ORDER: SiteSectionId[] = ['historia', 'cerimonia', 'hospedagem', 'galeria', 'presentes', 'faq', 'rsvp']
+  const navOrder = (site.content.sections?.order ? order : LEGACY_NAV_ORDER).filter((id) => navEntries[id])
+  const navItems = [{ href: '#hero', label: 'Início' }, ...navOrder.map((id) => navEntries[id]!)]
+  const quickLinks = navOrder.map((id) => {
+    const entry = navEntries[id]!
+    return { href: entry.href, icon: entry.icon, title: entry.label, desc: entry.desc }
+  })
 
   // Fator de zoom extra (ver cover-photo-zoom.ts) — aplicado via transform: scale por
   // cima do background-size: cover, já que o CSS puro não permite combinar "cover
@@ -528,6 +530,252 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   // mais alta que a do clássico — o mesmo cover_photo_position pode precisar de mais
   // zoom aqui para não deixar a foto "afastada demais".
   const coverPhotoScale = coverPhotoZoomScale(site.cover_photo_zoom)
+
+  const sections: Partial<Record<SiteSectionId, React.ReactNode>> = {
+    mensagem: <>
+          {/* ── Citação ── */}
+          {site.content.custom_message && (
+            <section style={{ padding: '80px 0', textAlign: 'center' }}>
+              <Eyebrow>Uma mensagem para vocês</Eyebrow>
+              <SectionDivider />
+              <SiteRichText
+                text={`\u201C${site.content.custom_message}\u201D`}
+                markdown={markdown}
+                className="font-display"
+                style={{ fontStyle: 'italic', fontSize: 'clamp(20px,3vw,30px)', color: 'var(--fg)', lineHeight: 1.5, margin: '0 auto', maxWidth: '760px' }}
+              />
+            </section>
+          )}
+    </>,
+    historia: <>
+          {/* ── Sobre os noivos / Nossa história (apresentações novas) ── */}
+          {site.story.layout !== 'legacy' && site.story.hasContent && (
+            <section id="historia" style={{ padding: '40px 0 80px' }}>
+              <Eyebrow>Nossa história</Eyebrow>
+              <SectionDivider className="justify-start" />
+              <h2
+                className="font-display"
+                style={{ fontWeight: 500, fontSize: 'clamp(30px,4.4vw,46px)', color: 'var(--fg)', margin: '0 0 28px', lineHeight: 1.06 }}
+              >
+                Como tudo começou
+              </h2>
+              <PortfolioStory view={site.story} coupleNames={site.wedding.couple_names} markdown={markdown} />
+            </section>
+          )}
+
+          {/* ── Sobre os noivos / Nossa história ── */}
+          {legacyStory && site.content.our_story && (
+            <section id="historia" style={{ padding: '40px 0 80px' }}>
+              <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center">
+                {aboutPhoto && (
+                  <div style={{ borderRadius: '28px', overflow: 'hidden', order: 1 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage/externa, sem domínio fixo para configurar no next/image */}
+                    <img
+                      src={aboutPhoto.url}
+                      alt="Foto do casal"
+                      style={{
+                        width: '100%', height: 'clamp(320px,42vw,520px)', display: 'block',
+                        objectFit:      aboutPhoto.fit_contain ? 'contain' : 'cover',
+                        objectPosition: `center ${aboutPhoto.position_y}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                <div style={{ order: 2 }}>
+                  <Eyebrow>Nossa história</Eyebrow>
+                  <SectionDivider className="justify-start" />
+                  <h2
+                    className="font-display"
+                    style={{ fontWeight: 500, fontSize: 'clamp(30px,4.4vw,46px)', color: 'var(--fg)', margin: '0 0 14px', lineHeight: 1.06 }}
+                  >
+                    Como tudo começou
+                  </h2>
+                  <p style={{ fontStyle: 'italic', fontSize: '15.5px', color: 'var(--wedding-color-dark)', margin: '0 0 18px' }}>
+                    Uma história para contar durante toda a vida.
+                  </p>
+                  <SiteRichText text={site.content.our_story} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line', margin: 0 }} />
+                </div>
+              </div>
+            </section>
+          )}
+    </>,
+    cerimonia: <>
+          {/* ── Cerimônia & Festa ── */}
+          {hasCeremony && (
+            <section id="cerimonia" style={{ padding: '40px 0 80px' }}>
+              <SectionHeader
+                eyebrow="Cerimônia e festa"
+                title="Tudo pra esse dia inesquecível"
+                subtitle="O endereço, os horários e as informações que vocês precisam antes de vir celebrar com a gente."
+              />
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {hasVenue && (
+                  <div style={cardStyle}>
+                    <IconCircle><MapPinIcon /></IconCircle>
+                    <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 6px' }}>
+                      Local
+                    </h3>
+                    <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.65, margin: '0 0 20px' }}>
+                      {[site.wedding.venue, site.wedding.city].filter(Boolean).join(', ')}
+                    </p>
+                    {mapsUrl && (
+                      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={pillOutlineButtonStyle}>
+                        <MapPinIcon /> Como chegar
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                <div style={cardStyle}>
+                  <IconCircle><ClockLineIcon /></IconCircle>
+                  <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 20px' }}>
+                    Horários
+                  </h3>
+                  <ScheduleTimeline nodes={scheduleNodes} markdown={markdown} />
+                </div>
+
+                {site.content.dress_code && (
+                  <div style={{ ...cardStyle }} className="lg:col-span-2">
+                    <IconCircle><InfoLineIcon /></IconCircle>
+                    <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 16px' }}>
+                      Informações importantes
+                    </h3>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '6px' }}>
+                          Dress code
+                        </div>
+                        <SiteRichText text={site.content.dress_code} markdown={markdown} style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+    </>,
+    hospedagem: lodging.length > 0 && (
+      <section id="hospedagem" style={{ padding: '40px 0 80px' }}>
+        <SectionHeader eyebrow="Hospedagem" title="Onde ficar e como chegar" subtitle="Sugestões para quem vem de longe." />
+        <LodgingCards items={lodging} markdown={markdown} look="portfolio" />
+      </section>
+    ),
+    presentes: <>
+          {/* ── Lista de presentes ── */}
+          {hasGifts && (
+            <section id="presentes" style={{ padding: '40px 0 80px' }}>
+              <GiftPaymentReturnToast />
+              <SectionHeader eyebrow="Lista de presentes" title="Ajude a construir esse novo capítulo" />
+              <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px,1fr))' }}>
+                {site.gifts.map((gift) => (
+                  <div key={gift.id} style={{ ...cardStyle, padding: 0, overflow: 'hidden', opacity: gift.is_purchased ? 0.6 : 1 }}>
+                    {gift.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
+                      <img src={gift.image_url} alt={gift.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                      <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--wedding-color-subtle)' }}>
+                        <IconCircle size={52}><GiftLineIcon /></IconCircle>
+                      </div>
+                    )}
+                    <div style={{ padding: '20px' }}>
+                      <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--fg)' }}>{gift.name}</div>
+                      {gift.price_cents != null && (
+                        <div style={{ fontSize: '13.5px', color: 'var(--muted-fg)', marginTop: '3px' }}>
+                          {currencyFmt.format(gift.price_cents / 100)}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '14px', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '11.5px', fontWeight: 700, padding: '4px 12px', borderRadius: '99px',
+                            background: gift.is_purchased ? '#E9EFE6' : 'var(--wedding-color-subtle)',
+                            color: gift.is_purchased ? '#5E8B6A' : 'var(--wedding-color-dark)',
+                          }}
+                        >
+                          {gift.is_purchased ? 'Já foi dado' : 'Disponível'}
+                        </span>
+                        {!gift.is_purchased && gift.gift_type === 'link' && gift.store_url && (
+                          <a
+                            href={gift.store_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '12px', fontWeight: 700, color: 'var(--wedding-color-dark)', textDecoration: 'none' }}
+                          >
+                            Ver na loja
+                          </a>
+                        )}
+                        {!gift.is_purchased && gift.gift_type === 'app_payment' && (
+                          <GiftPaymentButton giftId={gift.id} giftName={gift.name} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+    </>,
+    galeria: <>
+          {/* ── Galeria — fotos curadas pelo casal, em linhas de tamanho fixo ── */}
+          {hasGallery && (
+            <section id="galeria" style={{ padding: '40px 0 80px' }}>
+              <SectionHeader eyebrow="Galeria" title="Momentos" />
+              <PortfolioGalleryGrid photos={galleryPhotos} />
+            </section>
+          )}
+    </>,
+    mural: <>
+          {/* ── Mural de fotos ao vivo — grade completa embutida nativamente, sem
+              prévia/link separado (a densidade visual deste template pede isso, ao
+              contrário do template clássico, onde é só um teaser). Sempre visível
+              quando o plano libera 'album', mesmo com o mural ainda vazio. */}
+          {site.albumEnabled && (
+            <section style={{ padding: '40px 0 80px' }}>
+              <SectionHeader
+                eyebrow="Ao vivo"
+                title="Mural de fotos"
+                subtitle="As fotos que os convidados forem enviando durante o casamento aparecem aqui, ao vivo."
+              />
+              <LivePhotoGallery
+                slug={slug}
+                emptyTitle="O mural ainda está vazio"
+                emptyMessage="Volte no dia do casamento (ou no dia seguinte) — os convidados poderão enviar fotos ao vivo pelo QR code."
+              />
+              <div style={{ textAlign: 'center', marginTop: '22px' }}>
+                <a href={`/mural/${slug}`} style={{ ...pillOutlineButtonStyle, border: 'none', background: 'none', padding: 0, color: 'var(--wedding-color-dark)' }}>
+                  Abrir mural em tela cheia <ArrowRightIcon />
+                </a>
+              </div>
+            </section>
+          )}
+    </>,
+    faq: faq.length > 0 && (
+      <section id="duvidas" style={{ padding: '40px 0 80px' }}>
+        <SectionHeader eyebrow="Dúvidas" title="Perguntas frequentes" />
+        <FaqAccordion items={faq} markdown={markdown} look="portfolio" />
+      </section>
+    ),
+    rsvp: <>
+          {/* ── RSVP ── */}
+          {hasRsvp && (
+          <section
+            id="rsvp"
+            style={{ background: 'var(--wedding-color-subtle)', borderRadius: '32px', padding: '64px 24px', textAlign: 'center', marginBottom: '64px' }}
+          >
+            <Eyebrow>Presença</Eyebrow>
+            <SectionDivider />
+            <h2 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(28px,4.2vw,38px)', color: 'var(--fg)', margin: '0 0 12px' }}>
+              Confirmação de presença
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--muted-fg)', margin: '0 auto', lineHeight: 1.6, maxWidth: '440px' }}>
+              Cada convidado recebe um link pessoal para confirmar presença. Se você não recebeu o seu,
+              fale diretamente com o casal.
+            </p>
+          </section>
+          )}
+    </>,
+  }
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -582,7 +830,11 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
               className="font-display"
               style={{ fontSize: '16px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >
-              {site.content.envelope_monogram || coverTitle}
+              <SiteMonogram
+                imageUrl={site.content.monogram_image_url}
+                text={site.content.envelope_monogram || coverTitle}
+                imgStyle={{ display: 'block', height: '34px', width: 'auto', maxWidth: '140px', objectFit: 'contain' }}
+              />
             </span>
           </a>
 
@@ -629,9 +881,11 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
               </div>
             )}
 
-            <div className="flex justify-center lg:justify-start">
-              <PortfolioCountdown weddingDate={site.wedding.wedding_date} />
-            </div>
+            {!isSectionHidden(site.content, 'contagem') && (
+              <div className="flex justify-center lg:justify-start">
+                <PortfolioCountdown weddingDate={site.wedding.wedding_date} />
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -665,229 +919,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
       )}
 
       <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '20px 20px 0' }}>
-        {/* ── Citação ── */}
-        {site.content.custom_message && (
-          <section style={{ padding: '80px 0', textAlign: 'center' }}>
-            <Eyebrow>Uma mensagem para vocês</Eyebrow>
-            <SectionDivider />
-            <SiteRichText
-              text={`\u201C${site.content.custom_message}\u201D`}
-              markdown={markdown}
-              className="font-display"
-              style={{ fontStyle: 'italic', fontSize: 'clamp(20px,3vw,30px)', color: 'var(--fg)', lineHeight: 1.5, margin: '0 auto', maxWidth: '760px' }}
-            />
-          </section>
-        )}
-
-        {/* ── Sobre os noivos / Nossa história (apresentações novas) ── */}
-        {site.story.layout !== 'legacy' && site.story.hasContent && (
-          <section id="historia" style={{ padding: '40px 0 80px' }}>
-            <Eyebrow>Nossa história</Eyebrow>
-            <SectionDivider className="justify-start" />
-            <h2
-              className="font-display"
-              style={{ fontWeight: 500, fontSize: 'clamp(30px,4.4vw,46px)', color: 'var(--fg)', margin: '0 0 28px', lineHeight: 1.06 }}
-            >
-              Como tudo começou
-            </h2>
-            <PortfolioStory view={site.story} coupleNames={site.wedding.couple_names} markdown={markdown} />
-          </section>
-        )}
-
-        {/* ── Sobre os noivos / Nossa história ── */}
-        {legacyStory && site.content.our_story && (
-          <section id="historia" style={{ padding: '40px 0 80px' }}>
-            <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center">
-              {aboutPhoto && (
-                <div style={{ borderRadius: '28px', overflow: 'hidden', order: 1 }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- URL do Storage/externa, sem domínio fixo para configurar no next/image */}
-                  <img
-                    src={aboutPhoto.url}
-                    alt="Foto do casal"
-                    style={{
-                      width: '100%', height: 'clamp(320px,42vw,520px)', display: 'block',
-                      objectFit:      aboutPhoto.fit_contain ? 'contain' : 'cover',
-                      objectPosition: `center ${aboutPhoto.position_y}%`,
-                    }}
-                  />
-                </div>
-              )}
-              <div style={{ order: 2 }}>
-                <Eyebrow>Nossa história</Eyebrow>
-                <SectionDivider className="justify-start" />
-                <h2
-                  className="font-display"
-                  style={{ fontWeight: 500, fontSize: 'clamp(30px,4.4vw,46px)', color: 'var(--fg)', margin: '0 0 14px', lineHeight: 1.06 }}
-                >
-                  Como tudo começou
-                </h2>
-                <p style={{ fontStyle: 'italic', fontSize: '15.5px', color: 'var(--wedding-color-dark)', margin: '0 0 18px' }}>
-                  Uma história para contar durante toda a vida.
-                </p>
-                <SiteRichText text={site.content.our_story} markdown={markdown} style={{ fontSize: '15px', color: 'var(--fg)', lineHeight: 1.9, whiteSpace: 'pre-line', margin: 0 }} />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ── Cerimônia & Festa ── */}
-        {hasCeremony && (
-          <section id="cerimonia" style={{ padding: '40px 0 80px' }}>
-            <SectionHeader
-              eyebrow="Cerimônia e festa"
-              title="Tudo pra esse dia inesquecível"
-              subtitle="O endereço, os horários e as informações que vocês precisam antes de vir celebrar com a gente."
-            />
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {hasVenue && (
-                <div style={cardStyle}>
-                  <IconCircle><MapPinIcon /></IconCircle>
-                  <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 6px' }}>
-                    Local
-                  </h3>
-                  <p style={{ fontSize: '14px', color: 'var(--muted-fg)', lineHeight: 1.65, margin: '0 0 20px' }}>
-                    {[site.wedding.venue, site.wedding.city].filter(Boolean).join(', ')}
-                  </p>
-                  {mapsUrl && (
-                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={pillOutlineButtonStyle}>
-                      <MapPinIcon /> Como chegar
-                    </a>
-                  )}
-                </div>
-              )}
-
-              <div style={cardStyle}>
-                <IconCircle><ClockLineIcon /></IconCircle>
-                <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 20px' }}>
-                  Horários
-                </h3>
-                <ScheduleTimeline nodes={scheduleNodes} markdown={markdown} />
-              </div>
-
-              {site.content.dress_code && (
-                <div style={{ ...cardStyle }} className="lg:col-span-2">
-                  <IconCircle><InfoLineIcon /></IconCircle>
-                  <h3 className="font-display" style={{ fontSize: '21px', fontWeight: 600, color: 'var(--fg)', margin: '18px 0 16px' }}>
-                    Informações importantes
-                  </h3>
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--wedding-color-dark)', marginBottom: '6px' }}>
-                        Dress code
-                      </div>
-                      <SiteRichText text={site.content.dress_code} markdown={markdown} style={{ fontSize: '13.5px', color: 'var(--muted-fg)', lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ── Lista de presentes ── */}
-        {hasGifts && (
-          <section id="presentes" style={{ padding: '40px 0 80px' }}>
-            <GiftPaymentReturnToast />
-            <SectionHeader eyebrow="Lista de presentes" title="Ajude a construir esse novo capítulo" />
-            <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px,1fr))' }}>
-              {site.gifts.map((gift) => (
-                <div key={gift.id} style={{ ...cardStyle, padding: 0, overflow: 'hidden', opacity: gift.is_purchased ? 0.6 : 1 }}>
-                  {gift.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária colada pelo casal, sem domínio fixo para configurar no next/image
-                    <img src={gift.image_url} alt={gift.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} />
-                  ) : (
-                    <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--wedding-color-subtle)' }}>
-                      <IconCircle size={52}><GiftLineIcon /></IconCircle>
-                    </div>
-                  )}
-                  <div style={{ padding: '20px' }}>
-                    <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--fg)' }}>{gift.name}</div>
-                    {gift.price_cents != null && (
-                      <div style={{ fontSize: '13.5px', color: 'var(--muted-fg)', marginTop: '3px' }}>
-                        {currencyFmt.format(gift.price_cents / 100)}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '14px', gap: '8px' }}>
-                      <span
-                        style={{
-                          fontSize: '11.5px', fontWeight: 700, padding: '4px 12px', borderRadius: '99px',
-                          background: gift.is_purchased ? '#E9EFE6' : 'var(--wedding-color-subtle)',
-                          color: gift.is_purchased ? '#5E8B6A' : 'var(--wedding-color-dark)',
-                        }}
-                      >
-                        {gift.is_purchased ? 'Já foi dado' : 'Disponível'}
-                      </span>
-                      {!gift.is_purchased && gift.gift_type === 'link' && gift.store_url && (
-                        <a
-                          href={gift.store_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ fontSize: '12px', fontWeight: 700, color: 'var(--wedding-color-dark)', textDecoration: 'none' }}
-                        >
-                          Ver na loja
-                        </a>
-                      )}
-                      {!gift.is_purchased && gift.gift_type === 'app_payment' && (
-                        <GiftPaymentButton giftId={gift.id} giftName={gift.name} />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Galeria — fotos curadas pelo casal, em linhas de tamanho fixo ── */}
-        {hasGallery && (
-          <section id="galeria" style={{ padding: '40px 0 80px' }}>
-            <SectionHeader eyebrow="Galeria" title="Momentos" />
-            <PortfolioGalleryGrid photos={galleryPhotos} />
-          </section>
-        )}
-
-        {/* ── Mural de fotos ao vivo — grade completa embutida nativamente, sem
-            prévia/link separado (a densidade visual deste template pede isso, ao
-            contrário do template clássico, onde é só um teaser). Sempre visível
-            quando o plano libera 'album', mesmo com o mural ainda vazio. */}
-        {site.albumEnabled && (
-          <section style={{ padding: '40px 0 80px' }}>
-            <SectionHeader
-              eyebrow="Ao vivo"
-              title="Mural de fotos"
-              subtitle="As fotos que os convidados forem enviando durante o casamento aparecem aqui, ao vivo."
-            />
-            <LivePhotoGallery
-              slug={slug}
-              emptyTitle="O mural ainda está vazio"
-              emptyMessage="Volte no dia do casamento (ou no dia seguinte) — os convidados poderão enviar fotos ao vivo pelo QR code."
-            />
-            <div style={{ textAlign: 'center', marginTop: '22px' }}>
-              <a href={`/mural/${slug}`} style={{ ...pillOutlineButtonStyle, border: 'none', background: 'none', padding: 0, color: 'var(--wedding-color-dark)' }}>
-                Abrir mural em tela cheia <ArrowRightIcon />
-              </a>
-            </div>
-          </section>
-        )}
-
-        {/* ── RSVP ── */}
-        {hasRsvp && (
-        <section
-          id="rsvp"
-          style={{ background: 'var(--wedding-color-subtle)', borderRadius: '32px', padding: '64px 24px', textAlign: 'center', marginBottom: '64px' }}
-        >
-          <Eyebrow>Presença</Eyebrow>
-          <SectionDivider />
-          <h2 className="font-display" style={{ fontWeight: 500, fontSize: 'clamp(28px,4.2vw,38px)', color: 'var(--fg)', margin: '0 0 12px' }}>
-            Confirmação de presença
-          </h2>
-          <p style={{ fontSize: '14px', color: 'var(--muted-fg)', margin: '0 auto', lineHeight: 1.6, maxWidth: '440px' }}>
-            Cada convidado recebe um link pessoal para confirmar presença. Se você não recebeu o seu,
-            fale diretamente com o casal.
-          </p>
-        </section>
-        )}
+        {order.map((id) => <Fragment key={id}>{sections[id]}</Fragment>)}
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', paddingBottom: '40px', textAlign: 'center' }}>
           Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest

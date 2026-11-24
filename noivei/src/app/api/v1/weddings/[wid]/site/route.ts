@@ -1,5 +1,6 @@
 import { validateTemplateContent } from '@/lib/site/validate-template-content'
-import { allowsSiteMonogram, canUseSiteTemplate, resolveSiteTemplate } from '@/lib/site/templates'
+import { isWeddingPhotoUrl, lockedCustomizationChange, storagePathFromPhotoUrl } from '@/lib/site/customization'
+import { canUseSiteTemplate, resolveSiteTemplate } from '@/lib/site/templates'
 import { requireModuleAccess, requireWeddingOwnership } from '@/lib/api/guards/ownership'
 import { parseJsonBody } from '@/lib/api/parse-body'
 import { ok, err, handleApiError } from '@/lib/api/response'
@@ -61,15 +62,26 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (fetchError) return err(500, 'DB_ERROR', 'Erro ao buscar configuração do site.')
 
     const template = parsed.data.template
-    const monogram = parsed.data.content?.envelope_monogram
-    const monogramChanged = Boolean(monogram) && monogram !== existingData?.content?.envelope_monogram
+    const existingContent = (existingData?.content ?? {}) as Record<string, unknown>
 
     const planId = template || parsed.data.content ? await resolveWeddingPlanId(supabase, wid) : 'free'
     if (template && !canUseSiteTemplate(planId, template)) {
       return err(403, 'TEMPLATE_NOT_AVAILABLE', 'Este estilo não está disponível no seu plano.')
     }
-    if (monogramChanged && !allowsSiteMonogram(planId)) {
-      return err(403, 'MONOGRAM_NOT_AVAILABLE', 'O monograma está disponível a partir do plano Ideal.')
+    if (parsed.data.content) {
+      const locked = lockedCustomizationChange(parsed.data.content, existingContent, planId)
+      if (locked) return err(403, locked.startsWith('O monograma') ? 'MONOGRAM_NOT_AVAILABLE' : 'FEATURE_NOT_AVAILABLE', locked)
+
+      // Monograma em imagem: só arquivo enviado por este casamento como 'brand'
+      // (nunca URL externa nem foto de outro casal).
+      const monogramImage = parsed.data.content.monogram_image_url
+      if (typeof monogramImage === 'string' && monogramImage !== existingContent.monogram_image_url) {
+        const storagePath = storagePathFromPhotoUrl(monogramImage)
+        const { data: brandPhoto } = isWeddingPhotoUrl(monogramImage, wid) && storagePath
+          ? await supabase.from('wedding_gallery_photos').select('id').eq('wedding_id', wid).eq('purpose', 'brand').eq('storage_path', storagePath).maybeSingle()
+          : { data: null }
+        if (!brandPhoto) return err(400, 'INVALID_TEMPLATE_CONTENT', 'Envie a imagem do monograma novamente.')
+      }
     }
 
     const contentError = validateTemplateContent(resolveSiteTemplate(template ?? existingData?.template, planId), parsed.data.content, existingData?.content ?? {})
