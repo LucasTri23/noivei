@@ -1,12 +1,15 @@
 import { z } from 'zod'
 
+import { isReservedSiteSlug, SITE_SLUG_MAX_LENGTH } from '@/lib/site/slug'
+
 export const SiteSlugSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .min(3, 'Slug deve ter ao menos 3 caracteres.')
-  .max(60)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug deve conter apenas letras minúsculas, números e hífens.')
+  .min(3, 'O endereço deve ter ao menos 3 caracteres.')
+  .max(SITE_SLUG_MAX_LENGTH, `O endereço deve ter no máximo ${SITE_SLUG_MAX_LENGTH} caracteres.`)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use apenas letras minúsculas, números e hífens.')
+  .refine((slug) => !isReservedSiteSlug(slug), 'Este endereço é reservado. Escolha outro.')
 
 // 'portfolio' só é gravável quando o plano ATUAL do casamento libera o módulo
 // 'album' (mesmo módulo do mural de fotos) — checado na Route Handler, não

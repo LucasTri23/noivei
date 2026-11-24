@@ -4,7 +4,7 @@ import ModuleAccessGate from '@/components/billing/module-access-gate'
 import SiteBuilder from '@/components/site/site-builder'
 import { checkStorageLimit, resolveWeddingPlanId } from '@/lib/billing/check-limit'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import type { SiteConfig } from '@/types/database'
+import type { GuestStatus, SiteConfig } from '@/types/database'
 
 async function SiteContent() {
   const supabase = await createSupabaseServer()
@@ -30,7 +30,9 @@ async function SiteContent() {
 
   const weddingId = wedding.id as string
 
-  const [{ data: site }, limitCheck, planId] = await Promise.all([
+  // Contagens das abas "Confirmar presença" e "Lista de presentes" — só colunas mínimas,
+  // a RLS já restringe ao casamento do usuário.
+  const [{ data: site }, limitCheck, planId, { data: guests }, { data: gifts }] = await Promise.all([
     supabase
       .from('site_config')
       .select('*')
@@ -38,7 +40,21 @@ async function SiteContent() {
       .maybeSingle(),
     checkStorageLimit(supabase, weddingId, 0),
     resolveWeddingPlanId(supabase, weddingId),
+    supabase.from('guests').select('status').eq('wedding_id', weddingId),
+    supabase.from('gift_registry_items').select('is_purchased').eq('wedding_id', weddingId),
   ])
+
+  const guestStatuses = (guests ?? []).map((guest) => guest.status as GuestStatus)
+  const rsvpStats = {
+    total:     guestStatuses.length,
+    confirmed: guestStatuses.filter((status) => status === 'confirmado').length,
+    declined:  guestStatuses.filter((status) => status === 'recusado').length,
+    pending:   guestStatuses.filter((status) => status === 'pendente').length,
+  }
+  const giftStats = {
+    total:     (gifts ?? []).length,
+    purchased: (gifts ?? []).filter((gift) => gift.is_purchased === true).length,
+  }
 
   return (
     <SiteBuilder
@@ -48,6 +64,8 @@ async function SiteContent() {
       planId={planId}
       storageLimitBytes={limitCheck.limit}
       storageUsedBytes={limitCheck.current}
+      rsvpStats={rsvpStats}
+      giftStats={giftStats}
     />
   )
 }

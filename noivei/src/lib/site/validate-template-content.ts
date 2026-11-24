@@ -19,6 +19,9 @@ export function validateTemplateContent(template: SiteTemplate, content: Record<
   // do estilo na renderização (resolveStoryLayout), preservando a escolha.
   if (content.story_layout !== undefined && !isStoryLayout(content.story_layout)) return 'Escolha uma apresentação válida para a história.'
   if (content.rich_text !== undefined && typeof content.rich_text !== 'boolean') return 'Configuração de formatação inválida.'
+  for (const key of ['hide_rsvp', 'hide_gifts'] as const) {
+    if (content[key] !== undefined && typeof content[key] !== 'boolean') return 'Configuração de visibilidade das seções inválida.'
+  }
   const photos = content.gallery_urls
   if (photos === undefined) return null
   if (!Array.isArray(photos) || photos.some((url) => typeof url !== 'string' || !URL.canParse(url) || !/^https?:/.test(url))) return 'Informe URLs válidas para as fotos da galeria.'

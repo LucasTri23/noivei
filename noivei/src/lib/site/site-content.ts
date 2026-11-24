@@ -25,6 +25,10 @@ export interface SiteContent {
    * textos continuam exibidos como texto simples (sites existentes intactos).
    */
   rich_text?:       boolean
+  /** Oculta a seção de confirmação de presença do site público. Ausente = visível. */
+  hide_rsvp?:       boolean
+  /** Oculta a lista de presentes do site público. Ausente = visível (quando há itens). */
+  hide_gifts?:      boolean
 }
 
 /** Normaliza o JSON livre de `site_config.content` para o shape tipado — ignora chaves desconhecidas ou malformadas. */
@@ -44,6 +48,8 @@ export function parseSiteContent(raw: Record<string, Json | undefined> | null | 
   if (typeof raw.dress_code === 'string') content.dress_code = raw.dress_code
   if (isStoryLayout(raw.story_layout)) content.story_layout = raw.story_layout
   if (raw.rich_text === true) content.rich_text = true
+  if (raw.hide_rsvp === true) content.hide_rsvp = true
+  if (raw.hide_gifts === true) content.hide_gifts = true
   if (Array.isArray(raw.gallery_urls)) {
     content.gallery_urls = raw.gallery_urls.filter((url): url is string => typeof url === 'string')
   }

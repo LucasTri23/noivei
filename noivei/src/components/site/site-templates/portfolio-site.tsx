@@ -473,6 +473,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   const legacyStory      = site.story.layout === 'legacy'
   const markdown         = site.content.rich_text === true
   const hasStory         = site.story.layout === 'legacy' ? Boolean(site.content.our_story) : site.story.hasContent
+  const hasRsvp          = !site.content.hide_rsvp
 
   // Foto de destaque da seção "Nossa história" — usa `content.story_photo_url` quando o
   // casal escolheu explicitamente uma foto pra essa seção (ver HistoriaSection no editor).
@@ -491,14 +492,15 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
   ].filter((node): node is ScheduleNode => Boolean(node))
 
   // Só entram na navegação (barra do topo, grade de acesso rápido) as seções que o
-  // casal de fato preencheu — "Início" e "Confirmação de presença" sempre existem.
+  // casal de fato preencheu — "Início" sempre existe; "Confirmação de presença" só sai
+  // quando o casal oculta a seção no editor.
   const navItems: { href: string; label: string }[] = [
     { href: '#hero', label: 'Início' },
     ...(hasStory ? [{ href: '#historia', label: 'Sobre os noivos' }] : []),
     ...(hasCeremony ? [{ href: '#cerimonia', label: 'Cerimônia e Festa' }] : []),
     ...(hasGallery ? [{ href: '#galeria', label: 'Álbum de Fotos' }] : []),
     ...(hasGifts ? [{ href: '#presentes', label: 'Lista de Presentes' }] : []),
-    { href: '#rsvp', label: 'Confirmação de Presença' },
+    ...(hasRsvp ? [{ href: '#rsvp', label: 'Confirmação de Presença' }] : []),
   ]
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
@@ -514,7 +516,9 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
     ...(hasGifts
       ? [{ href: '#presentes', icon: <GiftLineIcon />, title: 'Lista de Presentes', desc: 'Ajude a construir esse novo capítulo.' }]
       : []),
-    { href: '#rsvp', icon: <MailLineIcon />, title: 'Confirmação de Presença', desc: 'Confirme sua presença pelo seu link pessoal.' },
+    ...(hasRsvp
+      ? [{ href: '#rsvp', icon: <MailLineIcon />, title: 'Confirmação de Presença', desc: 'Confirme sua presença pelo seu link pessoal.' }]
+      : []),
   ]
 
   // Fator de zoom extra (ver cover-photo-zoom.ts) — aplicado via transform: scale por
@@ -594,7 +598,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
             ))}
           </div>
 
-          <a href="#rsvp" style={pillButtonStyle}>RSVP</a>
+          {hasRsvp && <a href="#rsvp" style={pillButtonStyle}>RSVP</a>}
         </nav>
 
         <div className="relative z-[1] flex flex-1 flex-col items-center justify-end px-6 pb-14 text-center lg:flex-row lg:items-center lg:justify-end lg:px-14 lg:pb-0 lg:text-left">
@@ -868,6 +872,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
         )}
 
         {/* ── RSVP ── */}
+        {hasRsvp && (
         <section
           id="rsvp"
           style={{ background: 'var(--wedding-color-subtle)', borderRadius: '32px', padding: '64px 24px', textAlign: 'center', marginBottom: '64px' }}
@@ -882,6 +887,7 @@ export default function PortfolioSite({ slug, site }: PortfolioSiteProps) {
             fale diretamente com o casal.
           </p>
         </section>
+        )}
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', paddingBottom: '40px', textAlign: 'center' }}>
           Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest

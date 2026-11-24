@@ -675,8 +675,10 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
           </section>
         )}
 
-        {/* RSVP */}
+        {/* RSVP — o casal pode ocultar no editor */}
+        {!site.content.hide_rsvp && (
         <section
+          id="rsvp"
           className="rounded-2xl text-center"
           style={{ background: 'var(--wedding-color-subtle)', padding: '32px 24px', border: '1px dashed #D8C6A6' }}
         >
@@ -688,6 +690,7 @@ export default function ClassicSite({ slug, site }: ClassicSiteProps) {
             fale diretamente com o casal.
           </p>
         </section>
+        )}
 
         <p style={{ fontSize: '12px', color: 'var(--muted-fg)', marginTop: '40px', textAlign: 'center' }}>
           Feito com <span style={{ color: 'var(--wedding-color)' }}>♥</span> no Wednest

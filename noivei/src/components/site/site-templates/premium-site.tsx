@@ -178,7 +178,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
     <div className={`${styles.site} ${styles[variant === 'enveloped' ? 'invitation' : variant]}`}>
       <header className={styles.header}>
         <a className={styles.monogram} href="#inicio" aria-label="Início">{monogram}</a>
-        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{hasStory && <a href="#historia">{isInvitation(variant) ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}<a href="#rsvp">Sua presença</a></nav>
+        <nav aria-label="Seções do site"><a href="#celebracao">O grande dia</a>{hasStory && <a href="#historia">{isInvitation(variant) ? 'Nosso convite' : 'Nossa história'}</a>}{site.gifts.length > 0 && <a href="#presentes">Presentes</a>}{!content.hide_rsvp && <a href="#rsvp">Sua presença</a>}</nav>
         <span className={styles.headerDate}>{date || 'Vamos celebrar'}</span>
       </header>
 
@@ -240,7 +240,7 @@ export default function PremiumSite({ slug, site, variant }: { slug: string; sit
 
       {site.albumEnabled && <section className={styles.albumSection}><p className={styles.eyebrow}>PELO OLHAR DE QUEM AMAMOS</p><h2>O nosso mural <em>de memórias.</em></h2><p className={styles.sectionIntro}>As fotos compartilhadas pelos convidados durante o casamento aparecem aqui.</p><LivePhotoGallery slug={slug} limit={8} columnsClassName="columns-2 sm:columns-4" emptyTitle="As próximas memórias ainda estão por vir" emptyMessage="No dia do casamento, envie suas fotos pelo QR code do álbum." /><a className={styles.textLink} href={`/mural/${slug}`}>Ver o mural completo ↗</a></section>}
 
-      <section id="rsvp" className={styles.rsvp}><p className={styles.eyebrow}>VOCÊ FAZ PARTE DESTA HISTÓRIA</p><h2>O nosso sim fica mais bonito<br /><em>com você por perto.</em></h2><p>Cada convidado recebe um link pessoal para confirmar presença. Use o link do seu convite; se ainda não recebeu, fale diretamente com o casal.</p><span className={styles.rsvpMonogram} aria-hidden="true">{initials}</span></section>
+      {!content.hide_rsvp && <section id="rsvp" className={styles.rsvp}><p className={styles.eyebrow}>VOCÊ FAZ PARTE DESTA HISTÓRIA</p><h2>O nosso sim fica mais bonito<br /><em>com você por perto.</em></h2><p>Cada convidado recebe um link pessoal para confirmar presença. Use o link do seu convite; se ainda não recebeu, fale diretamente com o casal.</p><span className={styles.rsvpMonogram} aria-hidden="true">{initials}</span></section>}
       <footer className={styles.footer}><span>{wedding.couple_names}</span><span>{date || 'Com amor'}</span><small>Feito com amor no Wednest</small></footer>
     </div>
   )

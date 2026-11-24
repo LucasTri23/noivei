@@ -55,17 +55,22 @@ export interface PublicSiteInfo {
   }[]
 }
 
-/** Busca o site publicado pelo slug (requer client service role — RLS não cobre acesso anônimo). */
+/**
+ * Busca o site publicado pelo slug (requer client service role — RLS não cobre acesso anônimo).
+ * `includeUnpublished` só pode ser usado depois de confirmar que quem pede é o próprio
+ * casal (pré-visualização do rascunho em /site/previa).
+ */
 export async function getPublicSiteBySlug(
   supabase: SupabaseClient,
   slug:     string,
+  options:  { includeUnpublished?: boolean } = {},
 ): Promise<PublicSiteInfo | null> {
-  const { data: site, error } = await supabase
+  let query = supabase
     .from('site_config')
     .select('wedding_id, content, cover_photo_url, cover_photo_position, cover_photo_zoom, template')
     .eq('slug', slug)
-    .eq('published', true)
-    .maybeSingle()
+  if (!options.includeUnpublished) query = query.eq('published', true)
+  const { data: site, error } = await query.maybeSingle()
 
   // Site inexistente ou não publicado: mesmo tratamento (404) para não vazar existência
   if (error || !site) return null
@@ -93,15 +98,18 @@ export async function getPublicSiteBySlug(
   const storedTemplate = (site.template as SiteTemplate | null) ?? 'classic'
   const template = resolveSiteTemplate(storedTemplate, planId)
 
-  const { data: gifts } = await supabase
+  const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
+  if (!allowsSiteMonogram(planId)) delete content.envelope_monogram
+
+  // Lista oculta pelo casal no editor: nem busca os itens (os templates já escondem a
+  // seção quando a lista está vazia).
+  const { data: gifts } = content.hide_gifts ? { data: [] } : await supabase
     .from('gift_registry_items')
     .select('id, name, description, price_cents, store_url, image_url, image_storage_path, gift_type, is_purchased')
     .eq('wedding_id', weddingId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 
-  const content = parseSiteContent(site.content as Record<string, Json | undefined> | null)
-  if (!allowsSiteMonogram(planId)) delete content.envelope_monogram
   const galleryPhotos = await resolveGalleryPhotos(supabase, weddingId, content.gallery_urls ?? [], template)
 
   // Momentos/fotos só são buscados quando o casal escolheu uma apresentação

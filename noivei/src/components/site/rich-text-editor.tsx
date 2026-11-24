@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 
 import SiteRichText from '@/components/site/site-rich-text'
+import { ghostButtonStyle, textareaStyle as baseTextareaStyle } from '@/components/site/editor/styles'
 import { insertLink, toggleInlineFormat, type InlineMarker, type TextSelectionState } from '@/lib/site/rich-text/format-selection'
 
 interface RichTextEditorProps {
@@ -16,16 +17,9 @@ interface RichTextEditorProps {
   placeholder?: string
 }
 
-const textareaStyle: React.CSSProperties = {
-  border: '1.5px solid #EBDDD0', borderRadius: '12px', padding: '12px 14px',
-  fontSize: '15px', color: 'var(--fg)', background: 'var(--surface)', outline: 'none', width: '100%',
-  resize: 'vertical', fontFamily: 'var(--font-body)',
-}
+const textareaStyle: React.CSSProperties = baseTextareaStyle
 
-const toolButtonStyle: React.CSSProperties = {
-  minWidth: '36px', minHeight: '36px', padding: '0 10px', border: '1px solid #EBDDD0', borderRadius: '9px',
-  background: 'var(--surface)', color: 'var(--fg)', cursor: 'pointer', fontSize: '14px',
-}
+const toolButtonStyle: React.CSSProperties = { ...ghostButtonStyle, fontSize: '14px' }
 
 const TOOLS: { marker: InlineMarker; label: string; shortcut?: string; content: React.ReactNode }[] = [
   { marker: '**', label: 'Negrito', shortcut: 'Ctrl+B', content: <strong>N</strong> },
